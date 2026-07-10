@@ -1,0 +1,65 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Archivo", "Inter", system-ui, sans-serif;
+  --font-body: "Inter", system-ui, sans-serif;
+
+  --color-ink: #0a0a0b;
+  --color-charcoal: #131316;
+  --color-graphite: #1c1c20;
+  --color-line: #2a2a2f;
+  --color-mist: #8a8a93;
+  --color-fog: #b8b8c0;
+  --color-paper: #f2f1ee;
+  --color-white: #fafaf9;
+  --color-signal: #baff29;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background: var(--color-ink);
+  color: var(--color-paper);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+::selection {
+  background: var(--color-signal);
+  color: var(--color-ink);
+}
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+/* thin custom scrollbar, industrial */
+::-webkit-scrollbar {
+  width: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-ink);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-line);
+  border: 2px solid var(--color-ink);
+}
+
+.noise {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 60;
+  opacity: 0.035;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
