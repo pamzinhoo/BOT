@@ -24,7 +24,7 @@ export default function Hero() {
           className="flex items-center gap-3 text-[12px] uppercase tracking-[0.2em] text-mist mb-8"
         >
           <span className="w-1.5 h-1.5 rounded-full bg-signal animate-pulse" />
-          Maringá · PR · Brasil — 23°25&apos;30&quot;S 51°56&apos;20&quot;W
+          Maringá · PR · Brasil
         </motion.div>
 
         <div className="overflow-hidden">
