@@ -21,10 +21,13 @@ class Database:
 
     def __init__(self, database_url: str, *, echo: bool = False) -> None:
         self._engine: AsyncEngine = create_async_engine(
-            database_url,
-            echo=echo,
-            pool_pre_ping=True,
-        )
+        database_url,
+        echo=echo,
+        pool_pre_ping=True,
+        connect_args={
+            "statement_cache_size": 0
+        },
+)
         self._session_factory = async_sessionmaker(
             bind=self._engine,
             expire_on_commit=False,
