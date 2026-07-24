@@ -1,0 +1,64 @@
+[project]
+name = "bot-limerence"
+version = "0.1.0"
+description = "BOT LIMERENCE - Discord support team management platform"
+requires-python = ">=3.13"
+dependencies = [
+    "discord.py>=2.4,<3.0",
+    "SQLAlchemy[asyncio]>=2.0,<3.0",
+    "alembic>=1.13,<2.0",
+    "asyncpg>=0.30,<0.32",
+    "python-dotenv>=1.0,<2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.6,<1.0",
+    "black>=24.0,<25.0",
+    "isort>=5.13,<6.0",
+    "pre-commit>=3.7,<4.0",
+    "pytest>=8.0,<9.0",
+    "pytest-asyncio>=0.24,<1.0",
+    "mypy>=1.11,<2.0",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["core*", "config*", "database*", "cogs*", "services*", "views*", "utils*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+exclude = ["alembic/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["E501"]
+
+[tool.black]
+line-length = 100
+target-version = ["py313"]
+
+[tool.isort]
+profile = "black"
+line_length = 100
+known_first_party = ["core", "config", "database", "cogs", "services", "views", "utils"]
+
+[tool.mypy]
+python_version = "3.13"
+warn_unused_ignores = true
+warn_redundant_casts = true
+check_untyped_defs = true
+disallow_untyped_defs = false
+exclude = ["alembic/", "\\.venv/"]
+
+[[tool.mypy.overrides]]
+module = "discord.*"
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
