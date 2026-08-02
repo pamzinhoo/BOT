@@ -130,6 +130,15 @@ class Settings:
         api_port = _optional_int("API_PORT") or 8000
         public_base_url = _optional("PUBLIC_BASE_URL") or f"http://localhost:{api_port}"
 
+        webhook_enabled = _bool("WEBHOOK_ENABLED", default=False)
+        webhook_secret_production = _optional("MERCADOPAGO_WEBHOOK_SECRET_PRODUCTION")
+        if webhook_enabled and payment_mode == "production" and not webhook_secret_production:
+            raise SettingsError(
+                "MERCADOPAGO_WEBHOOK_SECRET_PRODUCTION ausente com PAYMENT_MODE=production "
+                "e WEBHOOK_ENABLED=true — o endpoint de webhook aceitaria notificacoes sem "
+                "verificar assinatura. Configure o secret antes de subir em producao."
+            )
+
         return cls(
             discord_token=_require("DISCORD_TOKEN"),
             database_url=database_url,
@@ -141,13 +150,13 @@ class Settings:
             public_base_url=public_base_url,
             api_host=_optional("API_HOST") or "127.0.0.1",
             api_port=api_port,
-            webhook_enabled=_bool("WEBHOOK_ENABLED", default=False),
+            webhook_enabled=webhook_enabled,
             mercadopago_access_token_sandbox=_optional("MERCADOPAGO_ACCESS_TOKEN_SANDBOX"),
             mercadopago_access_token_production=_optional("MERCADOPAGO_ACCESS_TOKEN_PRODUCTION"),
             mercadopago_public_key_sandbox=_optional("MERCADOPAGO_PUBLIC_KEY_SANDBOX"),
             mercadopago_public_key_production=_optional("MERCADOPAGO_PUBLIC_KEY_PRODUCTION"),
             mercadopago_webhook_secret_sandbox=_optional("MERCADOPAGO_WEBHOOK_SECRET_SANDBOX"),
-            mercadopago_webhook_secret_production=_optional("MERCADOPAGO_WEBHOOK_SECRET_PRODUCTION"),
+            mercadopago_webhook_secret_production=webhook_secret_production,
         )
 
 

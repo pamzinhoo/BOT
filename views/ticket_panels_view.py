@@ -244,7 +244,7 @@ class _PanelSelect(discord.ui.Select[Any]):
     async def callback(self, interaction: discord.Interaction) -> None:
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         panel = await bot.ticket_panel_service.get_panel(uuid.UUID(self.values[0]))
-        if panel is None:
+        if panel is None or panel.guild_id != interaction.guild_id:
             await interaction.response.send_message("Painel não encontrado.", ephemeral=True)
             return
         await _render_panel_edit(interaction, panel, self.on_back)

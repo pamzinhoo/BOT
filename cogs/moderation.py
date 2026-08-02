@@ -683,7 +683,7 @@ class ModerationCog(commands.Cog):
         embed, view = await build_panel(
             self.bot, guild_id=interaction.guild.id, filtro=filtro_value, staff_id=staff.id if staff else 0, page=1
         )
-        await interaction.response.send_message(embed=embed, view=view)
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
         await self.bot.audit_log_service.record(
             guild_id=interaction.guild.id,

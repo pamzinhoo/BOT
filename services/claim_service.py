@@ -25,7 +25,7 @@ class ClaimService:
         now = datetime.now(UTC)
         async with self._database.session() as session:
             ticket_repo = TicketRepository(session)
-            ticket = await ticket_repo.get_by_channel_id(channel_id)
+            ticket = await ticket_repo.get_by_channel_id_locked(channel_id)
             if ticket is None:
                 raise ClaimError("Ticket nao encontrado para este canal.")
             if ticket.status not in (TicketStatus.OPEN, TicketStatus.CLAIMED):

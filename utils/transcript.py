@@ -87,10 +87,27 @@ class _Row:
     content_escaped: str
 
 
+def _describe_extras(message: discord.Message) -> list[str]:
+    """Anexos/embeds tem que aparecer na transcricao — o canal e apagado logo
+    depois de gerada, entao ela e o unico registro que sobra (evidencias como
+    print/comprovante enviados como anexo nao podem ser perdidas)."""
+    extras: list[str] = []
+    for attachment in message.attachments:
+        extras.append(f"📎 <a href=\"{html.escape(attachment.url)}\">{html.escape(attachment.filename)}</a>")
+    for embed in message.embeds:
+        title = embed.title or embed.description or "(embed sem título)"
+        extras.append(f"🔗 {html.escape(str(title))[:200]}")
+    return extras
+
+
 async def _collect_rows(channel: discord.TextChannel) -> list[_Row]:
     rows: list[_Row] = []
     async for message in channel.history(limit=None, oldest_first=True):
-        content = html.escape(message.content) or "<em>(sem texto — anexo ou embed)</em>"
+        parts = []
+        if message.content:
+            parts.append(html.escape(message.content))
+        parts.extend(_describe_extras(message))
+        content = "<br>".join(parts) if parts else "<em>(mensagem vazia)</em>"
         rows.append(
             _Row(
                 author=html.escape(str(message.author.display_name)),

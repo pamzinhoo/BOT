@@ -461,7 +461,9 @@ class _ReminderDayToggleButton(discord.ui.Button[Any]):
 
     async def callback(self, interaction: discord.Interaction) -> None:
         bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
-        day = await bot.subscription_renewal_config_service.toggle_reminder_day(self.day_id)
+        day = await bot.subscription_renewal_config_service.toggle_reminder_day(
+            self.day_id, guild_id=interaction.guild_id
+        )
         if day is not None:
             await _log_change(
                 interaction,
@@ -483,7 +485,7 @@ class _ReminderDayMoveButton(discord.ui.Button[Any]):
     async def callback(self, interaction: discord.Interaction) -> None:
         bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
         await bot.subscription_renewal_config_service.move_reminder_day(
-            self.day_id, delta=self.delta
+            self.day_id, guild_id=interaction.guild_id, delta=self.delta
         )
         await render_days_menu(interaction)
 
@@ -495,7 +497,9 @@ class _ReminderDayRemoveButton(discord.ui.Button[Any]):
 
     async def callback(self, interaction: discord.Interaction) -> None:
         bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
-        await bot.subscription_renewal_config_service.remove_reminder_day(self.day_id)
+        await bot.subscription_renewal_config_service.remove_reminder_day(
+            self.day_id, guild_id=interaction.guild_id
+        )
         await _log_change(interaction, "Aviso removido", "—", str(self.day_id))
         await render_days_menu(interaction)
 

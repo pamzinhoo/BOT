@@ -17,6 +17,15 @@ class TicketRepository(BaseRepository[Ticket]):
         )
         return result.scalar_one_or_none()
 
+    async def get_by_channel_id_locked(self, channel_id: int) -> Ticket | None:
+        """Mesmo que get_by_channel_id, mas com SELECT ... FOR UPDATE — trava a
+        linha ate o fim da transacao, pra que dois cliques simultaneos em
+        "Assumir" nao consigam ambos passar da checagem de claim livre."""
+        result = await self.session.execute(
+            select(Ticket).where(Ticket.channel_id == channel_id).with_for_update()
+        )
+        return result.scalar_one_or_none()
+
     async def count_open_by_member(self, guild_id: int, member_id: int) -> int:
         result = await self.session.execute(
             select(func.count(Ticket.id)).where(

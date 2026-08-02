@@ -4,6 +4,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from database.models.subscription_renewal import (
     SubscriptionMessage,
@@ -135,6 +136,41 @@ class SubscriptionReminderRepository(BaseRepository[SubscriptionReminder]):
         )
         result = await self.session.execute(stmt.limit(1))
         return result.scalar_one_or_none() is not None
+
+    async def reserve(
+        self,
+        *,
+        guild_id: int,
+        subscription_id: uuid.UUID,
+        reminder_type: str,
+        period_end: datetime | None,
+        now: datetime,
+    ) -> uuid.UUID | None:
+        """Grava a linha do lembrete ANTES de enviar o DM (status 'pending'),
+        pra que um crash entre o envio e o registro nao cause reenvio na
+        proxima passada do scheduler — a UniqueConstraint tambem torna isto
+        seguro contra duas execucoes concorrentes do scheduler. Retorna None
+        se a linha ja existir (outro processo reservou primeiro)."""
+        reminder = SubscriptionReminder(
+            guild_id=guild_id,
+            subscription_id=subscription_id,
+            reminder_type=reminder_type,
+            period_end=period_end,
+            sent_at=now,
+            delivery_status="pending",
+        )
+        self.session.add(reminder)
+        try:
+            await self.session.flush()
+        except IntegrityError:
+            await self.session.rollback()
+            return None
+        return reminder.id
+
+    async def finalize(self, reminder_id: uuid.UUID, *, delivery_status: str) -> None:
+        reminder = await self.session.get(SubscriptionReminder, reminder_id)
+        if reminder is not None:
+            reminder.delivery_status = delivery_status
 
     async def list_by_subscription(self, subscription_id: uuid.UUID) -> list[SubscriptionReminder]:
         result = await self.session.execute(

@@ -285,7 +285,7 @@ class AnalisesAcceptButton(
         return cls(uuid.UUID(match["punishment_id"]))
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        if not await member_can(interaction, "analises"):
+        if not await member_can(interaction, "recurso_banimento"):
             await interaction.response.send_message(_DENIAL_MESSAGE, ephemeral=True)
             return
         guild = interaction.guild
@@ -422,7 +422,7 @@ class AnalisesDenyButton(
         return cls(uuid.UUID(match["punishment_id"]))
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        if not await member_can(interaction, "analises"):
+        if not await member_can(interaction, "recurso_banimento"):
             await interaction.response.send_message(_DENIAL_MESSAGE, ephemeral=True)
             return
         await interaction.response.send_modal(AnalisesDenyModal(self.punishment_id))

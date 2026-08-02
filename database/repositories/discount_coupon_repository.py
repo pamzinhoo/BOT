@@ -20,6 +20,15 @@ class DiscountCouponRepository(BaseRepository[DiscountCoupon]):
     async def get_by_id(self, id_: uuid.UUID) -> DiscountCoupon | None:
         return await self.session.get(DiscountCoupon, id_)
 
+    async def get_by_id_locked(self, id_: uuid.UUID) -> DiscountCoupon | None:
+        """Mesmo que get_by_id, mas com SELECT ... FOR UPDATE — trava a linha
+        do cupom ate o fim da transacao, pra que duas resgates concorrentes
+        nao consigam ambos passar da checagem de limite antes de qualquer
+        um gravar sua redemption (senao o limite configurado e ultrapassado)."""
+        stmt = select(DiscountCoupon).where(DiscountCoupon.id == id_).with_for_update()
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def get_by_code(
         self, guild_id: int, code: str, *, include_deleted: bool = False
     ) -> DiscountCoupon | None:

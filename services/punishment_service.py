@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 
 import discord
 
+from core.logger import get_logger
 from database.database import Database
 from database.models.punishment import (
     UNRESOLVED_STATUSES,
@@ -30,6 +31,8 @@ _CODE_PREFIXES = {
 
 _TYPES_REQUIRING_DURATION = {PunishmentType.BAN_TEMPORARIO, PunishmentType.TIMEOUT}
 _DISCORD_TIMEOUT_MAX = timedelta(days=28)
+
+logger = get_logger("punishment_service")
 
 
 class PunishmentError(ValueError):
@@ -192,7 +195,8 @@ class PunishmentService:
                 "O bot não tem permissão para alterar os cargos deste membro (verifique a hierarquia)."
             ) from exc
         except discord.HTTPException as exc:
-            raise PunishmentError(f"Falha na API do Discord ao isolar o membro: {exc}") from exc
+            logger.exception("Falha na API do Discord ao isolar o membro.")
+            raise PunishmentError("Falha na API do Discord ao isolar o membro.") from exc
 
     async def _restore_review_roles(
         self,
@@ -276,7 +280,8 @@ class PunishmentService:
                         "O bot não tem permissão para aplicar essa punição neste membro."
                     ) from exc
                 except discord.HTTPException as exc:
-                    raise PunishmentError(f"Falha na API do Discord ao aplicar a punição: {exc}") from exc
+                    logger.exception("Falha na API do Discord ao aplicar a punicao.")
+                    raise PunishmentError("Falha na API do Discord ao aplicar a punição.") from exc
 
                 punishment.status = PunishmentStatus.ACTIVE
                 punishment.second_confirmed_at = now
@@ -336,7 +341,8 @@ class PunishmentService:
                     "O bot não tem permissão para aplicar essa punição neste membro (verifique a hierarquia de cargos do bot)."
                 ) from exc
             except discord.HTTPException as exc:
-                raise PunishmentError(f"Falha na API do Discord ao aplicar a punição: {exc}") from exc
+                logger.exception("Falha na API do Discord ao aplicar a punicao.")
+                raise PunishmentError("Falha na API do Discord ao aplicar a punição.") from exc
 
             now = datetime.now(UTC)
             punishment.status = PunishmentStatus.ACTIVE
@@ -405,7 +411,8 @@ class PunishmentService:
         except discord.Forbidden as exc:
             raise PunishmentError("O bot não tem permissão para reverter essa punição.") from exc
         except discord.HTTPException as exc:
-            raise PunishmentError(f"Falha na API do Discord ao revogar a punição: {exc}") from exc
+            logger.exception("Falha na API do Discord ao revogar a punicao.")
+            raise PunishmentError("Falha na API do Discord ao revogar a punição.") from exc
 
     async def revoke(
         self, *, guild: discord.Guild, punishment_id: uuid.UUID, revoked_by: discord.Member, reason: str
@@ -527,7 +534,7 @@ class PunishmentService:
             if appeal.status != AppealStatus.PENDING:
                 raise AppealError("Esse recurso já foi analisado.")
             punishment = await PunishmentRepository(session).get_by_id(appeal.punishment_id)
-            if punishment is None:
+            if punishment is None or punishment.guild_id != guild.id:
                 raise AppealError("Punição associada não encontrada.")
             if punishment.staff_id == reviewer.id and not bypass_self_review:
                 raise AppealError("Você não pode analisar o recurso da sua própria punição.")
@@ -575,7 +582,7 @@ class PunishmentService:
             if appeal.status != AppealStatus.PENDING:
                 raise AppealError("Esse recurso já foi analisado.")
             punishment = await PunishmentRepository(session).get_by_id(appeal.punishment_id)
-            if punishment is None:
+            if punishment is None or punishment.guild_id != guild.id:
                 raise AppealError("Punição associada não encontrada.")
             if punishment.staff_id == reviewer.id and not bypass_self_review:
                 raise AppealError("Você não pode analisar o recurso da sua própria punição.")
@@ -607,7 +614,8 @@ class PunishmentService:
                         "O bot não tem permissão para aplicar essa punição neste membro."
                     ) from exc
                 except discord.HTTPException as exc:
-                    raise AppealError(f"Falha na API do Discord ao aplicar a punição: {exc}") from exc
+                    logger.exception("Falha na API do Discord ao aplicar a punicao (recurso negado).")
+                    raise AppealError("Falha na API do Discord ao aplicar a punição.") from exc
 
                 now = datetime.now(UTC)
                 punishment.status = PunishmentStatus.ACTIVE

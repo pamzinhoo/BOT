@@ -226,7 +226,15 @@ class SubscriptionService:
             return None
 
         now = datetime.now(UTC)
-        await self._payments.set_status(payment.id, PaymentStatus.APPROVED, paid_at=now)
+        updated = await self._payments.set_status(
+            payment.id, PaymentStatus.APPROVED, paid_at=now,
+            expected_statuses=(PaymentStatus.PENDING,),
+        )
+        if updated is None:
+            # outra transacao concorrente (webhook + clique manual, ou dois
+            # cliques de staff) ja mudou o status entre a leitura acima e
+            # aqui — perdeu a corrida, nao entrega beneficio duplicado
+            return None
 
         async with self._database.session() as session:
             sub_repo = SubscriptionRepository(session)
@@ -279,7 +287,12 @@ class SubscriptionService:
         payment = await self._payments.get(payment_id)
         if payment is None or payment.status != PaymentStatus.PENDING:
             return False  # idempotente — so processa pagamento ainda pendente
-        await self._payments.set_status(payment.id, PaymentStatus.REJECTED)
+        updated = await self._payments.set_status(
+            payment.id, PaymentStatus.REJECTED,
+            expected_statuses=(PaymentStatus.PENDING,),
+        )
+        if updated is None:
+            return False  # perdeu a corrida — outra transacao ja mudou o status
         if payment.subscription_id is None:
             return True
         async with self._database.session() as session:
@@ -331,7 +344,10 @@ class SubscriptionService:
         payment = await self._payments.get(payment_id)
         if payment is None or payment.status not in (PaymentStatus.PROCESSING, PaymentStatus.REJECTED):
             return None
-        payment = await self._payments.set_status(payment.id, PaymentStatus.PENDING)
+        payment = await self._payments.set_status(
+            payment.id, PaymentStatus.PENDING,
+            expected_statuses=(PaymentStatus.PROCESSING, PaymentStatus.REJECTED),
+        )
         if payment is None or payment.subscription_id is None:
             return payment
         async with self._database.session() as session:
@@ -363,7 +379,12 @@ class SubscriptionService:
         payment = await self._payments.get(payment_id)
         if payment is None or payment.status not in (PaymentStatus.PENDING, PaymentStatus.PROCESSING):
             return False
-        await self._payments.set_status(payment.id, PaymentStatus.CANCELED)
+        updated = await self._payments.set_status(
+            payment.id, PaymentStatus.CANCELED,
+            expected_statuses=(PaymentStatus.PENDING, PaymentStatus.PROCESSING),
+        )
+        if updated is None:
+            return False  # perdeu a corrida — outra transacao ja mudou o status
         if payment.subscription_id is None:
             return True
         async with self._database.session() as session:
@@ -531,7 +552,12 @@ class SubscriptionService:
         payment = await self._payments.get(payment_id)
         if payment is None or payment.status != PaymentStatus.PENDING:
             return False  # idempotente — so expira pagamento ainda pendente
-        await self._payments.set_status(payment.id, PaymentStatus.EXPIRED)
+        updated = await self._payments.set_status(
+            payment.id, PaymentStatus.EXPIRED,
+            expected_statuses=(PaymentStatus.PENDING,),
+        )
+        if updated is None:
+            return False  # perdeu a corrida — outra transacao ja mudou o status
         if payment.subscription_id is None:
             return True
         async with self._database.session() as session:

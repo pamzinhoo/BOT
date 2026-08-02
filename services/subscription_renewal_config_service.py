@@ -107,31 +107,33 @@ class SubscriptionRenewalConfigService:
                 )
             )
 
-    async def remove_reminder_day(self, day_id: uuid.UUID) -> None:
+    async def remove_reminder_day(self, day_id: uuid.UUID, *, guild_id: int) -> None:
         async with self._database.session() as session:
             repo = SubscriptionReminderDayRepository(session)
             day = await repo.get_by_id(day_id)
-            if day is not None:
+            if day is not None and day.guild_id == guild_id:
                 await repo.delete(day)
 
-    async def toggle_reminder_day(self, day_id: uuid.UUID) -> SubscriptionReminderDay | None:
+    async def toggle_reminder_day(
+        self, day_id: uuid.UUID, *, guild_id: int
+    ) -> SubscriptionReminderDay | None:
         async with self._database.session() as session:
             repo = SubscriptionReminderDayRepository(session)
             day = await repo.get_by_id(day_id)
-            if day is None:
+            if day is None or day.guild_id != guild_id:
                 return None
             day.enabled = not day.enabled
             await session.flush()
             await session.refresh(day)
             return day
 
-    async def move_reminder_day(self, day_id: uuid.UUID, *, delta: int) -> None:
+    async def move_reminder_day(self, day_id: uuid.UUID, *, guild_id: int, delta: int) -> None:
         """Reordena trocando a posicao com o vizinho — mantem a lista sem
         buracos e sem depender de o admin digitar indices."""
         async with self._database.session() as session:
             repo = SubscriptionReminderDayRepository(session)
             day = await repo.get_by_id(day_id)
-            if day is None:
+            if day is None or day.guild_id != guild_id:
                 return
             days = await repo.list_by_guild(day.guild_id)
             for index, item in enumerate(days):

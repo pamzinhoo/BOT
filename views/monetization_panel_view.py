@@ -217,7 +217,7 @@ class _PlanSelect(discord.ui.Select[Any]):
     async def callback(self, interaction: discord.Interaction) -> None:
         bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
         plan = await bot.plan_service.get_plan(uuid.UUID(self.values[0]))
-        if plan is None:
+        if plan is None or plan.guild_id != interaction.guild_id:
             await interaction.response.send_message("Plano não encontrado.", ephemeral=True)
             return
         await interaction.response.edit_message(

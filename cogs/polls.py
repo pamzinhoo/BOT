@@ -54,7 +54,7 @@ class PollVoteButton(
             return
 
         poll = await bot.poll_service.get_poll(self.poll_id)
-        if poll is None:
+        if poll is None or poll.guild_id != interaction.guild_id:
             await interaction.response.send_message("Enquete não encontrada.", ephemeral=True)
             return
 

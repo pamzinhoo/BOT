@@ -73,6 +73,46 @@ class BoosterService:
         async with self._database.session() as session:
             return await BoosterRepository(session).list_by_guild(guild_id, limit)
 
+    # --- reconciliacao periodica -------------------------------------------
+
+    async def reconcile_guild(self, guild: discord.Guild) -> None:
+        """on_member_update e a unica fonte oficial de deteccao de boost, mas se
+        o bot ficar offline exatamente durante o inicio/fim de um boost (deploy,
+        crash, gap de resume do gateway) esse evento nunca chega — o membro
+        ficaria com o cargo/beneficio pra sempre (ou nunca receberia). Chamado
+        periodicamente pra comparar guild.premium_subscribers (fonte de verdade
+        do Discord) contra o que esta marcado como currently_boosting no banco,
+        corrigindo qualquer divergencia via os mesmos handlers idempotentes do
+        evento normal."""
+        settings = await self.get_settings(guild.id)
+        if not settings.enabled:
+            return
+
+        actually_boosting_ids = {member.id for member in guild.premium_subscribers}
+
+        async with self._database.session() as session:
+            tracked = await BoosterRepository(session).list_active_by_guild(guild.id)
+        tracked_ids = {record.user_id for record in tracked}
+
+        for user_id in tracked_ids - actually_boosting_ids:
+            member = guild.get_member(user_id)
+            if member is None:
+                try:
+                    member = await guild.fetch_member(user_id)
+                except discord.NotFound:
+                    continue
+                except discord.HTTPException:
+                    logger.warning(
+                        "Falha ao buscar membro %s na guild %s durante reconciliacao de boosters.",
+                        user_id, guild.id,
+                    )
+                    continue
+            await self.handle_boost_removed(member)
+
+        for member in guild.premium_subscribers:
+            if member.id not in tracked_ids:
+                await self.handle_boost_started(member)
+
     # --- fluxo: boost iniciado -------------------------------------------------
 
     async def handle_boost_started(self, member: discord.Member) -> None:
@@ -82,7 +122,7 @@ class BoosterService:
 
         async with self._database.session() as session:
             repo = BoosterRepository(session)
-            record = await repo.get_by_guild_user(member.guild.id, member.id)
+            record = await repo.get_by_guild_user_locked(member.guild.id, member.id)
             if record is not None and record.currently_boosting:
                 return  # ja processado — evita duplicar cargo/DM em atualizacoes redundantes
 
@@ -133,7 +173,7 @@ class BoosterService:
 
         async with self._database.session() as session:
             repo = BoosterRepository(session)
-            record = await repo.get_by_guild_user(member.guild.id, member.id)
+            record = await repo.get_by_guild_user_locked(member.guild.id, member.id)
             if record is None or not record.currently_boosting:
                 return  # nunca registrado como boosting — nada a reverter
 

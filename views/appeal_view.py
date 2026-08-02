@@ -193,7 +193,6 @@ class AppealButton(
         return cls(uuid.UUID(match["punishment_id"]))
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        print("APPEAL BUTTON RECEBIDO")
         await interaction.response.send_modal(AppealModal(self.punishment_id))
 
 

@@ -31,6 +31,15 @@ class PaymentRepository(BaseRepository[PaymentHistory]):
         )
         return result.scalar_one_or_none()
 
+    async def get_by_id_locked(self, payment_id: object) -> PaymentHistory | None:
+        """Mesmo que get_by_id, mas com SELECT ... FOR UPDATE — trava a linha
+        ate o fim da transacao, pra evitar duas aprovacoes/rejeicoes
+        concorrentes lerem o mesmo status antes de qualquer uma escrever."""
+        result = await self.session.execute(
+            select(PaymentHistory).where(PaymentHistory.id == payment_id).with_for_update()
+        )
+        return result.scalar_one_or_none()
+
     async def list_by_user(self, guild_id: int, user_id: int) -> list[PaymentHistory]:
         result = await self.session.execute(
             select(PaymentHistory)

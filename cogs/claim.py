@@ -7,6 +7,7 @@ from discord.ext import commands
 from core.bot import LimerenceBot
 from database.models.log import LogAction
 from services.claim_service import ClaimError
+from services.ticket_panel_service import member_matches_panel_claim_roles
 from utils.checks import has_permission
 
 
@@ -20,6 +21,15 @@ class ClaimCog(commands.Cog):
         guild = interaction.guild
         member = interaction.user
         if guild is None or not isinstance(member, discord.Member) or interaction.channel_id is None:
+            return
+
+        existing = await self.bot.ticket_service.get_by_channel_id(interaction.channel_id)
+        panel = await self.bot.ticket_panel_service.get_panel_for_ticket(existing) if existing else None
+        if not member_matches_panel_claim_roles(member, panel):
+            await interaction.response.send_message(
+                "Apenas os cargos responsáveis por este painel podem assumir este ticket.",
+                ephemeral=True,
+            )
             return
 
         staff = await self.bot.staff_service.ensure_staff(guild.id, member.id, member.display_name)

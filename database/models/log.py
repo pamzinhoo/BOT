@@ -29,7 +29,7 @@ class LogEntry(Base, UUIDPrimaryKeyMixin, TimestampMixin):
 
     __tablename__ = "logs"
 
-    guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
     action: Mapped[LogAction] = mapped_column(Enum(LogAction, name="log_action"), nullable=False)
     actor_discord_id: Mapped[int | None] = mapped_column(BigInteger)
     staff_id: Mapped[uuid.UUID | None] = mapped_column(

@@ -41,7 +41,7 @@ class Ticket(Base, UUIDPrimaryKeyMixin, TimestampMixin):
 
     __tablename__ = "tickets"
 
-    guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
     channel_id: Mapped[int] = mapped_column(BigInteger, nullable=False, unique=True)
     opened_by_discord_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     category: Mapped[TicketCategory] = mapped_column(

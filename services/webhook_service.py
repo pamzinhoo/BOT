@@ -88,8 +88,13 @@ class WebhookService:
             logger.info("Webhook ignorado: pagamento %s ja esta em %s.", payment_id, remote.status.value)
             return
 
-        await self._payments.set_status(payment.id, remote.status, provider_payload=dict(remote.raw))
-
+        # A transicao de status e feita DENTRO de cada metodo abaixo (com
+        # SELECT ... FOR UPDATE e guarda de status esperado) — nunca aqui de
+        # antemao. Setar o status primeiro faria confirm_payment/reject_payment
+        # /expire_payment encontrarem o pagamento ja fora de PENDING e pularem
+        # a entrega de beneficio/DM/auditoria (bug ja corrigido: o antigo
+        # set_status direto aqui rodava antes da chamada e mascarava a
+        # aprovacao real).
         if remote.status == PaymentStatus.APPROVED:
             await self._subscriptions.confirm_payment(payment.id)
         elif remote.status in (PaymentStatus.REJECTED, PaymentStatus.CANCELED):
@@ -97,8 +102,12 @@ class WebhookService:
         elif remote.status == PaymentStatus.EXPIRED:
             await self._subscriptions.expire_payment(payment.id)
         elif remote.status == PaymentStatus.REFUNDED:
+            # handle_refund_or_chargeback nao mexe no status do pagamento (so
+            # da assinatura) — precisa ser setado aqui, nao ha outro lugar.
+            await self._payments.set_status(payment.id, PaymentStatus.REFUNDED, provider_payload=dict(remote.raw))
             await self._subscriptions.handle_refund_or_chargeback(payment.id, chargeback=False)
         elif remote.status == PaymentStatus.CHARGEBACK:
+            await self._payments.set_status(payment.id, PaymentStatus.CHARGEBACK, provider_payload=dict(remote.raw))
             await self._subscriptions.handle_refund_or_chargeback(payment.id, chargeback=True)
         else:
             logger.info("Webhook processado sem acao adicional (status %s).", remote.status.value)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
@@ -185,8 +186,9 @@ class SubscriptionReminderService:
                 else SubscriptionMessageType.REMINDER
             )
             reminder_type = f"{REMINDER_DAY_PREFIX}{day.days_before}"
-            if await self._already_sent(subscription, reminder_type, period_end):
-                continue
+            reminder_id = await self._reserve_reminder(subscription, reminder_type, period_end, now)
+            if reminder_id is None:
+                continue  # ja reservado (enviado ou em progresso em outra execucao)
             delivery = await self._send(
                 subscription,
                 plan,
@@ -195,7 +197,7 @@ class SubscriptionReminderService:
                 days_left=days_left,
                 period_end=period_end,
             )
-            await self._record_reminder(subscription, reminder_type, period_end, delivery, now)
+            await self._finalize_reminder(reminder_id, delivery_status=delivery.status)
             await self._audit(
                 settings,
                 subscription,
@@ -216,7 +218,10 @@ class SubscriptionReminderService:
         period_end: datetime,
         now: datetime,
     ) -> None:
-        if await self._already_sent(subscription, REMINDER_TYPE_GRACE_STARTED, period_end):
+        reminder_id = await self._reserve_reminder(
+            subscription, REMINDER_TYPE_GRACE_STARTED, period_end, now
+        )
+        if reminder_id is None:
             return
         delivery = await self._send(
             subscription,
@@ -226,9 +231,7 @@ class SubscriptionReminderService:
             days_left=0,
             period_end=period_end,
         )
-        await self._record_reminder(
-            subscription, REMINDER_TYPE_GRACE_STARTED, period_end, delivery, now
-        )
+        await self._finalize_reminder(reminder_id, delivery_status=delivery.status)
         await self._audit(
             settings,
             subscription,
@@ -249,7 +252,8 @@ class SubscriptionReminderService:
         """Fim de linha: avisa, remove cargo/benefícios e encerra a assinatura,
         respeitando cada toggle de 'Remoção Automática'."""
         period_end = _aware(subscription.current_period_end)  # type: ignore[arg-type]
-        if await self._already_sent(subscription, REMINDER_TYPE_EXPIRED, period_end):
+        reminder_id = await self._reserve_reminder(subscription, REMINDER_TYPE_EXPIRED, period_end, now)
+        if reminder_id is None:
             return
 
         delivery = await self._send(
@@ -261,9 +265,7 @@ class SubscriptionReminderService:
             period_end=period_end,
             allow_dm=settings.send_dm_on_removal,
         )
-        await self._record_reminder(
-            subscription, REMINDER_TYPE_EXPIRED, period_end, delivery, now
-        )
+        await self._finalize_reminder(reminder_id, delivery_status=delivery.status)
 
         await self._subscriptions.expire_subscription(
             subscription.id,
@@ -303,6 +305,11 @@ class SubscriptionReminderService:
                 plan = await PlanRepository(session).get_by_id(subscription.plan_id)
         if plan is None:
             return
+        reminder_id = await self._reserve_reminder(
+            subscription, REMINDER_TYPE_RENEWED, period_end, datetime.now(UTC)
+        )
+        if reminder_id is None:
+            return
         delivery = await self._send(
             subscription,
             plan,
@@ -311,9 +318,7 @@ class SubscriptionReminderService:
             days_left=days_left_until(period_end, datetime.now(UTC)),
             period_end=period_end,
         )
-        await self._record_reminder(
-            subscription, REMINDER_TYPE_RENEWED, period_end, delivery, datetime.now(UTC)
-        )
+        await self._finalize_reminder(reminder_id, delivery_status=delivery.status)
         await self._audit(
             settings,
             subscription,
@@ -332,24 +337,26 @@ class SubscriptionReminderService:
                 subscription.id, reminder_type, period_end
             )
 
-    async def _record_reminder(
+    async def _reserve_reminder(
         self,
         subscription: Subscription,
         reminder_type: str,
         period_end: datetime | None,
-        delivery: _Delivery,
         now: datetime,
-    ) -> None:
+    ) -> uuid.UUID | None:
         async with self._database.session() as session:
-            await SubscriptionReminderRepository(session).add(
-                SubscriptionReminder(
-                    guild_id=subscription.guild_id,
-                    subscription_id=subscription.id,
-                    reminder_type=reminder_type,
-                    period_end=period_end,
-                    sent_at=now,
-                    delivery_status=delivery.status,
-                )
+            return await SubscriptionReminderRepository(session).reserve(
+                guild_id=subscription.guild_id,
+                subscription_id=subscription.id,
+                reminder_type=reminder_type,
+                period_end=period_end,
+                now=now,
+            )
+
+    async def _finalize_reminder(self, reminder_id: uuid.UUID, *, delivery_status: str) -> None:
+        async with self._database.session() as session:
+            await SubscriptionReminderRepository(session).finalize(
+                reminder_id, delivery_status=delivery_status
             )
 
     async def list_reminders(self, subscription_id) -> list[SubscriptionReminder]:

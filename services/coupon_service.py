@@ -460,8 +460,24 @@ class CouponService:
         final_price: int,
     ) -> DiscountCouponRedemption:
         async with self._database.session() as session:
-            coupon = await DiscountCouponRepository(session).get_by_id(coupon_id)
-            redemption = await DiscountCouponRedemptionRepository(session).add(
+            # trava a linha do cupom antes de reconferir os limites — fecha a
+            # corrida entre validate_and_price (so uma pre-checagem, sem lock)
+            # e o insert: duas compras concorrentes nao conseguem mais passar
+            # ambas do limite configurado, uma delas sempre falha aqui.
+            coupon = await DiscountCouponRepository(session).get_by_id_locked(coupon_id)
+            redemptions = DiscountCouponRedemptionRepository(session)
+            if coupon is not None:
+                global_uses = await redemptions.count_for_coupon(coupon_id)
+                if coupon.max_global_uses is not None and global_uses >= coupon.max_global_uses:
+                    raise CouponGlobalLimitReachedError(
+                        f"O cupom `{coupon.code}` atingiu o limite de utilizações."
+                    )
+                user_uses = await redemptions.count_for_coupon_and_user(coupon_id, user_id)
+                if coupon.max_uses_per_user is not None and user_uses >= coupon.max_uses_per_user:
+                    raise CouponUserLimitReachedError(
+                        f"Você já usou o cupom `{coupon.code}` o número máximo de vezes."
+                    )
+            redemption = await redemptions.add(
                 DiscountCouponRedemption(
                     coupon_id=coupon_id,
                     guild_id=guild_id,
@@ -472,7 +488,7 @@ class CouponService:
                     final_price=final_price,
                 )
             )
-            total = await DiscountCouponRedemptionRepository(session).count_for_coupon(coupon_id)
+            total = await redemptions.count_for_coupon(coupon_id)
 
         if coupon is not None:
             await self._audit(

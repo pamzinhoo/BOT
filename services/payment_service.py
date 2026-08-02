@@ -159,11 +159,19 @@ class PaymentService:
         *,
         paid_at: object = None,
         provider_payload: dict[str, object] | None = None,
+        expected_statuses: tuple[PaymentStatus, ...] | None = None,
     ) -> PaymentHistory | None:
+        """expected_statuses, se informado, restringe a transicao a partir
+        desses status — a linha e travada (FOR UPDATE) antes da checagem, entao
+        duas chamadas concorrentes (dois cliques de staff, webhook + clique
+        manual) nunca conseguem transicionar a mesma linha duas vezes: a
+        segunda encontra o status ja alterado e recebe None."""
         async with self._database.session() as session:
             repo = PaymentRepository(session)
-            payment = await repo.get_by_id(payment_id)
+            payment = await repo.get_by_id_locked(payment_id)
             if payment is None:
+                return None
+            if expected_statuses is not None and payment.status not in expected_statuses:
                 return None
             previous_status = payment.status
             payment.status = status
