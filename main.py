@@ -3,7 +3,9 @@ from __future__ import annotations
 import asyncio
 
 import discord
+import uvicorn
 
+from api.main import create_app
 from config.settings import SettingsError, get_settings
 from core.bot import LimerenceBot
 from core.logger import get_logger, setup_logging
@@ -23,14 +25,23 @@ async def main() -> None:
     database = init_database(settings.database_url, echo=False)
     bot = LimerenceBot(settings=settings, database=database)
 
+    api_app = create_app(bot)
+    api_server = uvicorn.Server(
+        uvicorn.Config(
+            api_app, host=settings.api_host, port=settings.api_port,
+            log_level=settings.log_level.lower(),
+        )
+    )
+
     try:
         logger.info("Iniciando BOT LIMERENCE (ambiente: %s)...", settings.environment)
-        await bot.start(settings.discord_token)
+        await asyncio.gather(bot.start(settings.discord_token), api_server.serve())
     except discord.LoginFailure:
         logger.critical("Falha no login: DISCORD_TOKEN invalido.")
     finally:
         if not bot.is_closed():
             await bot.close()
+        api_server.should_exit = True
 
 
 if __name__ == "__main__":

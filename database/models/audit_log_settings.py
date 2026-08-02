@@ -42,6 +42,13 @@ class AuditLogSettings(Base, UUIDPrimaryKeyMixin):
     sticker: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     server_config: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     tickets: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    punishment_appeal: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    punishment_review: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    payment: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    enquete: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    subscription: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    coupon: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    plan: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow, onupdate=_utcnow

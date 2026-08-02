@@ -4,6 +4,7 @@ from datetime import timedelta
 from typing import TYPE_CHECKING
 
 import discord
+from views.base_view import SafeView
 
 from database.models.log import LogAction
 from utils.checks import member_is_staff
@@ -50,7 +51,7 @@ async def _finish(
         await interaction.response.edit_message(view=view)
 
 
-class BlacklistActionView(discord.ui.View):
+class BlacklistActionView(SafeView):
     """Botoes de moderacao anexados ao report de spam no canal de blacklist.
     Nao-persistente — precisa estar vivo no processo do bot pra funcionar,
     igual outros paineis de admin sob demanda deste bot."""

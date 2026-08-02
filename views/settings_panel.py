@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import discord
+from views.base_view import SafeView
 
 from database.models.audit_log import AuditLogCategory
 from utils.model_defaults import column_default
@@ -18,6 +19,7 @@ class FieldKind(enum.Enum):
     NUMBER = "number"
     BOOL = "bool"
     CHOICE = "choice"
+    TEXT = "text"
 
 
 @dataclass
@@ -29,6 +31,13 @@ class SettingsField:
     choices: list[tuple[str, str]] | None = None  # (value, label), so kind == CHOICE
     channel_types: list[discord.ChannelType] | None = None  # so kind == CHANNEL
     allow_clear: bool = True  # so kind == NUMBER — False pra coluna NOT NULL (nao pode virar None)
+    # validador opcional (so usado por kind TEXT/CHOICE hoje) — recebe o
+    # objeto de settings ATUAL da guild (antes da mudança) e o valor bruto
+    # submetido, devolve o valor NORMALIZADO a persistir, ou levanta
+    # ValueError com mensagem pronta pra exibir ao usuário (bloqueia o save).
+    # Default None em todo domínio existente — comportamento 100% inalterado
+    # pra quem não define validator.
+    validator: Callable[[Any, str], str] | None = None
 
 
 def category_defaults(fields: list[SettingsField]) -> dict[str, Any]:
@@ -59,6 +68,9 @@ def _format_value(field: SettingsField, raw: object) -> str:
     if field.kind == FieldKind.CHOICE:
         label = next((lbl for value, lbl in (field.choices or []) if str(value) == str(raw)), None)
         return label or str(raw)
+    if field.kind == FieldKind.TEXT:
+        text = str(raw)
+        return text if len(text) <= 200 else f"{text[:200]}…"
     return str(raw)
 
 
@@ -100,7 +112,7 @@ def build_domain_embed(title: str, fields: list[SettingsField], settings: object
     return embed
 
 
-class DomainSettingsView(discord.ui.View):
+class DomainSettingsView(SafeView):
     """Painel generico de configuracao de um dominio (Tickets/Dashboard/Ranking/...).
     Nao-persistente (timeout=300) — utilitario de admin aberto sob demanda."""
 
@@ -165,7 +177,11 @@ class _FieldPickSelect(discord.ui.Select[DomainSettingsView]):
             await interaction.response.send_modal(_NumberModal(parent, field))
             return
 
-        sub_view = discord.ui.View(timeout=180)
+        if field.kind == FieldKind.TEXT:
+            await interaction.response.send_modal(_TextModal(parent, field))
+            return
+
+        sub_view = SafeView(timeout=180)
         if field.kind == FieldKind.CHANNEL:
             sub_view.add_item(_ChannelPicker(parent, field))
         elif field.kind == FieldKind.ROLE:
@@ -253,6 +269,44 @@ class _ChoicePicker(discord.ui.Select[Any]):
         settings = await self.parent_view.get_settings(interaction.guild_id)
         before = getattr(settings, self.field.attr)
         after = self.values[0]
+        if self.field.validator is not None:
+            try:
+                after = self.field.validator(settings, after)
+            except ValueError as exc:
+                await interaction.response.send_message(f"❌ {exc}", ephemeral=True)
+                return
+        await self.parent_view.update_settings(interaction.guild_id, **{self.field.attr: after})
+        await _log_change(interaction, self.parent_view, self.field, before, after)
+        await self.parent_view.render(interaction)
+
+
+class _TextModal(discord.ui.Modal):
+    value_input: discord.ui.TextInput[Any] = discord.ui.TextInput(
+        label="Texto",
+        style=discord.TextStyle.paragraph,
+        required=False,
+        max_length=1000,
+    )
+
+    def __init__(self, parent: DomainSettingsView, field: SettingsField) -> None:
+        super().__init__(title=field.label[:45])
+        self.parent_view = parent
+        self.field = field
+        self.value_input.label = field.label[:45]
+        self.value_input.placeholder = "Deixe vazio para usar a mensagem padrão"
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        assert interaction.guild_id is not None
+        raw = str(self.value_input.value).strip()
+        settings = await self.parent_view.get_settings(interaction.guild_id)
+        before = getattr(settings, self.field.attr)
+        after: str | None = raw or None
+        if after is not None and self.field.validator is not None:
+            try:
+                after = self.field.validator(settings, after)
+            except ValueError as exc:
+                await interaction.response.send_message(f"❌ {exc}", ephemeral=True)
+                return
         await self.parent_view.update_settings(interaction.guild_id, **{self.field.attr: after})
         await _log_change(interaction, self.parent_view, self.field, before, after)
         await self.parent_view.render(interaction)
@@ -297,7 +351,7 @@ class _ResetCategoryButton(discord.ui.Button[Any]):
         )
 
 
-class _ResetCategoryConfirmView(discord.ui.View):
+class _ResetCategoryConfirmView(SafeView):
     """Confirmação do reset de UMA categoria. So quem abriu o painel pode confirmar."""
 
     def __init__(self, parent: DomainSettingsView, defaults: dict[str, Any], *, enabled: bool) -> None:

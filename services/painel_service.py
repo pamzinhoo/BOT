@@ -7,6 +7,7 @@ import discord
 from database.database import Database
 from database.repositories.dashboard_settings_repository import DashboardSettingsRepository
 from database.repositories.guild_settings_repository import GuildSettingsRepository
+from database.repositories.monetization_settings_repository import MonetizationSettingsRepository
 from database.repositories.ranking_settings_repository import RankingSettingsRepository
 from database.repositories.ticket_repository import TicketRepository
 from services.ranking_service import RankingEntry, RankingPeriod, RankingService
@@ -139,3 +140,45 @@ class PainelService:
         async with self._database.session() as session:
             settings = await GuildSettingsRepository(session).get_or_create(guild_id)
             settings.ranking_message_id = new_message.id
+
+    # --- painel fixo da loja (auto-atualiza quando os planos mudam) ---------
+
+    async def publish_shop_panel(self, guild_id: int, channel_id: int) -> None:
+        """Posta (ou reposta, se o canal mudou) o painel fixo da loja nesse
+        canal e salva canal+mensagem em MonetizationSettings."""
+        channel = self._bot.get_channel(channel_id)
+        if not isinstance(channel, discord.TextChannel):
+            return
+
+        from views.shop_view import ShopPanelView, shop_panel_embed
+
+        plans = await self._bot.plan_service.list_plans(guild_id, only_active=True)
+        message = await channel.send(embed=shop_panel_embed(plans), view=ShopPanelView())
+        async with self._database.session() as session:
+            settings = await MonetizationSettingsRepository(session).get_or_create(guild_id)
+            settings.shop_channel_id = channel_id
+            settings.shop_message_id = message.id
+
+    async def refresh_shop_panel(self, guild_id: int) -> None:
+        """Re-renderiza o painel fixo da loja ja publicado — chamado sempre
+        que um plano e criado/editado/removido. Nunca reposta sozinho (se a
+        mensagem foi apagada, precisa publicar de novo via /loja ou /config)."""
+        async with self._database.session() as session:
+            settings = await MonetizationSettingsRepository(session).get_by_guild_id(guild_id)
+        if settings is None or settings.shop_channel_id is None or settings.shop_message_id is None:
+            return
+        channel = self._bot.get_channel(settings.shop_channel_id)
+        if not isinstance(channel, discord.TextChannel):
+            return
+        try:
+            message = await channel.fetch_message(settings.shop_message_id)
+        except discord.NotFound:
+            return
+
+        from views.shop_view import shop_panel_embed
+
+        plans = await self._bot.plan_service.list_plans(guild_id, only_active=True)
+        try:
+            await message.edit(embed=shop_panel_embed(plans))
+        except discord.HTTPException:
+            pass

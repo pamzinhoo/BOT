@@ -25,6 +25,10 @@ class BaseRepository[ModelType: Base]:
         return await self.session.get(self.model, id_)
 
     async def list_all(self) -> list[ModelType]:
+        """Sem filtro de guild — so serve pra models globais de proposito
+        (ex.: CommandHelp). Repository de model guild-scoped (GuildScopedMixin
+        ou guild_id proprio) tem que expor list_by_guild(guild_id) e nunca
+        chamar este metodo direto, senao vaza dado entre servidores."""
         result = await self.session.execute(select(self.model))
         return list(result.scalars().all())
 

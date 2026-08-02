@@ -4,8 +4,10 @@ import asyncio
 from typing import TYPE_CHECKING, Any
 
 import discord
+from views.base_view import SafeView
 
 from database.models.anti_spam_settings import AntiSpamSettings
+from database.models.booster_settings import BoosterSettings
 from database.models.bot_status_settings import BotStatusSettings
 from database.models.dashboard_settings import DashboardSettings
 from database.models.evaluation_settings import EvaluationSettings
@@ -15,7 +17,10 @@ from database.models.ranking_settings import RankingSettings
 from database.models.ticket_settings import TicketSettings
 from services.ranking_service import RankingPeriod
 from views.audit_log_panel_view import AuditLogPanelView, audit_log_summary_embed
+from views.enquete_panel_view import EnqueteMenuView, enquete_menu_embed
+from views.monetization_panel_view import MonetizationMenuView, monetization_menu_embed
 from views.settings_panel import DomainSettingsView, FieldKind, GetSettings, SettingsField, UpdateSettings
+from views.ticket_panels_view import render_tickets_menu
 
 if TYPE_CHECKING:
     from core.bot import LimerenceBot
@@ -30,7 +35,7 @@ _PERIOD_CHOICES = [(p.value, label) for p, label in [
     (RankingPeriod.ALLTIME, "Geral"),
 ]]
 
-_PERMISSION_ACTIONS = ["claim", "unclaim", "fechar", "reabrir", "excluir", "auditoria", "ranking", "config"]
+_PERMISSION_ACTIONS = ["claim", "unclaim", "fechar", "reabrir", "excluir", "auditoria", "ranking", "config", "recurso_banimento", "analises", "convite"]
 _PERMISSION_LABELS = {
     "claim": "Quem pode Assumir",
     "unclaim": "Quem pode Liberar",
@@ -40,6 +45,9 @@ _PERMISSION_LABELS = {
     "auditoria": "Quem pode usar Auditoria",
     "ranking": "Quem pode usar Ranking",
     "config": "Quem pode usar Config",
+    "recurso_banimento": "Quem pode aceitar/negar recurso de banimento",
+    "analises": "Quem pode usar /analises",
+    "convite": "Quem pode criar convites do servidor",
 }
 
 
@@ -120,6 +128,9 @@ def _cargos_category(bot: "LimerenceBot") -> tuple[list[SettingsField], GetSetti
         SettingsField("support_role_id", "Suporte", FieldKind.ROLE, GuildSettings),
         SettingsField("partner_role_id", "Parceiro", FieldKind.ROLE, GuildSettings),
         SettingsField("streamer_role_id", "Streamer", FieldKind.ROLE, GuildSettings),
+        SettingsField(
+            "player_role_id", "Jogador (restaurado após ban revogado)", FieldKind.ROLE, GuildSettings
+        ),
     ]
 
     async def get_settings(guild_id: int) -> Any:
@@ -291,6 +302,44 @@ def _alertas_category(bot: "LimerenceBot") -> tuple[list[SettingsField], GetSett
     return fields, get_settings, bot.config_service.update
 
 
+def _moderacao_category(bot: "LimerenceBot") -> tuple[list[SettingsField], GetSettings, UpdateSettings]:
+    fields = [
+        SettingsField("log_punishments_channel_id", "Canal de Log de Punições", FieldKind.CHANNEL, GuildSettings, channel_types=_TEXT),
+        SettingsField("appeal_channel_id", "Canal de Recursos", FieldKind.CHANNEL, GuildSettings, channel_types=_TEXT),
+        SettingsField("appeal_category_id", "Categoria de Recursos", FieldKind.CHANNEL, GuildSettings, channel_types=_CATEGORY_CHANNEL),
+        SettingsField("max_timeout_duration_minutes", "Duração Máxima de Timeout (min)", FieldKind.NUMBER, GuildSettings),
+        SettingsField("moderation_enabled", "Moderação Ativada", FieldKind.BOOL, GuildSettings),
+        SettingsField("require_proof", "Exigir Provas", FieldKind.BOOL, GuildSettings),
+        SettingsField("review_role_id", "Cargo Em Análise", FieldKind.ROLE, GuildSettings),
+        SettingsField("review_channel_id", "Canal Liberado Durante Análise", FieldKind.CHANNEL, GuildSettings, channel_types=_TEXT),
+        SettingsField("review_timeout_minutes", "Prazo de Recurso Antes do Ban (min)", FieldKind.NUMBER, GuildSettings),
+    ]
+
+    async def get_settings(guild_id: int) -> Any:
+        return await bot.config_service.get_settings(guild_id)
+
+    return fields, get_settings, bot.config_service.update
+
+
+def _boost_category(bot: "LimerenceBot") -> tuple[list[SettingsField], GetSettings, UpdateSettings]:
+    fields = [
+        SettingsField("enabled", "Sistema Ativado", FieldKind.BOOL, BoosterSettings),
+        SettingsField("booster_role_id", "Cargo de Booster", FieldKind.ROLE, BoosterSettings),
+        SettingsField("dm_enabled", "Enviar DM Automaticamente", FieldKind.BOOL, BoosterSettings),
+        SettingsField("dm_message", "Mensagem Privada Personalizada", FieldKind.TEXT, BoosterSettings),
+        SettingsField("log_channel_id", "Canal de Logs", FieldKind.CHANNEL, BoosterSettings, channel_types=_TEXT),
+        SettingsField("public_message_enabled", "Enviar Mensagem Pública", FieldKind.BOOL, BoosterSettings),
+        SettingsField("public_channel_id", "Canal da Mensagem Pública", FieldKind.CHANNEL, BoosterSettings, channel_types=_TEXT),
+        SettingsField("public_use_embed", "Mensagem Pública em Embed", FieldKind.BOOL, BoosterSettings),
+        SettingsField("public_message", "Mensagem Pública Personalizada", FieldKind.TEXT, BoosterSettings),
+    ]
+
+    async def get_settings(guild_id: int) -> Any:
+        return await bot.booster_service.get_settings(guild_id)
+
+    return fields, get_settings, bot.booster_service.update_settings
+
+
 _CATEGORY_BUILDERS: dict[str, tuple[str, Any]] = {
     "tickets": ("🎫 Tickets", _tickets_category),
     "cargos": ("👮 Cargos", _cargos_category),
@@ -300,6 +349,8 @@ _CATEGORY_BUILDERS: dict[str, tuple[str, Any]] = {
     "avaliacoes": ("⭐ Avaliações", _avaliacoes_category),
     "antispam": ("🚫 Anti-Spam", _antispam_category),
     "alertas": ("🔔 Alertas", _alertas_category),
+    "moderacao": ("🔨 Moderação", _moderacao_category),
+    "boost": ("💜 Boost", _boost_category),
 }
 
 
@@ -325,6 +376,26 @@ async def _open_category(interaction: discord.Interaction, category: str) -> Non
         )
         return
 
+    if category == "monetizacao":
+        await interaction.response.edit_message(
+            content=None, embed=monetization_menu_embed(), view=MonetizationMenuView(on_back=_back_to_main_menu)
+        )
+        return
+
+    if category == "tickets":
+        # Tickets tem menu proprio (kill switch + CRUD de paineis). O
+        # _tickets_category continua existindo em _CATEGORY_BUILDERS porque e a
+        # fonte dos campos/defaults do reset (/config reset-all) e e reaproveitado
+        # dentro do menu como "Configurações Gerais".
+        await render_tickets_menu(interaction, _back_to_main_menu)
+        return
+
+    if category == "enquetes":
+        await interaction.response.edit_message(
+            content=None, embed=enquete_menu_embed(), view=EnqueteMenuView(on_back=_back_to_main_menu)
+        )
+        return
+
     if category == "geral":
         settings = await bot.config_service.get_settings(interaction.guild_id)
         embed = discord.Embed(title="⚙️ Geral — visão completa")
@@ -332,7 +403,7 @@ async def _open_category(interaction: discord.Interaction, category: str) -> Non
         embed.add_field(name="Canal de Backup", value=f"<#{settings.backup_channel_id}>" if settings.backup_channel_id else "—")
         embed.add_field(name="Categoria de Tickets", value=f"<#{settings.ticket_category_id}>" if settings.ticket_category_id else "—")
         embed.set_footer(text="Configurações específicas: use as outras categorias no menu.")
-        view = discord.ui.View(timeout=300)
+        view = SafeView(timeout=300)
         view.add_item(_BackToMainMenuButton())
         await interaction.response.edit_message(content=None, embed=embed, view=view)
         return
@@ -378,6 +449,10 @@ class _CategorySelect(discord.ui.Select["MainConfigMenuView"]):
             discord.SelectOption(label="📈 Ranking", value="ranking"),
             discord.SelectOption(label="⭐ Avaliações", value="avaliacoes"),
             discord.SelectOption(label="🚫 Anti-Spam", value="antispam"),
+            discord.SelectOption(label="🔨 Moderação", value="moderacao"),
+            discord.SelectOption(label="💜 Boost", value="boost"),
+            discord.SelectOption(label="💰 Monetização", value="monetizacao"),
+            discord.SelectOption(label="🗳️ Enquetes", value="enquetes"),
             discord.SelectOption(label="📋 Auditoria", value="auditoria"),
             discord.SelectOption(label="🔔 Alertas", value="alertas"),
             discord.SelectOption(label="⚙️ Geral", value="geral"),
@@ -396,7 +471,7 @@ class _BackToMainMenuButton(discord.ui.Button[Any]):
         await _back_to_main_menu(interaction)
 
 
-class MainConfigMenuView(discord.ui.View):
+class MainConfigMenuView(SafeView):
     """Menu principal da central de configuração. Nao-persistente (timeout=300)."""
 
     def __init__(self) -> None:

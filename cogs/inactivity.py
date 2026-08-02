@@ -62,6 +62,13 @@ class InactivityCog(commands.Cog):
             if not isinstance(channel, discord.TextChannel):
                 continue
 
+            # painel que criou o ticket pode desligar o auto-close so pra ele
+            behaviour = await self.bot.ticket_panel_service.behaviour_for_ticket(
+                ticket, guild.id
+            )
+            if not behaviour.auto_close_enabled:
+                continue
+
             if settings.inactive_after_minutes and ticket.claimed_by_staff_id is not None:
                 last_activity_at = await self._last_message_at(channel, ticket.created_at)
                 elapsed_minutes = (now - last_activity_at).total_seconds() / 60
@@ -129,7 +136,10 @@ class InactivityCog(commands.Cog):
             )
         opener = guild.get_member(closed_ticket.opened_by_discord_id)
         eval_settings = await self.bot.config_service.get_evaluation_settings(guild.id)
-        if opener is not None and eval_settings.enabled:
+        behaviour = await self.bot.ticket_panel_service.behaviour_for_ticket(
+            closed_ticket, guild.id
+        )
+        if opener is not None and eval_settings.enabled and behaviour.evaluation_enabled:
             await channel.send(
                 content=opener.mention,
                 embed=discord.Embed(
@@ -164,9 +174,11 @@ class InactivityCog(commands.Cog):
                 color=EMBED_COLOR_DANGER,
             )
         )
-        ticket_settings = await self.bot.config_service.get_ticket_settings(guild.id)
+        behaviour = await self.bot.ticket_panel_service.behaviour_for_ticket(
+            cancelled_ticket, guild.id
+        )
         schedule_channel_deletion(
-            channel, "cancelado por inatividade do autor", ticket_settings.delete_delay_seconds
+            channel, "cancelado por inatividade do autor", behaviour.delete_delay_seconds
         )
 
 

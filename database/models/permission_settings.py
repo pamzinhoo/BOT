@@ -19,6 +19,9 @@ PERMISSION_ACTIONS: list[str] = [
     "auditoria",
     "ranking",
     "config",
+    "recurso_banimento",
+    "analises",
+    "convite",
 ]
 
 
@@ -45,6 +48,9 @@ class PermissionSettings(Base, UUIDPrimaryKeyMixin):
     auditoria: Mapped[list[int]] = mapped_column(JSONB, nullable=False, default=_empty_list)
     ranking: Mapped[list[int]] = mapped_column(JSONB, nullable=False, default=_empty_list)
     config: Mapped[list[int]] = mapped_column(JSONB, nullable=False, default=_empty_list)
+    recurso_banimento: Mapped[list[int]] = mapped_column(JSONB, nullable=False, default=_empty_list)
+    analises: Mapped[list[int]] = mapped_column(JSONB, nullable=False, default=_empty_list)
+    convite: Mapped[list[int]] = mapped_column(JSONB, nullable=False, default=_empty_list)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow, onupdate=_utcnow
     )

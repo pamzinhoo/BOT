@@ -13,15 +13,30 @@ from config.settings import Settings
 from core.logger import get_logger
 from database.database import Database
 from services.audit_log_service import AuditLogService
+from services.automod_service import AutoModService
+from services.booster_service import BoosterService
 from services.bot_status_service import BotStatusService
 from services.claim_service import ClaimService
 from services.config_service import ConfigService
+from services.coupon_service import CouponService
 from services.evaluation_service import EvaluationService
+from services.guild_service import GuildService
+from services.help_service import HelpService
 from services.log_service import LogService
 from services.painel_service import PainelService
+from services.payment_service import PaymentService
+from services.plan_service import PlanService
+from services.poll_service import PollService
+from services.punishment_review_service import PunishmentReviewService
+from services.punishment_service import PunishmentService
 from services.ranking_service import RankingService
 from services.staff_service import StaffService
+from services.subscription_reminder_service import SubscriptionReminderService
+from services.subscription_renewal_config_service import SubscriptionRenewalConfigService
+from services.subscription_service import SubscriptionService
+from services.ticket_panel_service import TicketPanelService
 from services.ticket_service import TicketService
+from services.vote_weight_service import VoteWeightService
 from utils.checks import NotAdminError, NotStaffError
 
 logger = get_logger("bot")
@@ -47,8 +62,10 @@ class LimerenceBot(commands.Bot):
         self.started_at = datetime.now(UTC)
 
         self.config_service = ConfigService(database)
+        self.guild_service = GuildService(database)
         self.staff_service = StaffService(database)
         self.ticket_service = TicketService(database)
+        self.ticket_panel_service = TicketPanelService(database, self)
         self.claim_service = ClaimService(database)
         self.evaluation_service = EvaluationService(database)
         self.ranking_service = RankingService(database)
@@ -56,6 +73,25 @@ class LimerenceBot(commands.Bot):
         self.painel_service = PainelService(database, self)
         self.audit_log_service = AuditLogService(database, self)
         self.bot_status_service = BotStatusService(database, self)
+        self.punishment_service = PunishmentService(database)
+        self.punishment_review_service = PunishmentReviewService(
+            database, self.punishment_service, self.audit_log_service
+        )
+        self.help_service = HelpService(database, self.audit_log_service)
+        self.automod_service = AutoModService(database)
+        self.booster_service = BoosterService(database, self)
+        self.plan_service = PlanService(database, self)
+        self.payment_service = PaymentService(database, settings)
+        self.coupon_service = CouponService(database, self)
+        self.subscription_service = SubscriptionService(database, self, self.payment_service)
+        self.subscription_renewal_config_service = SubscriptionRenewalConfigService(database)
+        self.subscription_reminder_service = SubscriptionReminderService(
+            database, self, self.subscription_renewal_config_service, self.subscription_service
+        )
+        self.vote_weight_service = VoteWeightService(database)
+        self.poll_service = PollService(
+            database, self, self.vote_weight_service, self.subscription_service
+        )
 
         self.tree.on_error = self._on_app_command_error
         self._patch_view_store_diagnostics()
@@ -129,13 +165,69 @@ class LimerenceBot(commands.Bot):
     async def _register_persistent_views(self) -> None:
         from views.evaluation_view import EvaluationView
         from views.painel_view import PainelView
+        from views.appeal_view import AppealAcceptButton, AppealButton, AppealDenyButton
+        from views.help_views import HelpCategoryView, HelpMainView
+        from views.pending_punishments_view import (
+            AnalisesAcceptButton,
+            AnalisesBackButton,
+            AnalisesDenyButton,
+            AnalisesNavButton,
+            AnalisesSelect,
+        )
         from views.ticket_actions_view import TicketActionsView
+        from views.ticket_approval_view import TicketApprovalView
         from views.ticket_closed_view import TicketClosedView
+        from views.shop_view import ShopPanelView
+        from cogs.polls import PollVoteButton
 
         self.add_view(PainelView())
         self.add_view(TicketActionsView())
         self.add_view(TicketClosedView())
+        self.add_view(TicketApprovalView())
         self.add_view(EvaluationView())
+        self.add_view(HelpMainView())
+        self.add_view(HelpCategoryView())
+        self.add_view(ShopPanelView())
+        self.add_dynamic_items(AppealButton, AppealAcceptButton, AppealDenyButton)
+        self.add_dynamic_items(
+            AnalisesNavButton, AnalisesSelect, AnalisesAcceptButton, AnalisesDenyButton, AnalisesBackButton
+        )
+        self.add_dynamic_items(PollVoteButton)
+
+        # botoes das mensagens de renovacao de assinatura (vao por DM/canal e
+        # precisam responder mesmo depois de um restart)
+        from views.subscription_renewal_buttons import (
+            CloseRenewalMessageButton,
+            OpenStoreButton,
+            RenewSubscriptionButton,
+            ViewPlanButton,
+        )
+
+        self.add_dynamic_items(
+            RenewSubscriptionButton, ViewPlanButton, OpenStoreButton, CloseRenewalMessageButton
+        )
+
+        # botoes de aprovacao manual de pagamento (canal de aprovacao —
+        # precisam responder mesmo depois de um restart)
+        from views.shop_view import (
+            PaymentApproveButton,
+            PaymentCancelButton,
+            PaymentPendingButton,
+            PaymentRejectButton,
+        )
+
+        self.add_dynamic_items(
+            PaymentApproveButton, PaymentRejectButton, PaymentPendingButton, PaymentCancelButton
+        )
+
+        # cada painel de ticket configuravel tem um botao com custom_id proprio
+        # (limerence:ticket_panel:<key>:open) — sem re-registrar aqui, os botoes
+        # dos paineis ja publicados param de responder depois de um restart.
+        try:
+            registered = await self.ticket_panel_service.register_published_views()
+            logger.info("Views persistentes de paineis de ticket registradas: %d", registered)
+        except Exception:
+            logger.exception("Falha ao registrar as views dos paineis de ticket publicados.")
 
     async def _load_cogs(self) -> None:
         loaded = 0

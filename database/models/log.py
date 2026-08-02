@@ -21,6 +21,7 @@ class LogAction(enum.Enum):
     REABERTURA = "reabertura"
     SPAM_DETECTADO = "spam_detectado"
     BLACKLIST_ACAO = "blacklist_acao"
+    EXCLUSAO = "exclusao"
 
 
 class LogEntry(Base, UUIDPrimaryKeyMixin, TimestampMixin):

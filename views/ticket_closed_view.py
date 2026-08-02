@@ -4,6 +4,7 @@ import io
 from typing import TYPE_CHECKING
 
 import discord
+from views.base_view import SafeView
 
 from database.models.log import LogAction
 from database.models.ticket import Ticket
@@ -35,7 +36,7 @@ async def _deny_if_cant(interaction: discord.Interaction, action: str) -> bool:
     return True
 
 
-class TicketClosedView(discord.ui.View):
+class TicketClosedView(SafeView):
     """Botoes Transcricao/Reabrir/Excluir, mostrados apos o fechamento
     confirmado. Persistent (timeout=None), resolve o ticket pelo channel_id."""
 
@@ -59,6 +60,14 @@ class TicketClosedView(discord.ui.View):
         ticket = await bot.ticket_service.get_by_channel_id(interaction.channel_id)
         if ticket is None:
             await interaction.response.send_message("Ticket não encontrado.", ephemeral=True)
+            return
+
+        behaviour = await bot.ticket_panel_service.behaviour_for_ticket(ticket, ticket.guild_id)
+        if not behaviour.transcript_enabled:
+            await interaction.response.send_message(
+                "A transcrição está desativada no painel que originou este ticket.",
+                ephemeral=True,
+            )
             return
 
         await interaction.response.defer(ephemeral=True, thinking=True)
@@ -164,14 +173,35 @@ class TicketClosedView(discord.ui.View):
             item.disabled = True  # type: ignore[attr-defined]
         await interaction.response.edit_message(view=self)
 
-        if ticket is not None and ticket.claimed_by_staff_id is not None:
+        behaviour = (
+            await bot.ticket_panel_service.behaviour_for_ticket(ticket, guild.id)
+            if guild is not None
+            else None
+        )
+
+        if (
+            ticket is not None
+            and ticket.claimed_by_staff_id is not None
+            and (behaviour is None or behaviour.dm_on_close_enabled)
+        ):
             evaluated = await bot.evaluation_service.has_evaluation(ticket.id)
             if not evaluated:
                 await self._dm_evaluation_fallback(bot, guild, ticket, channel)
 
         if guild is not None:
-            ticket_settings = await bot.config_service.get_ticket_settings(guild.id)
-            schedule_channel_deletion(channel, f"excluído por {member}", ticket_settings.delete_delay_seconds)
+            await bot.log_service.record(
+                guild_id=guild.id,
+                action=LogAction.EXCLUSAO,
+                actor_discord_id=member.id,
+                ticket_id=ticket.id if ticket is not None else None,
+                category_snapshot=ticket.category.value if ticket is not None else None,
+                message=f"{member} excluiu o ticket.",
+            )
+
+        if behaviour is not None:
+            schedule_channel_deletion(
+                channel, f"excluído por {member}", behaviour.delete_delay_seconds
+            )
         else:
             schedule_channel_deletion(channel, f"excluído por {member}")
 

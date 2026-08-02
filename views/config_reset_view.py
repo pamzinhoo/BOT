@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import discord
+from views.base_view import SafeView
 
 from database.models.audit_log import AuditLogCategory
 from services.config_reset_service import reset_all_guild_config
@@ -26,7 +27,7 @@ def reset_all_warning_embed() -> discord.Embed:
     return embed
 
 
-class ConfigResetAllConfirmView(discord.ui.View):
+class ConfigResetAllConfirmView(SafeView):
     """Confirmação do reset geral. So quem pediu pode confirmar/cancelar —
     igual ConfigImportConfirmView. Nao-persistente — expira em 2 minutos."""
 

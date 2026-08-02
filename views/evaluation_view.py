@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import discord
+from views.base_view import SafeView
 
 from database.models.log import LogAction
 from services.evaluation_service import EvaluationError
@@ -94,7 +95,7 @@ async def _submit(interaction: discord.Interaction, rating: int, comment: str | 
         schedule_channel_deletion(channel, "avaliação recebida")
 
 
-class EvaluationView(discord.ui.View):
+class EvaluationView(SafeView):
     """1-5 estrelas. Persistent (timeout=None); resolve o ticket pelo channel_id."""
 
     def __init__(self) -> None:

@@ -21,7 +21,7 @@ _PERIOD_DELTAS: dict[str, timedelta | None] = {
 _CATEGORY_CHOICES = [
     app_commands.Choice(name=label, value=category.value)
     for category, label in AUDIT_CATEGORY_LABELS.items()
-]
+]  # > 25 itens — nao da pra usar @app_commands.choices (limite do Discord), usa autocomplete abaixo
 
 
 class AuditCog(commands.Cog):
@@ -37,7 +37,6 @@ class AuditCog(commands.Cog):
         periodo="Janela de tempo (padrão: tudo)",
     )
     @app_commands.choices(
-        categoria=_CATEGORY_CHOICES,
         periodo=[app_commands.Choice(name=p, value=p) for p in _PERIOD_DELTAS],
     )
     @has_permission("auditoria")
@@ -46,7 +45,7 @@ class AuditCog(commands.Cog):
         interaction: discord.Interaction,
         usuario: discord.Member | None = None,
         staff: discord.Member | None = None,
-        categoria: app_commands.Choice[str] | None = None,
+        categoria: str | None = None,
         acao: str | None = None,
         periodo: app_commands.Choice[str] | None = None,
     ) -> None:
@@ -54,11 +53,19 @@ class AuditCog(commands.Cog):
         delta = _PERIOD_DELTAS[periodo.value] if periodo else None
         since = datetime.now(UTC) - delta if delta else None
 
+        category = None
+        if categoria:
+            try:
+                category = AuditLogCategory(categoria)
+            except ValueError:
+                await interaction.response.send_message("Categoria inválida.", ephemeral=True)
+                return
+
         entries = await self.bot.audit_log_service.list_entries(
             interaction.guild_id,
             target_id=usuario.id if usuario else None,
             executor_id=staff.id if staff else None,
-            category=AuditLogCategory(categoria.value) if categoria else None,
+            category=category,
             action=acao,
             since=since,
             limit=20,
@@ -93,6 +100,14 @@ class AuditCog(commands.Cog):
             description="\n".join(lines)[:4000],
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @audit.autocomplete("categoria")
+    async def categoria_autocomplete(
+        self, interaction: discord.Interaction, current: str
+    ) -> list[app_commands.Choice[str]]:
+        current = current.lower()
+        matches = [c for c in _CATEGORY_CHOICES if current in c.name.lower()]
+        return matches[:25]
 
 
 async def setup(bot: LimerenceBot) -> None:

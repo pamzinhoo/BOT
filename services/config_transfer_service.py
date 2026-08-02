@@ -68,6 +68,7 @@ TABLE_SCHEMAS: dict[str, list[tuple[str, RefKind]]] = {
         ("ranking_channel_id", RefKind.CHANNEL),
     ],
     "ticket_settings": [
+        ("enabled", RefKind.PLAIN),
         ("max_tickets_per_user", RefKind.PLAIN),
         ("allow_multiple_tickets", RefKind.PLAIN),
         ("auto_close_enabled", RefKind.PLAIN),

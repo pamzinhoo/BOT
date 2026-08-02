@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import discord
+from views.base_view import SafeView
 
 from utils.checks import member_is_staff
 
 
-class ConfirmCloseView(discord.ui.View):
+class ConfirmCloseView(SafeView):
     """Confirmacao efemera (Sim/Nao) antes de fechar um ticket de verdade.
 
     Restrita a quem abriu a confirmacao (closer_id) E que ainda seja staff no

@@ -19,6 +19,16 @@ class TicketCategory(enum.Enum):
     OUTRO = "outro"
 
 
+class TicketApprovalStatus(enum.Enum):
+    """Etapa opcional de aprovacao — so usada por tickets criados por um painel
+    com `approval_enabled`. NONE = painel sem aprovacao (padrao)."""
+
+    NONE = "none"
+    PENDING = "pending"
+    APPROVED = "approved"
+    REPROVED = "reproved"
+
+
 class TicketStatus(enum.Enum):
     OPEN = "open"
     CLAIMED = "claimed"
@@ -50,3 +60,15 @@ class Ticket(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     counts_for_stats: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     reminder_tier_sent: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     voice_channel_id: Mapped[int | None] = mapped_column(BigInteger)
+    # painel que originou o ticket. NULL = fluxo legado (/painel-setup) ou
+    # ticket criado sem painel nenhum.
+    panel_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("ticket_panels.id", ondelete="SET NULL"), nullable=True
+    )
+    approval_status: Mapped[TicketApprovalStatus] = mapped_column(
+        Enum(TicketApprovalStatus, name="ticket_approval_status"),
+        nullable=False,
+        default=TicketApprovalStatus.NONE,
+    )
+    approval_reviewed_by: Mapped[int | None] = mapped_column(BigInteger)
+    approval_reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

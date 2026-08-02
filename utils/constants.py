@@ -4,6 +4,8 @@ import discord
 
 from database.models.audit_log import AuditLogCategory
 from database.models.log import LogAction
+from database.models.punishment import PunishmentStatus, PunishmentType
+from database.models.punishment_appeal import AppealStatus
 from database.models.ticket import TicketCategory
 
 CATEGORY_LABELS: dict[TicketCategory, str] = {
@@ -90,6 +92,7 @@ LOG_ACTION_LABELS: dict[LogAction, str] = {
     LogAction.REABERTURA: "Reabertura",
     LogAction.SPAM_DETECTADO: "Spam detectado",
     LogAction.BLACKLIST_ACAO: "Ação de blacklist",
+    LogAction.EXCLUSAO: "Exclusão",
 }
 
 ACHIEVEMENT_LABELS: dict[str, str] = {
@@ -102,12 +105,45 @@ ACHIEVEMENT_LABELS: dict[str, str] = {
 
 MEDALS = ["🥇", "🥈", "🥉"]
 
+PUNISHMENT_TYPE_LABELS: dict[PunishmentType, str] = {
+    PunishmentType.BAN: "🔨 Ban",
+    PunishmentType.BAN_TEMPORARIO: "🔨 Ban Temporário",
+    PunishmentType.TIMEOUT: "⏳ Timeout",
+    PunishmentType.KICK: "👢 Expulsão",
+    PunishmentType.ADVERTENCIA: "⚠️ Advertência",
+}
+
+PUNISHMENT_STATUS_LABELS: dict[PunishmentStatus, str] = {
+    PunishmentStatus.PENDING: "Pendente",
+    PunishmentStatus.NOTIFIED: "Notificada (aguardando aplicação)",
+    PunishmentStatus.PENDING_REVIEW: "Em análise (isolado)",
+    PunishmentStatus.ACTIVE: "Ativa",
+    PunishmentStatus.EXPIRED: "Expirada",
+    PunishmentStatus.REVOKED: "Revogada",
+}
+
+APPEAL_STATUS_LABELS: dict[AppealStatus, str] = {
+    AppealStatus.PENDING: "Analisando",
+    AppealStatus.APPROVED: "Aceito",
+    AppealStatus.DENIED: "Negado",
+}
+
 
 def achievement_label(key: str) -> str:
     if key.startswith("monthly_top1_"):
         year, month = key.removeprefix("monthly_top1_").split("-")
         return f"🏆 1º lugar do mês {month}/{year}"
     return ACHIEVEMENT_LABELS.get(key, f"🏆 {key}")
+
+HELP_CATEGORIES: list[str] = ["moderacao", "tickets", "configuracao", "staff", "monetizacao"]
+
+HELP_CATEGORY_LABELS: dict[str, str] = {
+    "moderacao": "🔨 Moderação",
+    "tickets": "🎫 Tickets",
+    "configuracao": "⚙️ Configuração",
+    "staff": "📊 Staff",
+    "monetizacao": "💰 Monetização",
+}
 
 EMBED_COLOR_DEFAULT = discord.Color.blurple()
 EMBED_COLOR_SUCCESS = discord.Color.green()
@@ -145,6 +181,13 @@ AUDIT_CATEGORY_LABELS: dict[AuditLogCategory, str] = {
     AuditLogCategory.STICKER: "🏷️ Sticker",
     AuditLogCategory.SERVER_CONFIG: "⚙️ Configuração do Servidor",
     AuditLogCategory.TICKETS: "🎫 Ticket",
+    AuditLogCategory.PUNISHMENT_APPEAL: "📨 Recurso de Punição",
+    AuditLogCategory.PUNISHMENT_REVIEW: "🔒 Análise de Punição",
+    AuditLogCategory.PAYMENT: "💳 Pagamento",
+    AuditLogCategory.ENQUETE: "🗳️ Enquete",
+    AuditLogCategory.SUBSCRIPTION: "🔁 Assinatura",
+    AuditLogCategory.COUPON: "🎟️ Cupom",
+    AuditLogCategory.PLAN: "📦 Plano",
 }
 
 # como montar a mencao do alvo no embed/lista: "user" -> <@id>, "channel" -> <#id>,
@@ -172,6 +215,13 @@ AUDIT_CATEGORY_TARGET_KIND: dict[AuditLogCategory, str] = {
     AuditLogCategory.STICKER: "none",
     AuditLogCategory.SERVER_CONFIG: "none",
     AuditLogCategory.TICKETS: "channel",
+    AuditLogCategory.PUNISHMENT_APPEAL: "user",
+    AuditLogCategory.PUNISHMENT_REVIEW: "user",
+    AuditLogCategory.PAYMENT: "user",
+    AuditLogCategory.ENQUETE: "none",
+    AuditLogCategory.SUBSCRIPTION: "user",
+    AuditLogCategory.COUPON: "user",
+    AuditLogCategory.PLAN: "none",
 }
 
 AUDIT_CATEGORY_COLORS: dict[AuditLogCategory, discord.Color] = {
@@ -197,4 +247,11 @@ AUDIT_CATEGORY_COLORS: dict[AuditLogCategory, discord.Color] = {
     AuditLogCategory.STICKER: EMBED_COLOR_DEFAULT,
     AuditLogCategory.SERVER_CONFIG: EMBED_COLOR_DARK,
     AuditLogCategory.TICKETS: EMBED_COLOR_PURPLE,
+    AuditLogCategory.PUNISHMENT_APPEAL: EMBED_COLOR_INFO,
+    AuditLogCategory.PUNISHMENT_REVIEW: EMBED_COLOR_ORANGE,
+    AuditLogCategory.PAYMENT: EMBED_COLOR_SUCCESS,
+    AuditLogCategory.ENQUETE: EMBED_COLOR_PURPLE,
+    AuditLogCategory.SUBSCRIPTION: EMBED_COLOR_SUCCESS,
+    AuditLogCategory.COUPON: EMBED_COLOR_PURPLE,
+    AuditLogCategory.PLAN: EMBED_COLOR_PURPLE,
 }

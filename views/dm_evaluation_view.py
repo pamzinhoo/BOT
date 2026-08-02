@@ -4,6 +4,7 @@ import uuid
 from typing import TYPE_CHECKING
 
 import discord
+from views.base_view import SafeView
 
 from database.models.log import LogAction
 from services.evaluation_service import EvaluationError
@@ -97,7 +98,7 @@ async def _submit_dm(
         await interaction.response.send_message(message, ephemeral=True)
 
 
-class DMEvaluationView(discord.ui.View):
+class DMEvaluationView(SafeView):
     """Fallback de avaliacao mandado por DM quando a staff exclui o ticket
     antes do usuario avaliar — o canal ja nao existe mais, entao o ticket_id
     fica embutido no custom_id de cada botao (nao da pra resolver por

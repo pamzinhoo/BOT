@@ -8,8 +8,9 @@ import discord
 
 from database.database import Database
 from database.models.staff_activity import StaffActivityEvent
-from database.models.ticket import Ticket, TicketCategory, TicketStatus
+from database.models.ticket import Ticket, TicketApprovalStatus, TicketCategory, TicketStatus
 from database.models.ticket_message import TicketMessage, TicketMessageKind
+from database.models.ticket_panel import TicketPanel
 from database.repositories.achievement_repository import AchievementRepository
 from database.repositories.staff_activity_repository import StaffActivityRepository
 from database.repositories.staff_stats_repository import StaffStatsRepository
@@ -46,7 +47,15 @@ class TicketService:
         category: TicketCategory,
         ticket_category_channel: discord.CategoryChannel | None,
         staff_role_ids: list[int],
+        *,
+        panel: TicketPanel | None = None,
     ) -> tuple[Ticket, discord.TextChannel]:
+        """Cria o canal do ticket + a linha no banco.
+
+        `panel` e opcional de proposito: o fluxo legado (/painel-setup ->
+        PainelView) chama sem ele e continua se comportando exatamente igual.
+        Quando vem preenchido, o ticket fica vinculado ao painel (panel_id) e ja
+        nasce PENDING se o painel exigir aprovacao."""
         overwrites: dict[discord.Role | discord.Member | discord.Object, discord.PermissionOverwrite] = {
             guild.default_role: discord.PermissionOverwrite(view_channel=False),
             member: discord.PermissionOverwrite(
@@ -60,7 +69,8 @@ class TicketService:
                     view_channel=True, send_messages=True, read_message_history=True
                 )
 
-        channel_name = f"ticket-{member.name}"[:90].lower()
+        prefix = panel.key if panel is not None else "ticket"
+        channel_name = f"{prefix}-{member.name}"[:90].lower()
         channel = await guild.create_text_channel(
             name=channel_name,
             category=ticket_category_channel,
@@ -68,6 +78,11 @@ class TicketService:
             reason=f"Ticket aberto por {member} ({category.value})",
         )
 
+        approval_status = (
+            TicketApprovalStatus.PENDING
+            if panel is not None and panel.approval_enabled
+            else TicketApprovalStatus.NONE
+        )
         async with self._database.session() as session:
             ticket = await TicketRepository(session).add(
                 Ticket(
@@ -75,9 +90,26 @@ class TicketService:
                     channel_id=channel.id,
                     opened_by_discord_id=member.id,
                     category=category,
+                    panel_id=panel.id if panel is not None else None,
+                    approval_status=approval_status,
                 )
             )
         return ticket, channel
+
+    async def set_approval_decision(
+        self, channel_id: int, *, status: TicketApprovalStatus, reviewer_id: int
+    ) -> Ticket:
+        """Registra a decisao de Aprovar/Reprovar de um ticket vindo de painel
+        com etapa de aprovacao. Nao mexe no status do ticket em si — aprovar ou
+        reprovar nao fecha nada, o fluxo normal de fechamento continua valendo."""
+        async with self._database.session() as session:
+            ticket = await TicketRepository(session).get_by_channel_id(channel_id)
+            if ticket is None:
+                raise TicketNotFoundError("Ticket nao encontrado para este canal.")
+            ticket.approval_status = status
+            ticket.approval_reviewed_by = reviewer_id
+            ticket.approval_reviewed_at = datetime.now(UTC)
+            return ticket
 
     async def record_first_message(self, message: discord.Message, is_staff: bool) -> None:
         kind = TicketMessageKind.STAFF_FIRST if is_staff else TicketMessageKind.USER_FIRST

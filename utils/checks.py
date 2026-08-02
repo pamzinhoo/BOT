@@ -7,6 +7,7 @@ from discord import app_commands
 
 from database.models.guild_settings import GuildSettings
 from database.models.permission_settings import PermissionSettings
+from database.models.punishment import PunishmentType
 from database.repositories.guild_settings_repository import GuildSettingsRepository
 from database.repositories.permission_settings_repository import PermissionSettingsRepository
 
@@ -15,7 +16,9 @@ if TYPE_CHECKING:
 
 # acoes cujo fallback legado (sem override em permission_settings) e admin/staff/publico
 _LEGACY_ADMIN_ACTIONS = {"auditoria", "config"}
-_LEGACY_STAFF_ACTIONS = {"claim", "unclaim", "fechar", "reabrir", "excluir"}
+_LEGACY_STAFF_ACTIONS = {
+    "claim", "unclaim", "fechar", "reabrir", "excluir", "recurso_banimento", "analises",
+}
 
 
 class NotStaffError(app_commands.CheckFailure):
@@ -148,6 +151,55 @@ async def member_can(interaction: discord.Interaction, action: str) -> bool:
     if action in _LEGACY_STAFF_ACTIONS:
         return await member_is_staff(interaction)
     return True  # acoes sem fallback restrito (ex.: ranking) sao publicas por padrao
+
+
+# Moderador so pode advertencia/timeout/kick — ban/ban_temporario exige Administrador/Owner.
+_MODERATOR_ALLOWED_PUNISHMENT_TYPES = {
+    PunishmentType.ADVERTENCIA,
+    PunishmentType.TIMEOUT,
+    PunishmentType.KICK,
+}
+
+
+async def member_can_apply_punishment(interaction: discord.Interaction, ptype: PunishmentType) -> bool:
+    """Controle de permissoes de /punir (Etapa 9): Administrador/Owner podem qualquer tipo,
+    Moderador so advertencia/timeout/kick, os demais nao podem punir."""
+    if await member_is_admin(interaction):
+        return True
+    if await member_is_staff(interaction):
+        return ptype in _MODERATOR_ALLOWED_PUNISHMENT_TYPES
+    return False
+
+
+def can_punish_target(staff: discord.Member, target: discord.Member) -> bool:
+    """Protecao contra abuso de staff (Etapa 10): staff nao pode punir membro com cargo
+    igual ou superior ao seu. Administrador do servidor sempre pode; ninguem pode punir
+    o dono do servidor."""
+    if target.id == target.guild.owner_id:
+        return False
+    if staff.guild_permissions.administrator:
+        return True
+    return staff.top_role > target.top_role
+
+
+async def member_can_review_appeal(interaction: discord.Interaction, applied_by_staff_id: int) -> bool:
+    """Staff responsavel pela punicao original nao pode analisar o proprio recurso (Etapa 20)."""
+    if interaction.user.id == applied_by_staff_id:
+        return False
+    return await member_is_staff(interaction)
+
+
+def member_can_create_invite(member: discord.Member, settings: PermissionSettings | None) -> bool:
+    """Fora de interaction (listener de on_invite_create). Cargo(s) configurados em
+    `convite` sao os unicos autorizados a criar convite; lista vazia = sem restricao
+    (comportamento padrao do Discord)."""
+    if member.guild_permissions.administrator:
+        return True
+    role_ids: list[int] = settings.convite if settings is not None else []
+    if not role_ids:
+        return True
+    member_role_ids = {role.id for role in member.roles}
+    return bool(member_role_ids & set(role_ids))
 
 
 def has_permission(action: str) -> Any:

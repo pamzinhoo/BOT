@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 import discord
 from discord import app_commands
+from views.base_view import SafeView
 
 if TYPE_CHECKING:
     from core.bot import LimerenceBot
@@ -85,7 +86,7 @@ async def render_config_history(
     return embed, total_pages
 
 
-class ConfigHistoryView(discord.ui.View):
+class ConfigHistoryView(SafeView):
     """Paginador do /config history. Nao-persistente (timeout=300) — utilitario de
     admin aberto sob demanda, edita sempre a mesma mensagem."""
 

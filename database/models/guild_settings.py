@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import BigInteger, DateTime, Integer
+from sqlalchemy import BigInteger, Boolean, DateTime, Integer
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -39,6 +39,16 @@ class GuildSettings(Base, UUIDPrimaryKeyMixin):
     backup_channel_id: Mapped[int | None] = mapped_column(BigInteger)
     dashboard_channel_id: Mapped[int | None] = mapped_column(BigInteger)
     dashboard_message_id: Mapped[int | None] = mapped_column(BigInteger)
+    log_punishments_channel_id: Mapped[int | None] = mapped_column(BigInteger)
+    appeal_channel_id: Mapped[int | None] = mapped_column(BigInteger)
+    appeal_category_id: Mapped[int | None] = mapped_column(BigInteger)
+    max_timeout_duration_minutes: Mapped[int | None] = mapped_column(Integer)
+    review_role_id: Mapped[int | None] = mapped_column(BigInteger)
+    review_channel_id: Mapped[int | None] = mapped_column(BigInteger)
+    review_timeout_minutes: Mapped[int | None] = mapped_column(Integer)
+    player_role_id: Mapped[int | None] = mapped_column(BigInteger)
+    moderation_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    require_proof: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     extra_config: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow, onupdate=_utcnow

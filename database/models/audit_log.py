@@ -37,6 +37,13 @@ class AuditLogCategory(enum.Enum):
     STICKER = "sticker"
     SERVER_CONFIG = "server_config"
     TICKETS = "tickets"
+    PUNISHMENT_APPEAL = "punishment_appeal"
+    PUNISHMENT_REVIEW = "punishment_review"
+    ENQUETE = "enquete"
+    PAYMENT = "payment"
+    SUBSCRIPTION = "subscription"
+    COUPON = "coupon"
+    PLAN = "plan"
 
 
 class AuditLogEntry(Base, UUIDPrimaryKeyMixin):

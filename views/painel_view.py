@@ -3,8 +3,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import discord
+from views.base_view import SafeView
 
 from database.models.ticket import TicketCategory
+from services.ticket_panel_service import SYSTEM_DISABLED_MESSAGE
 from utils.constants import CATEGORY_LABELS, EMBED_COLOR_WARNING
 from views.embeds import (
     category_confirm_embed,
@@ -30,6 +32,12 @@ async def _create_ticket(interaction: discord.Interaction, category: TicketCateg
     bot: LimerenceBot = interaction.client  # type: ignore[assignment]
     settings = await bot.config_service.get_settings(guild.id)
     ticket_settings = await bot.config_service.get_ticket_settings(guild.id)
+
+    # kill switch global do sistema de tickets — vale tambem pro painel legado.
+    # Tickets ja abertos continuam funcionando; so a abertura fica bloqueada.
+    if not ticket_settings.enabled:
+        await interaction.followup.send(SYSTEM_DISABLED_MESSAGE, ephemeral=True)
+        return
 
     open_count = await bot.ticket_service.count_open_by_member(guild.id, member.id)
     if not ticket_settings.allow_multiple_tickets and open_count >= 1:
@@ -90,7 +98,7 @@ async def _create_ticket(interaction: discord.Interaction, category: TicketCateg
             await alert_channel.send(content=role_mentions or None, embed=embed)
 
 
-class _ConfirmOpenTicketView(discord.ui.View):
+class _ConfirmOpenTicketView(SafeView):
     """Confirmacao ephemera antes de criar o canal — mostra o aviso da categoria."""
 
     def __init__(self, category: TicketCategory) -> None:
@@ -132,7 +140,7 @@ class _CategorySelect(discord.ui.Select["PainelView"]):
         )
 
 
-class PainelView(discord.ui.View):
+class PainelView(SafeView):
     """Painel fixo com dropdown de categoria pra abrir tickets. Persistent (timeout=None)."""
 
     def __init__(self) -> None:

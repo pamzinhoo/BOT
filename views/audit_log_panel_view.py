@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 import discord
+from views.base_view import SafeView
 
 from database.models.audit_log import AuditLogCategory
 from database.models.audit_log_settings import AuditLogSettings
@@ -32,24 +33,35 @@ def audit_log_summary_embed(settings: AuditLogSettings) -> discord.Embed:
     return embed
 
 
+_MAX_SELECT_OPTIONS = 25  # limite do Discord — _CATEGORIES pode passar disso, entao divide em paginas
+_CATEGORY_PAGES: list[list[tuple[str, str]]] = [
+    _CATEGORIES[i : i + _MAX_SELECT_OPTIONS] for i in range(0, len(_CATEGORIES), _MAX_SELECT_OPTIONS)
+]
+
+
 class _CategoryToggleSelect(discord.ui.Select["AuditLogPanelView"]):
-    def __init__(self, settings: AuditLogSettings) -> None:
+    """Um select por pagina de ate 25 categorias (limite do Discord). O
+    callback so mexe nos attrs da SUA pagina — nunca reseta as outras."""
+
+    def __init__(self, settings: AuditLogSettings, page: list[tuple[str, str]], *, row: int) -> None:
         options = [
             discord.SelectOption(label=label, value=attr, default=getattr(settings, attr))
-            for attr, label in _CATEGORIES
+            for attr, label in page
         ]
         super().__init__(
             placeholder="Selecione as categorias que devem ser auditadas...",
             options=options,
             min_values=0,
             max_values=len(options),
+            row=row,
         )
+        self.page = page
 
     async def callback(self, interaction: discord.Interaction) -> None:
         assert interaction.guild_id is not None
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         selected = set(self.values)
-        fields = {attr: attr in selected for attr, _ in _CATEGORIES}
+        fields = {attr: attr in selected for attr, _ in self.page}
         await bot.audit_log_service.update_settings(interaction.guild_id, **fields)
         settings = await bot.audit_log_service.get_settings(interaction.guild_id)
         await interaction.response.edit_message(
@@ -57,14 +69,15 @@ class _CategoryToggleSelect(discord.ui.Select["AuditLogPanelView"]):
         )
 
 
-class AuditLogPanelView(discord.ui.View):
+class AuditLogPanelView(SafeView):
     """Painel de toggle das categorias de auditoria. Nao-persistente (timeout=300) —
-    utilitario de admin aberto sob demanda, igual ConfigPanelView."""
+    utilitario de admin aberto sob demanda, igual as demais views do /config."""
 
     def __init__(self, settings: AuditLogSettings) -> None:
         super().__init__(timeout=300)
-        self.add_item(_CategoryToggleSelect(settings))
-        self.add_item(_ResetAuditButton())
+        for row, page in enumerate(_CATEGORY_PAGES):
+            self.add_item(_CategoryToggleSelect(settings, page, row=row))
+        self.add_item(_ResetAuditButton(row=len(_CATEGORY_PAGES)))
         self.add_item(_BackToMainMenuButton())
 
 
@@ -87,8 +100,8 @@ def _format_audit_value(attr: str, value: object) -> str:
 
 
 class _ResetAuditButton(discord.ui.Button[Any]):
-    def __init__(self) -> None:
-        super().__init__(label="🔄 Restaurar padrão", style=discord.ButtonStyle.danger, row=1)
+    def __init__(self, *, row: int = 1) -> None:
+        super().__init__(label="🔄 Restaurar padrão", style=discord.ButtonStyle.danger, row=row)
 
     async def callback(self, interaction: discord.Interaction) -> None:
         from core.bot import LimerenceBot  # import tardio evita ciclo
@@ -118,7 +131,7 @@ class _ResetAuditButton(discord.ui.Button[Any]):
         )
 
 
-class _AuditResetConfirmView(discord.ui.View):
+class _AuditResetConfirmView(SafeView):
     def __init__(self, settings: AuditLogSettings, *, enabled: bool) -> None:
         super().__init__(timeout=120)
         confirm = _ConfirmAuditResetButton()

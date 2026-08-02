@@ -20,6 +20,7 @@ _TICKET_ACTION_LABELS: dict[LogAction, str] = {
     LogAction.UNCLAIM: "Ticket liberado",
     LogAction.FECHAMENTO: "Ticket fechado",
     LogAction.REABERTURA: "Ticket reaberto",
+    LogAction.EXCLUSAO: "Ticket excluído",
 }
 
 

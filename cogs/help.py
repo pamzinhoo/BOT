@@ -5,72 +5,52 @@ from discord import app_commands
 from discord.ext import commands
 
 from core.bot import LimerenceBot
-
-_EMOJI_BY_COMMAND: dict[str, str] = {
-    "config": "⚙️",
-    "audit": "🕵️",
-    "claim": "🙋",
-    "unclaim": "🙅",
-    "logs": "📜",
-    "ranking": "🏆",
-    "staff": "📋",
-    "status": "📈",
-    "painel-setup": "🎫",
-    "dashboard-setup": "📊",
-    "help": "📖",
-}
-
-_FIELD_LIMIT = 1024
-
-
-def _command_lines(command: app_commands.Command | app_commands.Group) -> list[str]:
-    if isinstance(command, app_commands.Group):
-        return [f"`/{command.name} {sub.name}` — {sub.description}" for sub in command.commands]
-    return [f"`/{command.name}` — {command.description}"]
-
-
-def _chunk_lines(lines: list[str], limit: int = _FIELD_LIMIT) -> list[str]:
-    chunks: list[str] = []
-    current = ""
-    for line in lines:
-        candidate = f"{current}\n{line}" if current else line
-        if len(candidate) > limit and current:
-            chunks.append(current)
-            current = line
-        else:
-            current = candidate
-    if current:
-        chunks.append(current)
-    return chunks
-
-
-def build_help_embed(tree: app_commands.CommandTree) -> discord.Embed:
-    embed = discord.Embed(
-        title="📖 Comandos do bot",
-        description="Tudo que o bot sabe fazer, organizado por área.",
-        color=discord.Color.blurple(),
-    )
-    for command in sorted(tree.get_commands(), key=lambda c: c.name):
-        emoji = _EMOJI_BY_COMMAND.get(command.name, "🔹")
-        chunks = _chunk_lines(_command_lines(command))
-        for i, chunk in enumerate(chunks):
-            suffix = f" ({i + 1}/{len(chunks)})" if len(chunks) > 1 else ""
-            embed.add_field(name=f"{emoji} /{command.name}{suffix}", value=chunk, inline=False)
-    embed.set_footer(text="Use /config painel para configurar o bot neste servidor.")
-    return embed
+from utils.checks import member_is_admin, member_is_staff
+from views.embeds import help_command_embed, help_main_embed
+from views.help_views import HelpMainView
 
 
 class HelpCog(commands.Cog):
     def __init__(self, bot: LimerenceBot) -> None:
         self.bot = bot
 
-    @app_commands.command(
-        name="help", description="Mostra todos os comandos do bot e o que cada um faz."
-    )
-    async def help_command(self, interaction: discord.Interaction) -> None:
+    @app_commands.command(name="help", description="Mostra a central de ajuda do bot.")
+    @app_commands.describe(comando="Nome de um comando específico pra ver detalhes (ex.: punir)")
+    async def help_command(
+        self, interaction: discord.Interaction, comando: str | None = None
+    ) -> None:
+        is_admin = await member_is_admin(interaction)
+        is_staff = await member_is_staff(interaction)
+
+        if comando:
+            command = await self.bot.help_service.get_visible_command(
+                comando.strip().lower(), is_admin=is_admin, is_staff=is_staff
+            )
+            if command is None:
+                await interaction.response.send_message(
+                    "Comando não encontrado (ou você não tem permissão pra vê-lo).", ephemeral=True
+                )
+                return
+            await interaction.response.send_message(embed=help_command_embed(command), ephemeral=True)
+            return
+
         await interaction.response.send_message(
-            embed=build_help_embed(self.bot.tree), ephemeral=True
+            embed=help_main_embed(), view=HelpMainView(), ephemeral=True
         )
+
+    @help_command.autocomplete("comando")
+    async def _comando_autocomplete(
+        self, interaction: discord.Interaction, current: str
+    ) -> list[app_commands.Choice[str]]:
+        is_admin = await member_is_admin(interaction)
+        is_staff = await member_is_staff(interaction)
+        commands_ = await self.bot.help_service.list_all_visible(is_admin=is_admin, is_staff=is_staff)
+        current = current.lower()
+        return [
+            app_commands.Choice(name=c.command_name, value=c.command_name)
+            for c in commands_
+            if current in c.command_name.lower()
+        ][:25]
 
 
 async def setup(bot: LimerenceBot) -> None:

@@ -3,10 +3,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import discord
+from views.base_view import SafeView
 
 from database.models.log import LogAction
 from database.models.ticket import TicketStatus
 from services.claim_service import ClaimError
+from services.ticket_panel_service import member_matches_panel_claim_roles
 from services.ticket_service import TicketNotClaimedError, TicketNotFoundError
 from utils.achievements import announce_achievements
 from utils.checks import member_can, member_is_staff
@@ -28,7 +30,7 @@ async def _deny_if_cant(interaction: discord.Interaction, action: str) -> bool:
     return True
 
 
-class TicketActionsView(discord.ui.View):
+class TicketActionsView(SafeView):
     """Botoes Assumir/Liberar/Fechar. Staff-only. Persistent (timeout=None),
     resolve o ticket pelo channel_id da interacao — nenhum dado sensivel no
     custom_id."""
@@ -47,6 +49,18 @@ class TicketActionsView(discord.ui.View):
         guild = interaction.guild
         member = interaction.user
         if guild is None or not isinstance(member, discord.Member) or interaction.channel_id is None:
+            return
+
+        # filtro extra por painel: se o painel que originou o ticket restringiu
+        # os cargos que podem assumir, ele vale POR CIMA da permissao global de
+        # `claim` (nunca no lugar dela). Ticket sem painel = nada muda.
+        existing = await bot.ticket_service.get_by_channel_id(interaction.channel_id)
+        panel = await bot.ticket_panel_service.get_panel_for_ticket(existing) if existing else None
+        if not member_matches_panel_claim_roles(member, panel):
+            await interaction.followup.send(
+                "Apenas os cargos responsáveis por este painel podem assumir este ticket.",
+                ephemeral=True,
+            )
             return
 
         staff = await bot.staff_service.ensure_staff(guild.id, member.id, member.display_name)
@@ -262,7 +276,8 @@ class TicketActionsView(discord.ui.View):
                 )
             opener = guild.get_member(ticket.opened_by_discord_id)
             eval_settings = await bot.config_service.get_evaluation_settings(guild.id)
-            if opener is not None and eval_settings.enabled:
+            behaviour = await bot.ticket_panel_service.behaviour_for_ticket(ticket, guild.id)
+            if opener is not None and eval_settings.enabled and behaviour.evaluation_enabled:
                 await channel.send(
                     content=opener.mention,
                     embed=discord.Embed(

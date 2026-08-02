@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import discord
+from views.base_view import SafeView
 
 from database.models.audit_log import AuditLogCategory
 from services.config_transfer_service import ImportFieldChange, apply_import_plan
@@ -11,7 +12,7 @@ if TYPE_CHECKING:
     from core.bot import LimerenceBot
 
 
-class ConfigImportConfirmView(discord.ui.View):
+class ConfigImportConfirmView(SafeView):
     """Confirmacao antes de aplicar um /config import. So quem pediu a importacao
     pode confirmar/cancelar. Nao-persistente — expira em 3 minutos."""
 
