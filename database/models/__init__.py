@@ -2,7 +2,13 @@ from database.models.achievement import Achievement
 from database.models.anti_spam_settings import AntiSpamSettings
 from database.models.audit_log import AuditLogCategory, AuditLogEntry
 from database.models.audit_log_settings import AuditLogSettings
-from database.models.automod import AutoModCategory, AutoModLog, AutoModRiskLevel, AutoModSettings, AutoModWord
+from database.models.automod import (
+    AutoModCategory,
+    AutoModLog,
+    AutoModRiskLevel,
+    AutoModSettings,
+    AutoModWord,
+)
 from database.models.base import Base, GuildScopedMixin, TimestampMixin, UUIDPrimaryKeyMixin
 from database.models.booster import Booster
 from database.models.booster_settings import BoosterSettings
@@ -29,7 +35,12 @@ from database.models.plan import Plan
 from database.models.plan_benefit import PlanBenefit
 from database.models.plan_message import PlanMessage, PlanMessageType
 from database.models.poll import Poll, PollOption, PollStatus, PollVisibility, PollVote, VoteWeight
-from database.models.punishment import APPEALABLE_TYPES, Punishment, PunishmentStatus, PunishmentType
+from database.models.punishment import (
+    APPEALABLE_TYPES,
+    Punishment,
+    PunishmentStatus,
+    PunishmentType,
+)
 from database.models.punishment_appeal import AppealStatus, PunishmentAppeal
 from database.models.punishment_review_role import PunishmentReviewRole
 from database.models.ranking_settings import RankingSettings
@@ -57,6 +68,13 @@ from database.models.ticket_panel_form_field import (
     TicketPanelFormField,
 )
 from database.models.ticket_settings import TicketSettings
+from database.models.verification_session import VerificationSession, VerificationSessionStatus
+from database.models.verification_settings import (
+    CodeCharset,
+    VerificationExceededAction,
+    VerificationMethod,
+    VerificationSettings,
+)
 
 __all__ = [
     "Achievement",
@@ -76,6 +94,7 @@ __all__ = [
     "Booster",
     "BoosterSettings",
     "Claim",
+    "CodeCharset",
     "CommandHelp",
     "DashboardSettings",
     "DiscountCoupon",
@@ -142,6 +161,11 @@ __all__ = [
     "TicketPanelFormField",
     "TicketSettings",
     "TicketStatus",
+    "VerificationExceededAction",
+    "VerificationMethod",
+    "VerificationSession",
+    "VerificationSessionStatus",
+    "VerificationSettings",
     "VoteWeight",
     "UUIDPrimaryKeyMixin",
     "TimestampMixin",

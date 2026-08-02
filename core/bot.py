@@ -36,6 +36,7 @@ from services.subscription_renewal_config_service import SubscriptionRenewalConf
 from services.subscription_service import SubscriptionService
 from services.ticket_panel_service import TicketPanelService
 from services.ticket_service import TicketService
+from services.verification_service import VerificationService
 from services.vote_weight_service import VoteWeightService
 from utils.checks import NotAdminError, NotStaffError
 
@@ -92,6 +93,7 @@ class LimerenceBot(commands.Bot):
         self.poll_service = PollService(
             database, self, self.vote_weight_service, self.subscription_service
         )
+        self.verification_service = VerificationService(database, self)
 
         self.tree.on_error = self._on_app_command_error
         self._patch_view_store_diagnostics()
@@ -163,10 +165,11 @@ class LimerenceBot(commands.Bot):
             )
 
     async def _register_persistent_views(self) -> None:
-        from views.evaluation_view import EvaluationView
-        from views.painel_view import PainelView
+        from cogs.polls import PollVoteButton
         from views.appeal_view import AppealAcceptButton, AppealButton, AppealDenyButton
+        from views.evaluation_view import EvaluationView
         from views.help_views import HelpCategoryView, HelpMainView
+        from views.painel_view import PainelView
         from views.pending_punishments_view import (
             AnalisesAcceptButton,
             AnalisesBackButton,
@@ -174,11 +177,10 @@ class LimerenceBot(commands.Bot):
             AnalisesNavButton,
             AnalisesSelect,
         )
+        from views.shop_view import ShopPanelView
         from views.ticket_actions_view import TicketActionsView
         from views.ticket_approval_view import TicketApprovalView
         from views.ticket_closed_view import TicketClosedView
-        from views.shop_view import ShopPanelView
-        from cogs.polls import PollVoteButton
 
         self.add_view(PainelView())
         self.add_view(TicketActionsView())
@@ -219,6 +221,13 @@ class LimerenceBot(commands.Bot):
         self.add_dynamic_items(
             PaymentApproveButton, PaymentRejectButton, PaymentPendingButton, PaymentCancelButton
         )
+
+        # botoes do sistema de verificacao/CAPTCHA (DM ou canal de fallback) —
+        # precisam responder mesmo depois de um restart, com o codigo/sessao
+        # ainda validos.
+        from views.verification_view import PickCaptchaButton, TypeCaptchaButton
+
+        self.add_dynamic_items(TypeCaptchaButton, PickCaptchaButton)
 
         # cada painel de ticket configuravel tem um botao com custom_id proprio
         # (limerence:ticket_panel:<key>:open) — sem re-registrar aqui, os botoes

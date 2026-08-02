@@ -4,7 +4,6 @@ import asyncio
 from typing import TYPE_CHECKING, Any
 
 import discord
-from views.base_view import SafeView
 
 from database.models.anti_spam_settings import AntiSpamSettings
 from database.models.booster_settings import BoosterSettings
@@ -15,11 +14,19 @@ from database.models.guild_settings import GuildSettings
 from database.models.permission_settings import PermissionSettings
 from database.models.ranking_settings import RankingSettings
 from database.models.ticket_settings import TicketSettings
+from database.models.verification_settings import VerificationSettings
 from services.ranking_service import RankingPeriod
 from views.audit_log_panel_view import AuditLogPanelView, audit_log_summary_embed
+from views.base_view import SafeView
 from views.enquete_panel_view import EnqueteMenuView, enquete_menu_embed
 from views.monetization_panel_view import MonetizationMenuView, monetization_menu_embed
-from views.settings_panel import DomainSettingsView, FieldKind, GetSettings, SettingsField, UpdateSettings
+from views.settings_panel import (
+    DomainSettingsView,
+    FieldKind,
+    GetSettings,
+    SettingsField,
+    UpdateSettings,
+)
 from views.ticket_panels_view import render_tickets_menu
 
 if TYPE_CHECKING:
@@ -64,7 +71,7 @@ class _Merged:
         raise AttributeError(name)
 
 
-def _dispatch(bot: "LimerenceBot", routing: dict[str, str]) -> UpdateSettings:
+def _dispatch(bot: LimerenceBot, routing: dict[str, str]) -> UpdateSettings:
     """Cria um update_settings(guild_id, **fields) que manda cada campo pro
     metodo certo do ConfigService/AuditLogService, conforme `routing`
     (attr -> nome do metodo update_* em bot.config_service ou "audit")."""
@@ -81,7 +88,7 @@ def _dispatch(bot: "LimerenceBot", routing: dict[str, str]) -> UpdateSettings:
     return _update
 
 
-def _tickets_category(bot: "LimerenceBot") -> tuple[list[SettingsField], GetSettings, UpdateSettings]:
+def _tickets_category(bot: LimerenceBot) -> tuple[list[SettingsField], GetSettings, UpdateSettings]:
     fields = [
         SettingsField("ticket_category_id", "Categoria de Tickets", FieldKind.CHANNEL, GuildSettings, channel_types=_CATEGORY_CHANNEL),
         SettingsField("log_channel_id", "Canal de Logs", FieldKind.CHANNEL, GuildSettings, channel_types=_TEXT),
@@ -119,7 +126,7 @@ def _tickets_category(bot: "LimerenceBot") -> tuple[list[SettingsField], GetSett
     return fields, get_settings, _dispatch(bot, routing)
 
 
-def _cargos_category(bot: "LimerenceBot") -> tuple[list[SettingsField], GetSettings, UpdateSettings]:
+def _cargos_category(bot: LimerenceBot) -> tuple[list[SettingsField], GetSettings, UpdateSettings]:
     fields = [
         SettingsField("owner_role_id", "Owner", FieldKind.ROLE, GuildSettings),
         SettingsField("ceo_role_id", "CEO", FieldKind.ROLE, GuildSettings),
@@ -139,7 +146,7 @@ def _cargos_category(bot: "LimerenceBot") -> tuple[list[SettingsField], GetSetti
     return fields, get_settings, bot.config_service.update
 
 
-def _permissoes_category(bot: "LimerenceBot") -> tuple[list[SettingsField], GetSettings, UpdateSettings]:
+def _permissoes_category(bot: LimerenceBot) -> tuple[list[SettingsField], GetSettings, UpdateSettings]:
     fields = [
         SettingsField(action, _PERMISSION_LABELS[action], FieldKind.ROLE_MULTI, PermissionSettings)
         for action in _PERMISSION_ACTIONS
@@ -151,7 +158,7 @@ def _permissoes_category(bot: "LimerenceBot") -> tuple[list[SettingsField], GetS
     return fields, get_settings, bot.config_service.update_permission_settings
 
 
-def _dashboard_category(bot: "LimerenceBot") -> tuple[list[SettingsField], GetSettings, UpdateSettings]:
+def _dashboard_category(bot: LimerenceBot) -> tuple[list[SettingsField], GetSettings, UpdateSettings]:
     fields = [
         SettingsField("dashboard_channel_id", "Canal", FieldKind.CHANNEL, GuildSettings, channel_types=_TEXT),
         SettingsField("auto_update_enabled", "Atualização Automática", FieldKind.BOOL, DashboardSettings),
@@ -182,7 +189,7 @@ def _dashboard_category(bot: "LimerenceBot") -> tuple[list[SettingsField], GetSe
     return fields, get_settings, update_settings
 
 
-def _ranking_category(bot: "LimerenceBot") -> tuple[list[SettingsField], GetSettings, UpdateSettings]:
+def _ranking_category(bot: LimerenceBot) -> tuple[list[SettingsField], GetSettings, UpdateSettings]:
     fields = [
         SettingsField("ranking_channel_id", "Canal", FieldKind.CHANNEL, GuildSettings, channel_types=_TEXT),
         SettingsField(
@@ -210,7 +217,7 @@ def _ranking_category(bot: "LimerenceBot") -> tuple[list[SettingsField], GetSett
     return fields, get_settings, update_settings
 
 
-def _avaliacoes_category(bot: "LimerenceBot") -> tuple[list[SettingsField], GetSettings, UpdateSettings]:
+def _avaliacoes_category(bot: LimerenceBot) -> tuple[list[SettingsField], GetSettings, UpdateSettings]:
     fields = [
         SettingsField("evaluations_channel_id", "Canal", FieldKind.CHANNEL, GuildSettings, channel_types=_TEXT),
         SettingsField("enabled", "Avaliação Ativada", FieldKind.BOOL, EvaluationSettings),
@@ -237,7 +244,7 @@ def _avaliacoes_category(bot: "LimerenceBot") -> tuple[list[SettingsField], GetS
     return fields, get_settings, update_settings
 
 
-def _antispam_category(bot: "LimerenceBot") -> tuple[list[SettingsField], GetSettings, UpdateSettings]:
+def _antispam_category(bot: LimerenceBot) -> tuple[list[SettingsField], GetSettings, UpdateSettings]:
     fields = [
         SettingsField("blacklist_channel_id", "Canal de Alerta", FieldKind.CHANNEL, GuildSettings, channel_types=_TEXT),
         SettingsField("window_seconds", "Janela de Tempo (s)", FieldKind.NUMBER, AntiSpamSettings, allow_clear=False),
@@ -266,7 +273,7 @@ def _antispam_category(bot: "LimerenceBot") -> tuple[list[SettingsField], GetSet
     return fields, get_settings, update_settings
 
 
-def _status_category(bot: "LimerenceBot") -> tuple[list[SettingsField], GetSettings, UpdateSettings]:
+def _status_category(bot: LimerenceBot) -> tuple[list[SettingsField], GetSettings, UpdateSettings]:
     fields = [
         SettingsField("channel_id", "Canal", FieldKind.CHANNEL, BotStatusSettings, channel_types=_TEXT),
         SettingsField(
@@ -291,7 +298,7 @@ def _status_category(bot: "LimerenceBot") -> tuple[list[SettingsField], GetSetti
     return fields, get_settings, update_settings
 
 
-def _alertas_category(bot: "LimerenceBot") -> tuple[list[SettingsField], GetSettings, UpdateSettings]:
+def _alertas_category(bot: LimerenceBot) -> tuple[list[SettingsField], GetSettings, UpdateSettings]:
     fields = [
         SettingsField("ticket_alert_channel_id", "Canal de Alerta de Tickets", FieldKind.CHANNEL, GuildSettings, channel_types=_TEXT),
     ]
@@ -302,7 +309,7 @@ def _alertas_category(bot: "LimerenceBot") -> tuple[list[SettingsField], GetSett
     return fields, get_settings, bot.config_service.update
 
 
-def _moderacao_category(bot: "LimerenceBot") -> tuple[list[SettingsField], GetSettings, UpdateSettings]:
+def _moderacao_category(bot: LimerenceBot) -> tuple[list[SettingsField], GetSettings, UpdateSettings]:
     fields = [
         SettingsField("log_punishments_channel_id", "Canal de Log de Punições", FieldKind.CHANNEL, GuildSettings, channel_types=_TEXT),
         SettingsField("appeal_channel_id", "Canal de Recursos", FieldKind.CHANNEL, GuildSettings, channel_types=_TEXT),
@@ -321,7 +328,7 @@ def _moderacao_category(bot: "LimerenceBot") -> tuple[list[SettingsField], GetSe
     return fields, get_settings, bot.config_service.update
 
 
-def _boost_category(bot: "LimerenceBot") -> tuple[list[SettingsField], GetSettings, UpdateSettings]:
+def _boost_category(bot: LimerenceBot) -> tuple[list[SettingsField], GetSettings, UpdateSettings]:
     fields = [
         SettingsField("enabled", "Sistema Ativado", FieldKind.BOOL, BoosterSettings),
         SettingsField("booster_role_id", "Cargo de Booster", FieldKind.ROLE, BoosterSettings),
@@ -340,6 +347,80 @@ def _boost_category(bot: "LimerenceBot") -> tuple[list[SettingsField], GetSettin
     return fields, get_settings, bot.booster_service.update_settings
 
 
+_VERIFICATION_ACTION_CHOICES = [
+    ("none", "Nenhuma"),
+    ("restart", "Reiniciar verificação"),
+    ("kick", "Kick"),
+    ("ban", "Ban"),
+]
+
+
+def _verificacao_category(bot: LimerenceBot) -> tuple[list[SettingsField], GetSettings, UpdateSettings]:
+    fields = [
+        SettingsField("enabled", "Sistema Ativado", FieldKind.BOOL, VerificationSettings),
+        SettingsField(
+            "method", "Método", FieldKind.CHOICE, VerificationSettings,
+            choices=[
+                ("type", "Digitar CAPTCHA"), ("button", "Selecionar CAPTCHA"), ("random", "Aleatório"),
+            ],
+        ),
+        SettingsField("unverified_role_id", "Cargo de Não Verificado", FieldKind.ROLE, VerificationSettings),
+        SettingsField("verified_role_id", "Cargo de Membro", FieldKind.ROLE, VerificationSettings),
+        SettingsField(
+            "verification_channel_id", "Canal de Verificação", FieldKind.CHANNEL, VerificationSettings,
+            channel_types=_TEXT,
+        ),
+        SettingsField(
+            "log_channel_id", "Canal de Logs", FieldKind.CHANNEL, VerificationSettings, channel_types=_TEXT
+        ),
+        SettingsField(
+            "code_length", "Comprimento do Código", FieldKind.CHOICE, VerificationSettings,
+            choices=[(str(n), f"{n} caracteres") for n in range(4, 9)],
+        ),
+        SettingsField(
+            "code_charset", "Caracteres do Código", FieldKind.CHOICE, VerificationSettings,
+            choices=[
+                ("letters", "Letras"), ("numbers", "Números"), ("alphanumeric", "Letras + números"),
+            ],
+        ),
+        SettingsField("case_sensitive", "Diferenciar Maiúsculas/Minúsculas", FieldKind.BOOL, VerificationSettings),
+        SettingsField(
+            "max_attempts", "Máximo de Tentativas", FieldKind.NUMBER, VerificationSettings, allow_clear=False
+        ),
+        SettingsField(
+            "timeout_minutes", "Tempo Máximo p/ Concluir (min)", FieldKind.NUMBER, VerificationSettings,
+            allow_clear=False,
+        ),
+        SettingsField("welcome_message", "Mensagem Inicial", FieldKind.TEXT, VerificationSettings),
+        SettingsField("success_message", "Mensagem de Sucesso", FieldKind.TEXT, VerificationSettings),
+        SettingsField("error_message", "Mensagem de Erro", FieldKind.TEXT, VerificationSettings),
+        SettingsField("expired_message", "Mensagem de Expiração", FieldKind.TEXT, VerificationSettings),
+        SettingsField(
+            "max_attempts_message", "Mensagem de Tentativas Excedidas", FieldKind.TEXT, VerificationSettings
+        ),
+        SettingsField(
+            "on_max_attempts_action", "Ação ao Exceder Tentativas", FieldKind.CHOICE, VerificationSettings,
+            choices=_VERIFICATION_ACTION_CHOICES,
+        ),
+        SettingsField(
+            "on_expire_action", "Ação ao Expirar", FieldKind.CHOICE, VerificationSettings,
+            choices=_VERIFICATION_ACTION_CHOICES,
+        ),
+    ]
+
+    async def get_settings(guild_id: int) -> Any:
+        return await bot.verification_service.get_settings(guild_id)
+
+    async def update_settings(guild_id: int, **updates: object) -> None:
+        for key, value in updates.items():
+            if key == "code_length":
+                await bot.verification_service.update_settings(guild_id, code_length=int(value))
+            else:
+                await bot.verification_service.update_settings(guild_id, **{key: value})
+
+    return fields, get_settings, update_settings
+
+
 _CATEGORY_BUILDERS: dict[str, tuple[str, Any]] = {
     "tickets": ("🎫 Tickets", _tickets_category),
     "cargos": ("👮 Cargos", _cargos_category),
@@ -351,11 +432,12 @@ _CATEGORY_BUILDERS: dict[str, tuple[str, Any]] = {
     "alertas": ("🔔 Alertas", _alertas_category),
     "moderacao": ("🔨 Moderação", _moderacao_category),
     "boost": ("💜 Boost", _boost_category),
+    "verificacao": ("🛡️ Verificação", _verificacao_category),
 }
 
 
 def iter_categories(
-    bot: "LimerenceBot",
+    bot: LimerenceBot,
 ) -> list[tuple[str, str, list[SettingsField], GetSettings, UpdateSettings]]:
     """Todas as categorias resetáveis do painel: (chave, título, fields, get_settings,
     update_settings). Usado pelo reset geral (/config reset-all) pra reaproveitar
@@ -451,6 +533,7 @@ class _CategorySelect(discord.ui.Select["MainConfigMenuView"]):
             discord.SelectOption(label="🚫 Anti-Spam", value="antispam"),
             discord.SelectOption(label="🔨 Moderação", value="moderacao"),
             discord.SelectOption(label="💜 Boost", value="boost"),
+            discord.SelectOption(label="🛡️ Verificação", value="verificacao"),
             discord.SelectOption(label="💰 Monetização", value="monetizacao"),
             discord.SelectOption(label="🗳️ Enquetes", value="enquetes"),
             discord.SelectOption(label="📋 Auditoria", value="auditoria"),

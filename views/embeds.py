@@ -6,8 +6,8 @@ import discord
 
 from database.models.audit_log import AuditLogCategory
 from database.models.automod import AutoModLog, AutoModSettings
-from database.models.log import LogAction
 from database.models.command_help import CommandHelp
+from database.models.log import LogAction
 from database.models.payment import PaymentHistory
 from database.models.payment_dm_settings import PaymentDmSettings
 from database.models.plan import Plan
@@ -34,6 +34,7 @@ from utils.constants import (
     EMBED_COLOR_ORANGE,
     EMBED_COLOR_PURPLE,
     EMBED_COLOR_SUCCESS,
+    EMBED_COLOR_VIOLET,
     EMBED_COLOR_WARNING,
     HELP_CATEGORY_LABELS,
     LOG_ACTION_LABELS,
@@ -820,6 +821,32 @@ def booster_removed_log_embed(
     embed.add_field(name="Cargo removido", value=role.mention if role else "—", inline=True)
     embed.add_field(name="Servidor", value=member.guild.name, inline=True)
     embed.add_field(name="Tempo impulsionando", value=humanize_duration(duration_seconds), inline=True)
+    embed.timestamp = discord.utils.utcnow()
+    return embed
+
+
+def verification_prompt_embed(description: str, *, code: str) -> discord.Embed:
+    embed = discord.Embed(title="🛡️ Verificação Necessária", description=description, color=EMBED_COLOR_VIOLET)
+    embed.add_field(name="Código", value=f"`{code}`", inline=False)
+    embed.set_footer(text="Verificação • Limerence")
+    return embed
+
+
+def verification_log_embed(
+    *,
+    user_id: int,
+    method_label: str,
+    attempts_used: int,
+    max_attempts: int,
+    elapsed_label: str,
+    result_label: str,
+) -> discord.Embed:
+    embed = discord.Embed(title="🛡️ Verificação", color=EMBED_COLOR_VIOLET)
+    embed.add_field(name="Usuário", value=f"<@{user_id}> ({user_id})", inline=False)
+    embed.add_field(name="Método", value=method_label, inline=True)
+    embed.add_field(name="Tentativas", value=f"{attempts_used}/{max_attempts}", inline=True)
+    embed.add_field(name="Tempo para concluir", value=elapsed_label, inline=True)
+    embed.add_field(name="Resultado", value=result_label, inline=False)
     embed.timestamp = discord.utils.utcnow()
     return embed
 
