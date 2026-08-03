@@ -35,7 +35,6 @@ if TYPE_CHECKING:
 
 _TEXT = [discord.ChannelType.text, discord.ChannelType.news]
 _CATEGORY_CHANNEL = [discord.ChannelType.category]
-_FORUM_CHANNEL = [discord.ChannelType.forum]
 
 _PERIOD_CHOICES = [(p.value, label) for p, label in [
     (RankingPeriod.DAILY, "Hoje"),
@@ -426,40 +425,41 @@ def _verificacao_category(bot: LimerenceBot) -> tuple[list[SettingsField], GetSe
 def _parcerias_category(bot: LimerenceBot) -> tuple[list[SettingsField], GetSettings, UpdateSettings]:
     fields = [
         SettingsField("enabled", "Sistema Ativado", FieldKind.BOOL, PartnershipSettings),
+        SettingsField("auto_create", "Criar Canal Automaticamente", FieldKind.BOOL, PartnershipSettings),
+        SettingsField("auto_move", "Mover Automaticamente", FieldKind.BOOL, PartnershipSettings),
+        # cargos Parceiro/Streamer reaproveitam GuildSettings (/config -> Cargos)
+        # — registro central de cargos importantes, ja existia pra isso.
+        SettingsField("partner_role_id", "Cargo Parceiro", FieldKind.ROLE, GuildSettings),
+        SettingsField("streamer_role_id", "Cargo Streamer", FieldKind.ROLE, GuildSettings),
         SettingsField(
-            "mode", "Modo de Funcionamento", FieldKind.CHOICE, PartnershipSettings,
-            choices=[("channel", "Canal"), ("forum", "Fórum")],
-        ),
-        SettingsField(
-            "category_channel_id", "Categoria dos Canais", FieldKind.CHANNEL, PartnershipSettings,
+            "category_channel_id", "Categoria Ativa", FieldKind.CHANNEL, PartnershipSettings,
             channel_types=_CATEGORY_CHANNEL,
         ),
         SettingsField(
-            "forum_channel_id", "Fórum dos Tópicos", FieldKind.CHANNEL, PartnershipSettings,
-            channel_types=_FORUM_CHANNEL,
+            "archive_category_id", "Categoria Parceiros Antigos", FieldKind.CHANNEL, PartnershipSettings,
+            channel_types=_CATEGORY_CHANNEL,
         ),
-        # cargo Parceiro/Streamer reaproveita GuildSettings (/config -> Cargos)
-        # — registro central de cargos importantes, ja existia pra isso.
-        SettingsField("partner_role_id", "Cargo Parceiro/Streamer", FieldKind.ROLE, GuildSettings),
         SettingsField("staff_role_id", "Cargo da Staff", FieldKind.ROLE, PartnershipSettings),
+        SettingsField("welcome_message", "Mensagem Inicial", FieldKind.TEXT, PartnershipSettings),
+        SettingsField("announcement_message", "Mensagem de Divulgação", FieldKind.TEXT, PartnershipSettings),
         SettingsField(
-            "cooldown_hours", "Cooldown entre Publicações (h)", FieldKind.NUMBER, PartnershipSettings,
-            allow_clear=False,
-        ),
-        SettingsField("allow_here", "Permitir @here", FieldKind.BOOL, PartnershipSettings),
-        SettingsField("pre_message", "Mensagem Antes do Embed", FieldKind.TEXT, PartnershipSettings),
-        SettingsField(
-            "log_channel_id", "Canal de Logs", FieldKind.CHANNEL, PartnershipSettings, channel_types=_TEXT
+            "announcement_channel_id", "Canal das Divulgações", FieldKind.CHANNEL, PartnershipSettings,
+            channel_types=_TEXT,
         ),
         SettingsField(
-            "max_description_length", "Máx. de Caracteres da Descrição", FieldKind.NUMBER,
+            "announcement_interval_minutes", "Intervalo entre Divulgações (min)", FieldKind.NUMBER,
             PartnershipSettings, allow_clear=False,
         ),
-        SettingsField("allow_banner", "Permitir Banner", FieldKind.BOOL, PartnershipSettings),
-        SettingsField("allow_image", "Permitir Imagem", FieldKind.BOOL, PartnershipSettings),
-        SettingsField("allow_invite", "Permitir Convite do Discord", FieldKind.BOOL, PartnershipSettings),
         SettingsField(
-            "allow_external_links", "Permitir Links Externos", FieldKind.BOOL, PartnershipSettings
+            "mention_type", "Tipo de Menção", FieldKind.CHOICE, PartnershipSettings,
+            choices=[("none", "Nenhuma"), ("here", "@here"), ("everyone", "@everyone")],
+        ),
+        SettingsField(
+            "role_removed_action", "Ação ao Perder o Cargo", FieldKind.CHOICE, PartnershipSettings,
+            choices=[("none", "Nada"), ("archive", "Arquivar"), ("delete", "Excluir")],
+        ),
+        SettingsField(
+            "log_channel_id", "Canal de Logs", FieldKind.CHANNEL, PartnershipSettings, channel_types=_TEXT
         ),
     ]
 
@@ -472,8 +472,8 @@ def _parcerias_category(bot: LimerenceBot) -> tuple[list[SettingsField], GetSett
 
     async def update_settings(guild_id: int, **updates: object) -> None:
         for key, value in updates.items():
-            if key == "partner_role_id":
-                await bot.config_service.update(guild_id, partner_role_id=value)
+            if key in ("partner_role_id", "streamer_role_id"):
+                await bot.config_service.update(guild_id, **{key: value})
             else:
                 await bot.partnership_service.update_settings(guild_id, **{key: value})
 

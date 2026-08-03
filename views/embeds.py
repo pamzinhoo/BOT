@@ -10,7 +10,6 @@ from database.models.automod import AutoModLog, AutoModSettings
 from database.models.command_help import CommandHelp
 from database.models.log import LogAction
 from database.models.partnership import Partnership
-from database.models.partnership_settings import PartnershipSettings
 from database.models.payment import PaymentHistory
 from database.models.payment_dm_settings import PaymentDmSettings
 from database.models.plan import Plan
@@ -21,7 +20,6 @@ from database.models.staff_stats import StaffStats
 from database.models.ticket import Ticket, TicketCategory
 from database.models.ticket_panel import TicketPanel
 from services.automod_service import EffectiveWord
-from services.partnership_service import cooldown_remaining
 from services.plan_service import render_placeholders
 from services.ranking_service import RankingEntry
 from services.staff_service import StaffProfile
@@ -855,71 +853,30 @@ def verification_log_embed(
     return embed
 
 
-def partnership_embed(record: Partnership, *, allow_image: bool) -> discord.Embed:
+def partnership_how_it_works_embed() -> discord.Embed:
     embed = discord.Embed(
-        title=f"🤝 {record.name}", description=record.description, color=EMBED_COLOR_PURPLE
+        title="📌 Como funciona seu canal de parceiro",
+        description=(
+            "• Este canal é seu — divulgue como preferir, dentro das regras do servidor.\n"
+            "• Você pode renomear o canal e personalizar a descrição quando quiser.\n"
+            "• Imagens, vídeos e novidades: publique livremente, sem precisar de comandos.\n"
+            "• Se você perder o cargo de Parceiro/Streamer, o canal é preservado "
+            "(arquivado) com todo o histórico — e volta ao normal se o cargo for "
+            "devolvido.\n"
+            "• O bot faz divulgações automáticas apontando pra este canal, conforme "
+            "configurado pela administração."
+        ),
+        color=EMBED_COLOR_PURPLE,
     )
-    if record.category_label:
-        embed.add_field(name="Categoria", value=record.category_label, inline=True)
-    embed.add_field(name="Divulgado por", value=f"<@{record.owner_id}>", inline=True)
-    if record.invite:
-        embed.add_field(name="Convite", value=record.invite, inline=False)
-    if record.banner:
-        if allow_image:
-            embed.set_image(url=record.banner)
-        else:
-            embed.set_thumbnail(url=record.banner)
-    embed.set_footer(text="Parceria • Limerence")
-    embed.timestamp = discord.utils.utcnow()
     return embed
 
 
 def partnership_log_embed(record: Partnership, *, action: str) -> discord.Embed:
     embed = discord.Embed(title="🤝 Parceria", description=action, color=EMBED_COLOR_PURPLE)
     embed.add_field(name="Parceiro", value=f"<@{record.owner_id}> ({record.owner_id})", inline=False)
-    embed.add_field(name="Nome", value=record.name, inline=True)
     if record.channel_id:
         embed.add_field(name="Canal", value=f"<#{record.channel_id}>", inline=True)
-    elif record.thread_id:
-        embed.add_field(name="Tópico", value=f"<#{record.thread_id}>", inline=True)
     embed.timestamp = discord.utils.utcnow()
-    return embed
-
-
-def partnership_status_embed(
-    record: Partnership | None, settings: PartnershipSettings, *, now: datetime
-) -> discord.Embed:
-    if record is None:
-        return discord.Embed(
-            title="🤝 Status da Parceria",
-            description="Você ainda não tem uma parceria publicada. Use `/parceria publicar`.",
-            color=EMBED_COLOR_PURPLE,
-        )
-
-    embed = discord.Embed(title="🤝 Status da Parceria", color=EMBED_COLOR_PURPLE)
-    if record.channel_id:
-        location = f"<#{record.channel_id}>"
-    elif record.thread_id:
-        location = f"<#{record.thread_id}>"
-    else:
-        location = "—"
-    embed.add_field(name="Canal", value=location, inline=True)
-    embed.add_field(
-        name="Última publicação",
-        value=discord.utils.format_dt(record.last_publish_at, style="R") if record.last_publish_at else "Nunca",
-        inline=True,
-    )
-
-    remaining = cooldown_remaining(settings.cooldown_hours, record.last_publish_at, now)
-    if remaining is None:
-        embed.add_field(name="Próxima publicação", value="Disponível agora", inline=True)
-    else:
-        embed.add_field(
-            name="Próxima publicação", value=discord.utils.format_dt(now + remaining, style="R"), inline=True
-        )
-        embed.add_field(
-            name="Cooldown restante", value=humanize_duration(int(remaining.total_seconds())), inline=True
-        )
     return embed
 
 

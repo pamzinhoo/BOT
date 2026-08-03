@@ -13,38 +13,55 @@ def _utcnow() -> datetime:
     return datetime.now(UTC)
 
 
-class PartnershipMode(enum.Enum):
-    CHANNEL = "channel"
-    FORUM = "forum"
+class PartnershipMentionType(enum.Enum):
+    NONE = "none"
+    HERE = "here"
+    EVERYONE = "everyone"
+
+
+class PartnershipRoleRemovedAction(enum.Enum):
+    NONE = "none"
+    ARCHIVE = "archive"
+    DELETE = "delete"
 
 
 class PartnershipSettings(Base, UUIDPrimaryKeyMixin):
     """1 linha por guild — configuracao do sistema de parcerias (/config ->
-    Parcerias). `mode` guarda o `.value` (string) do enum, nao o tipo Enum do
-    Postgres — mesma convencao de outras categorias do painel com campo
-    CHOICE (ver VerificationSettings).
+    Parcerias).
 
     O cargo Parceiro/Streamer NAO tem coluna aqui — reaproveita
-    GuildSettings.partner_role_id (/config -> Cargos), que ja existia
-    exatamente pra isso (registro central de cargos importantes da guild)."""
+    GuildSettings.partner_role_id / GuildSettings.streamer_role_id (/config ->
+    Cargos), que ja existiam exatamente pra isso (registro central de cargos
+    importantes da guild)."""
 
     __tablename__ = "partnership_settings"
 
     guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False, unique=True)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    mode: Mapped[str] = mapped_column(String(20), nullable=False, default=PartnershipMode.CHANNEL.value)
+
+    # categoria ativa (canais de parceiros em uso) e categoria pra onde o
+    # canal vai quando o parceiro perde o cargo.
     category_channel_id: Mapped[int | None] = mapped_column(BigInteger)
-    forum_channel_id: Mapped[int | None] = mapped_column(BigInteger)
+    archive_category_id: Mapped[int | None] = mapped_column(BigInteger)
+
     staff_role_id: Mapped[int | None] = mapped_column(BigInteger)
-    cooldown_hours: Mapped[int] = mapped_column(Integer, nullable=False, default=24)
-    allow_here: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    pre_message: Mapped[str | None] = mapped_column(Text)
     log_channel_id: Mapped[int | None] = mapped_column(BigInteger)
-    max_description_length: Mapped[int] = mapped_column(Integer, nullable=False, default=500)
-    allow_banner: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    allow_image: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    allow_invite: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    allow_external_links: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    auto_create: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    auto_move: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    role_removed_action: Mapped[str] = mapped_column(
+        String(20), nullable=False, default=PartnershipRoleRemovedAction.ARCHIVE.value
+    )
+
+    welcome_message: Mapped[str | None] = mapped_column(Text)
+
+    announcement_message: Mapped[str | None] = mapped_column(Text)
+    announcement_channel_id: Mapped[int | None] = mapped_column(BigInteger)
+    announcement_interval_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=60)
+    mention_type: Mapped[str] = mapped_column(
+        String(20), nullable=False, default=PartnershipMentionType.NONE.value
+    )
+    last_announcement_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow, onupdate=_utcnow

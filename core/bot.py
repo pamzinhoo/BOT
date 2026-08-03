@@ -179,6 +179,7 @@ class LimerenceBot(commands.Bot):
             AnalisesNavButton,
             AnalisesSelect,
         )
+        from views.partnership_view import PartnershipInfoView
         from views.shop_view import ShopPanelView
         from views.ticket_actions_view import TicketActionsView
         from views.ticket_approval_view import TicketApprovalView
@@ -192,6 +193,7 @@ class LimerenceBot(commands.Bot):
         self.add_view(HelpMainView())
         self.add_view(HelpCategoryView())
         self.add_view(ShopPanelView())
+        self.add_view(PartnershipInfoView())
         self.add_dynamic_items(AppealButton, AppealAcceptButton, AppealDenyButton)
         self.add_dynamic_items(
             AnalisesNavButton, AnalisesSelect, AnalisesAcceptButton, AnalisesDenyButton, AnalisesBackButton

@@ -27,7 +27,11 @@ from database.models.log import LogAction, LogEntry
 from database.models.monetization_gateway_settings import MonetizationGatewaySettings
 from database.models.monetization_settings import MonetizationSettings
 from database.models.partnership import Partnership
-from database.models.partnership_settings import PartnershipMode, PartnershipSettings
+from database.models.partnership_settings import (
+    PartnershipMentionType,
+    PartnershipRoleRemovedAction,
+    PartnershipSettings,
+)
 from database.models.payment import PaymentHistory, PaymentStatus
 from database.models.payment_dm_settings import PaymentDmSettings
 from database.models.payment_status_history import PaymentStatusHistory
@@ -116,7 +120,8 @@ __all__ = [
     "MonetizationGatewaySettings",
     "MonetizationSettings",
     "Partnership",
-    "PartnershipMode",
+    "PartnershipMentionType",
+    "PartnershipRoleRemovedAction",
     "PartnershipSettings",
     "PaymentDmSettings",
     "PaymentHistory",
