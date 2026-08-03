@@ -144,8 +144,9 @@ class PartnershipService:
 
         # ja ativo — so garante que as permissoes estao corretas (idempotente)
         dedicated_role = guild.get_role(record.role_id) if record.role_id else None
+        category = self._resolve_category(guild, settings.category_channel_id)
         await self._apply_overwrites(
-            channel, guild, settings, partner_role_id, streamer_role_id, dedicated_role, readonly=False
+            channel, guild, settings, partner_role_id, streamer_role_id, dedicated_role, category, readonly=False
         )
 
     # --- fluxo: cargo removido ---------------------------------------------
@@ -277,7 +278,9 @@ class PartnershipService:
             logger.warning("Falha ao criar/atribuir cargo dedicado de parceria na guild %s.", guild.id)
             role = None
 
-        overwrites = self._build_overwrites(guild, settings, partner_role_id, streamer_role_id, role, readonly=False)
+        overwrites = self._build_overwrites(
+            guild, settings, partner_role_id, streamer_role_id, role, category, readonly=False
+        )
         channel_name = f"📢・{slugify(member.display_name)}"
         try:
             channel = await guild.create_text_channel(
@@ -331,7 +334,7 @@ class PartnershipService:
                 logger.exception("Falha ao mover canal de parceria %s de volta pra categoria ativa.", channel.id)
 
         await self._apply_overwrites(
-            channel, guild, settings, partner_role_id, streamer_role_id, dedicated_role, readonly=False
+            channel, guild, settings, partner_role_id, streamer_role_id, dedicated_role, category, readonly=False
         )
 
         async with self._database.session() as session:
@@ -364,7 +367,7 @@ class PartnershipService:
         dedicated_role = guild.get_role(record.role_id) if record.role_id else None
         partner_role_id, streamer_role_id = await self.get_partner_role_ids(guild.id)
         await self._apply_overwrites(
-            channel, guild, settings, partner_role_id, streamer_role_id, dedicated_role, readonly=True
+            channel, guild, settings, partner_role_id, streamer_role_id, dedicated_role, category, readonly=True
         )
 
         now = datetime.now(UTC)
@@ -440,25 +443,34 @@ class PartnershipService:
         partner_role_id: int | None,
         streamer_role_id: int | None,
         dedicated_role: discord.Role | None,
+        category: discord.CategoryChannel | None,
         *,
         readonly: bool,
     ) -> dict[discord.Role, discord.PermissionOverwrite]:
-        overwrites: dict[discord.Role, discord.PermissionOverwrite] = {
-            guild.default_role: discord.PermissionOverwrite(
-                view_channel=True, send_messages=False, read_message_history=True
-            ),
-        }
+        # parte da base das permissoes da categoria (herda tudo que a staff configurou
+        # nela — outros cargos, bots etc.) e so sobrescreve o que a parceria precisa,
+        # assim canal criado/restaurado ja nasce sincronizado com a categoria.
+        overwrites: dict[discord.Role, discord.PermissionOverwrite] = (
+            dict(category.overwrites) if category is not None else {}
+        )
+
+        default_overwrite = overwrites.get(guild.default_role, discord.PermissionOverwrite())
+        default_overwrite.update(view_channel=True, send_messages=False, read_message_history=True)
+        overwrites[guild.default_role] = default_overwrite
+
         for role_id in {settings.staff_role_id, partner_role_id, streamer_role_id}:
             role = guild.get_role(role_id) if role_id else None
             if role is None:
                 continue
-            overwrites[role] = discord.PermissionOverwrite(
-                view_channel=True, send_messages=not readonly, read_message_history=True
-            )
+            role_overwrite = overwrites.get(role, discord.PermissionOverwrite())
+            role_overwrite.update(view_channel=True, send_messages=not readonly, read_message_history=True)
+            overwrites[role] = role_overwrite
+
         if dedicated_role is not None:
-            overwrites[dedicated_role] = discord.PermissionOverwrite(
-                view_channel=True, send_messages=not readonly, read_message_history=True
-            )
+            dedicated_overwrite = overwrites.get(dedicated_role, discord.PermissionOverwrite())
+            dedicated_overwrite.update(view_channel=True, send_messages=not readonly, read_message_history=True)
+            overwrites[dedicated_role] = dedicated_overwrite
+
         return overwrites
 
     async def _apply_overwrites(
@@ -469,10 +481,13 @@ class PartnershipService:
         partner_role_id: int | None,
         streamer_role_id: int | None,
         dedicated_role: discord.Role | None,
+        category: discord.CategoryChannel | None,
         *,
         readonly: bool,
     ) -> None:
-        overwrites = self._build_overwrites(guild, settings, partner_role_id, streamer_role_id, dedicated_role, readonly=readonly)
+        overwrites = self._build_overwrites(
+            guild, settings, partner_role_id, streamer_role_id, dedicated_role, category, readonly=readonly
+        )
         try:
             await channel.edit(overwrites=overwrites, reason="Parceria: permissões sincronizadas")
         except discord.HTTPException:

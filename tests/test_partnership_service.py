@@ -504,7 +504,7 @@ def test_build_overwrites_active_channel_allows_partner_to_write() -> None:
     guild.get_role = MagicMock(side_effect=lambda rid: {10: partner_role}.get(rid))
     settings = _fake_settings(staff_role_id=None)
 
-    overwrites = service._build_overwrites(guild, settings, 10, None, None, readonly=False)
+    overwrites = service._build_overwrites(guild, settings, 10, None, None, None, readonly=False)
 
     assert overwrites[partner_role].send_messages is True
     assert overwrites[guild.default_role].send_messages is False
@@ -518,7 +518,26 @@ def test_build_overwrites_readonly_blocks_everyone_from_writing() -> None:
     guild.get_role = MagicMock(side_effect=lambda rid: {10: partner_role}.get(rid))
     settings = _fake_settings(staff_role_id=None)
 
-    overwrites = service._build_overwrites(guild, settings, 10, None, None, readonly=True)
+    overwrites = service._build_overwrites(guild, settings, 10, None, None, None, readonly=True)
 
     assert overwrites[partner_role].send_messages is False
     assert overwrites[partner_role].view_channel is True
+
+
+def test_build_overwrites_inherits_category_permissions() -> None:
+    service = _make_service()
+    guild = MagicMock(spec=discord.Guild)
+    guild.default_role = MagicMock(spec=discord.Role, id=0)
+    other_role = MagicMock(spec=discord.Role, id=99)
+    guild.get_role = MagicMock(side_effect=lambda rid: None)
+    settings = _fake_settings(staff_role_id=None)
+
+    category_overwrite = discord.PermissionOverwrite(manage_messages=True)
+    category = MagicMock(spec=discord.CategoryChannel)
+    category.overwrites = {other_role: category_overwrite}
+
+    overwrites = service._build_overwrites(guild, settings, None, None, None, category, readonly=False)
+
+    assert overwrites[other_role] is category_overwrite
+    assert overwrites[other_role].manage_messages is True
+    assert overwrites[guild.default_role].view_channel is True
