@@ -11,6 +11,7 @@ from database.models.bot_status_settings import BotStatusSettings
 from database.models.dashboard_settings import DashboardSettings
 from database.models.evaluation_settings import EvaluationSettings
 from database.models.guild_settings import GuildSettings
+from database.models.partnership_settings import PartnershipSettings
 from database.models.permission_settings import PermissionSettings
 from database.models.ranking_settings import RankingSettings
 from database.models.ticket_settings import TicketSettings
@@ -34,6 +35,7 @@ if TYPE_CHECKING:
 
 _TEXT = [discord.ChannelType.text, discord.ChannelType.news]
 _CATEGORY_CHANNEL = [discord.ChannelType.category]
+_FORUM_CHANNEL = [discord.ChannelType.forum]
 
 _PERIOD_CHOICES = [(p.value, label) for p, label in [
     (RankingPeriod.DAILY, "Hoje"),
@@ -421,6 +423,63 @@ def _verificacao_category(bot: LimerenceBot) -> tuple[list[SettingsField], GetSe
     return fields, get_settings, update_settings
 
 
+def _parcerias_category(bot: LimerenceBot) -> tuple[list[SettingsField], GetSettings, UpdateSettings]:
+    fields = [
+        SettingsField("enabled", "Sistema Ativado", FieldKind.BOOL, PartnershipSettings),
+        SettingsField(
+            "mode", "Modo de Funcionamento", FieldKind.CHOICE, PartnershipSettings,
+            choices=[("channel", "Canal"), ("forum", "Fórum")],
+        ),
+        SettingsField(
+            "category_channel_id", "Categoria dos Canais", FieldKind.CHANNEL, PartnershipSettings,
+            channel_types=_CATEGORY_CHANNEL,
+        ),
+        SettingsField(
+            "forum_channel_id", "Fórum dos Tópicos", FieldKind.CHANNEL, PartnershipSettings,
+            channel_types=_FORUM_CHANNEL,
+        ),
+        # cargo Parceiro/Streamer reaproveita GuildSettings (/config -> Cargos)
+        # — registro central de cargos importantes, ja existia pra isso.
+        SettingsField("partner_role_id", "Cargo Parceiro/Streamer", FieldKind.ROLE, GuildSettings),
+        SettingsField("staff_role_id", "Cargo da Staff", FieldKind.ROLE, PartnershipSettings),
+        SettingsField(
+            "cooldown_hours", "Cooldown entre Publicações (h)", FieldKind.NUMBER, PartnershipSettings,
+            allow_clear=False,
+        ),
+        SettingsField("allow_here", "Permitir @here", FieldKind.BOOL, PartnershipSettings),
+        SettingsField("pre_message", "Mensagem Antes do Embed", FieldKind.TEXT, PartnershipSettings),
+        SettingsField(
+            "log_channel_id", "Canal de Logs", FieldKind.CHANNEL, PartnershipSettings, channel_types=_TEXT
+        ),
+        SettingsField(
+            "max_description_length", "Máx. de Caracteres da Descrição", FieldKind.NUMBER,
+            PartnershipSettings, allow_clear=False,
+        ),
+        SettingsField("allow_banner", "Permitir Banner", FieldKind.BOOL, PartnershipSettings),
+        SettingsField("allow_image", "Permitir Imagem", FieldKind.BOOL, PartnershipSettings),
+        SettingsField("allow_invite", "Permitir Convite do Discord", FieldKind.BOOL, PartnershipSettings),
+        SettingsField(
+            "allow_external_links", "Permitir Links Externos", FieldKind.BOOL, PartnershipSettings
+        ),
+    ]
+
+    async def get_settings(guild_id: int) -> _Merged:
+        g, p = await asyncio.gather(
+            bot.config_service.get_settings(guild_id),
+            bot.partnership_service.get_settings(guild_id),
+        )
+        return _Merged(p, g)
+
+    async def update_settings(guild_id: int, **updates: object) -> None:
+        for key, value in updates.items():
+            if key == "partner_role_id":
+                await bot.config_service.update(guild_id, partner_role_id=value)
+            else:
+                await bot.partnership_service.update_settings(guild_id, **{key: value})
+
+    return fields, get_settings, update_settings
+
+
 _CATEGORY_BUILDERS: dict[str, tuple[str, Any]] = {
     "tickets": ("🎫 Tickets", _tickets_category),
     "cargos": ("👮 Cargos", _cargos_category),
@@ -433,6 +492,7 @@ _CATEGORY_BUILDERS: dict[str, tuple[str, Any]] = {
     "moderacao": ("🔨 Moderação", _moderacao_category),
     "boost": ("💜 Boost", _boost_category),
     "verificacao": ("🛡️ Verificação", _verificacao_category),
+    "parcerias": ("🤝 Parcerias", _parcerias_category),
 }
 
 
@@ -534,6 +594,7 @@ class _CategorySelect(discord.ui.Select["MainConfigMenuView"]):
             discord.SelectOption(label="🔨 Moderação", value="moderacao"),
             discord.SelectOption(label="💜 Boost", value="boost"),
             discord.SelectOption(label="🛡️ Verificação", value="verificacao"),
+            discord.SelectOption(label="🤝 Parcerias", value="parcerias"),
             discord.SelectOption(label="💰 Monetização", value="monetizacao"),
             discord.SelectOption(label="🗳️ Enquetes", value="enquetes"),
             discord.SelectOption(label="📋 Auditoria", value="auditoria"),

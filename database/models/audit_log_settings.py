@@ -50,6 +50,7 @@ class AuditLogSettings(Base, UUIDPrimaryKeyMixin):
     coupon: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     plan: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     verification: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    partnership: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow, onupdate=_utcnow

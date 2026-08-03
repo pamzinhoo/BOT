@@ -24,6 +24,7 @@ from services.guild_service import GuildService
 from services.help_service import HelpService
 from services.log_service import LogService
 from services.painel_service import PainelService
+from services.partnership_service import PartnershipService
 from services.payment_service import PaymentService
 from services.plan_service import PlanService
 from services.poll_service import PollService
@@ -94,6 +95,7 @@ class LimerenceBot(commands.Bot):
             database, self, self.vote_weight_service, self.subscription_service
         )
         self.verification_service = VerificationService(database, self)
+        self.partnership_service = PartnershipService(database, self)
 
         self.tree.on_error = self._on_app_command_error
         self._patch_view_store_diagnostics()
