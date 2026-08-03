@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 import discord
 
 from database.models.audit_log import AuditLogCategory
 from database.models.automod import AutoModLog, AutoModSettings
-from database.models.log import LogAction
 from database.models.command_help import CommandHelp
+from database.models.log import LogAction
+from database.models.partnership import Partnership
+from database.models.partnership_settings import PartnershipSettings
 from database.models.payment import PaymentHistory
 from database.models.payment_dm_settings import PaymentDmSettings
 from database.models.plan import Plan
@@ -18,6 +21,7 @@ from database.models.staff_stats import StaffStats
 from database.models.ticket import Ticket, TicketCategory
 from database.models.ticket_panel import TicketPanel
 from services.automod_service import EffectiveWord
+from services.partnership_service import cooldown_remaining
 from services.plan_service import render_placeholders
 from services.ranking_service import RankingEntry
 from services.staff_service import StaffProfile
@@ -34,6 +38,7 @@ from utils.constants import (
     EMBED_COLOR_ORANGE,
     EMBED_COLOR_PURPLE,
     EMBED_COLOR_SUCCESS,
+    EMBED_COLOR_VIOLET,
     EMBED_COLOR_WARNING,
     HELP_CATEGORY_LABELS,
     LOG_ACTION_LABELS,
@@ -821,6 +826,100 @@ def booster_removed_log_embed(
     embed.add_field(name="Servidor", value=member.guild.name, inline=True)
     embed.add_field(name="Tempo impulsionando", value=humanize_duration(duration_seconds), inline=True)
     embed.timestamp = discord.utils.utcnow()
+    return embed
+
+
+def verification_prompt_embed(description: str, *, code: str) -> discord.Embed:
+    embed = discord.Embed(title="🛡️ Verificação Necessária", description=description, color=EMBED_COLOR_VIOLET)
+    embed.add_field(name="Código", value=f"`{code}`", inline=False)
+    embed.set_footer(text="Verificação • Limerence")
+    return embed
+
+
+def verification_log_embed(
+    *,
+    user_id: int,
+    method_label: str,
+    attempts_used: int,
+    max_attempts: int,
+    elapsed_label: str,
+    result_label: str,
+) -> discord.Embed:
+    embed = discord.Embed(title="🛡️ Verificação", color=EMBED_COLOR_VIOLET)
+    embed.add_field(name="Usuário", value=f"<@{user_id}> ({user_id})", inline=False)
+    embed.add_field(name="Método", value=method_label, inline=True)
+    embed.add_field(name="Tentativas", value=f"{attempts_used}/{max_attempts}", inline=True)
+    embed.add_field(name="Tempo para concluir", value=elapsed_label, inline=True)
+    embed.add_field(name="Resultado", value=result_label, inline=False)
+    embed.timestamp = discord.utils.utcnow()
+    return embed
+
+
+def partnership_embed(record: Partnership, *, allow_image: bool) -> discord.Embed:
+    embed = discord.Embed(
+        title=f"🤝 {record.name}", description=record.description, color=EMBED_COLOR_PURPLE
+    )
+    if record.category_label:
+        embed.add_field(name="Categoria", value=record.category_label, inline=True)
+    embed.add_field(name="Divulgado por", value=f"<@{record.owner_id}>", inline=True)
+    if record.invite:
+        embed.add_field(name="Convite", value=record.invite, inline=False)
+    if record.banner:
+        if allow_image:
+            embed.set_image(url=record.banner)
+        else:
+            embed.set_thumbnail(url=record.banner)
+    embed.set_footer(text="Parceria • Limerence")
+    embed.timestamp = discord.utils.utcnow()
+    return embed
+
+
+def partnership_log_embed(record: Partnership, *, action: str) -> discord.Embed:
+    embed = discord.Embed(title="🤝 Parceria", description=action, color=EMBED_COLOR_PURPLE)
+    embed.add_field(name="Parceiro", value=f"<@{record.owner_id}> ({record.owner_id})", inline=False)
+    embed.add_field(name="Nome", value=record.name, inline=True)
+    if record.channel_id:
+        embed.add_field(name="Canal", value=f"<#{record.channel_id}>", inline=True)
+    elif record.thread_id:
+        embed.add_field(name="Tópico", value=f"<#{record.thread_id}>", inline=True)
+    embed.timestamp = discord.utils.utcnow()
+    return embed
+
+
+def partnership_status_embed(
+    record: Partnership | None, settings: PartnershipSettings, *, now: datetime
+) -> discord.Embed:
+    if record is None:
+        return discord.Embed(
+            title="🤝 Status da Parceria",
+            description="Você ainda não tem uma parceria publicada. Use `/parceria publicar`.",
+            color=EMBED_COLOR_PURPLE,
+        )
+
+    embed = discord.Embed(title="🤝 Status da Parceria", color=EMBED_COLOR_PURPLE)
+    if record.channel_id:
+        location = f"<#{record.channel_id}>"
+    elif record.thread_id:
+        location = f"<#{record.thread_id}>"
+    else:
+        location = "—"
+    embed.add_field(name="Canal", value=location, inline=True)
+    embed.add_field(
+        name="Última publicação",
+        value=discord.utils.format_dt(record.last_publish_at, style="R") if record.last_publish_at else "Nunca",
+        inline=True,
+    )
+
+    remaining = cooldown_remaining(settings.cooldown_hours, record.last_publish_at, now)
+    if remaining is None:
+        embed.add_field(name="Próxima publicação", value="Disponível agora", inline=True)
+    else:
+        embed.add_field(
+            name="Próxima publicação", value=discord.utils.format_dt(now + remaining, style="R"), inline=True
+        )
+        embed.add_field(
+            name="Cooldown restante", value=humanize_duration(int(remaining.total_seconds())), inline=True
+        )
     return embed
 
 

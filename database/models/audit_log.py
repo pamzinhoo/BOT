@@ -44,6 +44,8 @@ class AuditLogCategory(enum.Enum):
     SUBSCRIPTION = "subscription"
     COUPON = "coupon"
     PLAN = "plan"
+    VERIFICATION = "verification"
+    PARTNERSHIP = "partnership"
 
 
 class AuditLogEntry(Base, UUIDPrimaryKeyMixin):
