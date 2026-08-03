@@ -229,9 +229,10 @@ class LimerenceBot(commands.Bot):
         # botoes do sistema de verificacao/CAPTCHA (DM ou canal de fallback) —
         # precisam responder mesmo depois de um restart, com o codigo/sessao
         # ainda validos.
-        from views.verification_view import PickCaptchaButton, TypeCaptchaButton
+        from views.verification_view import PickCaptchaButton, TypeCaptchaButton, VerificationPanelView
 
         self.add_dynamic_items(TypeCaptchaButton, PickCaptchaButton)
+        self.add_view(VerificationPanelView())
 
         # cada painel de ticket configuravel tem um botao com custom_id proprio
         # (limerence:ticket_panel:<key>:open) — sem re-registrar aqui, os botoes

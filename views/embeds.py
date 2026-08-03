@@ -834,6 +834,12 @@ def verification_prompt_embed(description: str, *, code: str) -> discord.Embed:
     return embed
 
 
+def verification_panel_embed(welcome_message: str) -> discord.Embed:
+    embed = discord.Embed(title="🛡️ Verificação de Membros", description=welcome_message, color=EMBED_COLOR_VIOLET)
+    embed.set_footer(text="Clique no botão abaixo para iniciar • Limerence")
+    return embed
+
+
 def verification_log_embed(
     *,
     user_id: int,

@@ -55,6 +55,10 @@ class VerificationSettings(Base, UUIDPrimaryKeyMixin):
     verified_role_id: Mapped[int | None] = mapped_column(BigInteger)
     verification_channel_id: Mapped[int | None] = mapped_column(BigInteger)
     log_channel_id: Mapped[int | None] = mapped_column(BigInteger)
+    # mensagem fixa/pinada publicada em verification_channel_id (botão "Iniciar
+    # Verificação") — republicada quando o canal muda, reeditada quando o
+    # texto/estado do sistema muda.
+    panel_message_id: Mapped[int | None] = mapped_column(BigInteger)
 
     code_length: Mapped[int] = mapped_column(Integer, nullable=False, default=6)
     code_charset: Mapped[str] = mapped_column(

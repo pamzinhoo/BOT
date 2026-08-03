@@ -419,6 +419,13 @@ def _verificacao_category(bot: LimerenceBot) -> tuple[list[SettingsField], GetSe
             else:
                 await bot.verification_service.update_settings(guild_id, **{key: value})
 
+        # canal novo/trocado -> (re)publica e fixa a mensagem de verificação lá;
+        # sem canal novo mas mudou algo que aparece nela -> so reedita.
+        if updates.get("verification_channel_id") is not None:
+            await bot.verification_service.publish_panel(guild_id)
+        elif {"enabled", "welcome_message"} & updates.keys():
+            await bot.verification_service.refresh_panel(guild_id)
+
     return fields, get_settings, update_settings
 
 

@@ -50,6 +50,68 @@ def _build_button_view(
     return view
 
 
+class VerificationPanelStartButton(discord.ui.Button):
+    """Botao da mensagem fixa (pinada) em verification_channel_id. Cada clique
+    inicia/reaproveita a sessao do membro e entrega o CAPTCHA numa mensagem
+    efemera (so quem clicou ve) — resolve o caso de DM fechada sem depender
+    de o membro abrir a DM do bot."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            style=discord.ButtonStyle.success,
+            label="🔑 Iniciar Verificação",
+            custom_id="limerence:verify:panel:start",
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
+        member = interaction.user
+        if interaction.guild is None or not isinstance(member, discord.Member):
+            await interaction.response.send_message(
+                "Use este botão dentro do servidor.", ephemeral=True
+            )
+            return
+
+        settings = await bot.verification_service.get_settings(interaction.guild.id)
+        if settings.verified_role_id is not None:
+            role = interaction.guild.get_role(settings.verified_role_id)
+            if role is not None and role in member.roles:
+                await interaction.response.send_message("Você já está verificado. ✅", ephemeral=True)
+                return
+
+        prompt = await bot.verification_service.start_verification(member)
+        if prompt is None:
+            await interaction.response.send_message(
+                "Sistema de verificação está desativado no momento.", ephemeral=True
+            )
+            return
+
+        welcome = settings.welcome_message or DEFAULT_WELCOME_MESSAGE
+        text = render_placeholders(welcome, user=member.mention, server_name=interaction.guild.name)
+        embed = verification_prompt_embed(text, code=prompt.code)
+        view = _build_prompt_view(prompt.session)
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+        await bot.verification_service.set_delivery(
+            prompt.session.id, via_dm=False, channel_id=interaction.channel_id, message_id=None
+        )
+
+
+class VerificationPanelView(SafeView):
+    """View persistente da mensagem fixa — um unico botao estatico, registrada
+    uma vez no boot (sem custom_id dinamico, igual PainelView/ShopPanelView)."""
+
+    def __init__(self) -> None:
+        super().__init__(timeout=None)
+        self.add_item(VerificationPanelStartButton())
+
+
+def _is_panel_delivery(session: VerificationSession | None) -> bool:
+    """Sessao entregue pelo botao do painel fixo: canal (nao DM) mas sem
+    message_id salvo, porque a mensagem original e efemera (nao pode ser
+    reaberta via fetch_message — so editada dentro da propria interaction)."""
+    return session is not None and not session.via_dm and session.message_id is None
+
+
 async def send_verification_prompt(
     bot: LimerenceBot, member: discord.Member, prompt: VerificationPrompt
 ) -> None:
@@ -183,6 +245,16 @@ class TypeCaptchaModal(discord.ui.Modal, title="Verificação"):
             user_id=interaction.user.id,
             submitted_code=str(self.codigo.value),
         )
+        if _is_panel_delivery(outcome.session):
+            # entrega efemera do painel fixo: so da pra editar a propria
+            # mensagem da interaction, nunca reabrir via fetch_message.
+            refresh = await _build_refresh(bot, outcome, mention=interaction.user.mention)
+            if refresh is not None:
+                embed, view = refresh
+                await interaction.response.edit_message(content=outcome.message, embed=embed, view=view)
+            else:
+                await interaction.response.edit_message(content=outcome.message)
+            return
         await interaction.response.send_message(outcome.message, ephemeral=True)
         await _apply_outcome_to_persistent_message(bot, outcome, mention=interaction.user.mention)
 
@@ -253,6 +325,15 @@ class PickCaptchaButton(
             generation=self.generation,
             candidate=self.candidate,
         )
+        if _is_panel_delivery(outcome.session):
+            refresh = await _build_refresh(bot, outcome, mention=interaction.user.mention)
+            if refresh is not None:
+                embed, view = refresh
+                await interaction.response.edit_message(content=outcome.message, embed=embed, view=view)
+            else:
+                await interaction.response.edit_message(content=outcome.message)
+            return
+
         await interaction.response.send_message(outcome.message, ephemeral=True)
 
         refresh = await _build_refresh(bot, outcome, mention=interaction.user.mention)

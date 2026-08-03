@@ -3,6 +3,7 @@ from __future__ import annotations
 import secrets
 import string
 import uuid
+from contextlib import suppress
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Literal
@@ -212,6 +213,75 @@ class VerificationService:
             await session.flush()
             await session.refresh(settings)
         return settings
+
+    # --- painel fixo (mensagem pinada em verification_channel_id) -----------
+
+    async def publish_panel(self, guild_id: int) -> None:
+        """Posta (ou reposta, se ja existia) a mensagem fixa de verificacao em
+        verification_channel_id e fixa (pin) no canal. Chamado quando o canal
+        e configurado/trocado em /config -> Verificação."""
+        settings = await self.get_settings(guild_id)
+        if settings.verification_channel_id is None:
+            return
+        guild = self._bot.get_guild(guild_id)
+        if guild is None:
+            return
+        channel = guild.get_channel(settings.verification_channel_id)
+        if not isinstance(channel, discord.TextChannel):
+            return
+
+        from views.embeds import verification_panel_embed
+        from views.verification_view import VerificationPanelView
+
+        await self._delete_panel_message(settings)
+        welcome = settings.welcome_message or DEFAULT_WELCOME_MESSAGE
+        try:
+            message = await channel.send(
+                embed=verification_panel_embed(welcome), view=VerificationPanelView()
+            )
+        except discord.HTTPException:
+            logger.warning("Falha ao publicar painel de verificação na guild %s.", guild_id)
+            return
+        with suppress(discord.HTTPException):
+            await message.pin(reason="Painel fixo de verificação")
+        await self.update_settings(guild_id, panel_message_id=message.id)
+
+    async def refresh_panel(self, guild_id: int) -> None:
+        """Reedita a mensagem fixa ja publicada (ex.: mudou a mensagem inicial
+        ou o sistema foi ativado/desativado). Nunca reposta sozinho."""
+        settings = await self.get_settings(guild_id)
+        if settings.verification_channel_id is None or settings.panel_message_id is None:
+            return
+        guild = self._bot.get_guild(guild_id)
+        if guild is None:
+            return
+        channel = guild.get_channel(settings.verification_channel_id)
+        if not isinstance(channel, discord.TextChannel):
+            return
+        try:
+            message = await channel.fetch_message(settings.panel_message_id)
+        except discord.HTTPException:
+            return
+        from views.embeds import verification_panel_embed
+
+        welcome = settings.welcome_message or DEFAULT_WELCOME_MESSAGE
+        with suppress(discord.HTTPException):
+            await message.edit(embed=verification_panel_embed(welcome))
+
+    async def _delete_panel_message(self, settings: VerificationSettings) -> None:
+        if settings.verification_channel_id is None or settings.panel_message_id is None:
+            return
+        guild = self._bot.get_guild(settings.guild_id)
+        if guild is None:
+            return
+        channel = guild.get_channel(settings.verification_channel_id)
+        if not isinstance(channel, discord.TextChannel):
+            return
+        try:
+            message = await channel.fetch_message(settings.panel_message_id)
+            await message.delete()
+        except discord.HTTPException:
+            pass
 
     # --- criacao de sessao --------------------------------------------------
 
