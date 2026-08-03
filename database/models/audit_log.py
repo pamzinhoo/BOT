@@ -53,7 +53,7 @@ class AuditLogEntry(Base, UUIDPrimaryKeyMixin):
 
     __tablename__ = "audit_log_entries"
 
-    guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
     category: Mapped[AuditLogCategory] = mapped_column(
         Enum(AuditLogCategory, name="audit_log_category"), nullable=False
     )

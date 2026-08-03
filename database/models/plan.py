@@ -15,7 +15,7 @@ class Plan(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     __tablename__ = "plans"
     __table_args__ = (UniqueConstraint("guild_id", "name", name="uq_plans_guild_name"),)
 
-    guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     emoji: Mapped[str | None] = mapped_column(String(64))
     color: Mapped[int | None] = mapped_column(Integer)

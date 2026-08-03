@@ -33,16 +33,19 @@ def test_every_dumped_table_query_is_filtered_by_guild() -> None:
 
 def test_copy_transcripts_only_copies_files_for_this_guild_tickets(tmp_path: Path) -> None:
     """Auditoria (critico): `data/transcripts` e uma pasta compartilhada entre
-    TODAS as guilds (nomeada so pelo short_id do ticket) — copiar a pasta
-    inteira pro backup de uma guild vazaria as transcricoes de tickets de
-    outros servidores. So os arquivos cujo short_id pertence a esta guild
-    podem ser copiados."""
+    TODAS as guilds (nomeada pelo UUID completo do ticket, nao mais so os 8
+    primeiros chars — um prefixo curto tinha risco real de colisao entre
+    tickets de guilds diferentes) — copiar a pasta inteira pro backup de uma
+    guild vazaria as transcricoes de tickets de outros servidores. So os
+    arquivos cujo UUID pertence a esta guild podem ser copiados."""
+    ticket_a = "aaaaaaaa-0000-0000-0000-000000000001"
+    ticket_b = "bbbbbbbb-0000-0000-0000-000000000002"
     transcripts_dir = tmp_path / "transcripts"
     transcripts_dir.mkdir()
-    (transcripts_dir / "aaaaaaaa.html").write_text("guild A ticket")
-    (transcripts_dir / "aaaaaaaa.pdf").write_bytes(b"guild A ticket pdf")
-    (transcripts_dir / "bbbbbbbb.html").write_text("guild B ticket - NAO pode vazar")
-    (transcripts_dir / "bbbbbbbb.pdf").write_bytes(b"guild B ticket pdf - NAO pode vazar")
+    (transcripts_dir / f"{ticket_a}.html").write_text("guild A ticket")
+    (transcripts_dir / f"{ticket_a}.pdf").write_bytes(b"guild A ticket pdf")
+    (transcripts_dir / f"{ticket_b}.html").write_text("guild B ticket - NAO pode vazar")
+    (transcripts_dir / f"{ticket_b}.pdf").write_bytes(b"guild B ticket pdf - NAO pode vazar")
 
     out_dir = tmp_path / "backup-guild-a" / "transcricoes"
 
@@ -51,14 +54,14 @@ def test_copy_transcripts_only_copies_files_for_this_guild_tickets(tmp_path: Pat
     original_dir = backup_module.TRANSCRIPTS_DIR
     backup_module.TRANSCRIPTS_DIR = transcripts_dir
     try:
-        BackupCog._copy_transcripts(out_dir, {"aaaaaaaa"})
+        BackupCog._copy_transcripts(out_dir, {ticket_a})
     finally:
         backup_module.TRANSCRIPTS_DIR = original_dir
 
     copied = {p.name for p in out_dir.iterdir()}
-    assert copied == {"aaaaaaaa.html", "aaaaaaaa.pdf"}
-    assert "bbbbbbbb.html" not in copied
-    assert "bbbbbbbb.pdf" not in copied
+    assert copied == {f"{ticket_a}.html", f"{ticket_a}.pdf"}
+    assert f"{ticket_b}.html" not in copied
+    assert f"{ticket_b}.pdf" not in copied
 
 
 def test_run_generates_one_backup_per_guild_not_a_shared_zip() -> None:

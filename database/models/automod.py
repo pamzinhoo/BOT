@@ -39,7 +39,7 @@ class AutoModWord(Base, UUIDPrimaryKeyMixin):
 
     __tablename__ = "automod_config"
 
-    guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
     palavra: Mapped[str] = mapped_column(String(200), nullable=False)
     categoria: Mapped[AutoModCategory] = mapped_column(
         Enum(AutoModCategory, name="automod_category"), nullable=False
@@ -77,7 +77,7 @@ class AutoModLog(Base, UUIDPrimaryKeyMixin):
 
     __tablename__ = "automod_logs"
 
-    guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
     user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     user_name: Mapped[str | None] = mapped_column(String(100))
     channel_id: Mapped[int | None] = mapped_column(BigInteger)

@@ -48,7 +48,7 @@ class Punishment(Base, UUIDPrimaryKeyMixin, TimestampMixin):
 
     __tablename__ = "punishments"
 
-    guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
     punishment_code: Mapped[str] = mapped_column(String(20), nullable=False, unique=True)
     user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     user_name: Mapped[str | None] = mapped_column(String(100))

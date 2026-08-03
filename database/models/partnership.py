@@ -20,7 +20,7 @@ class Partnership(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         Index("ix_partnerships_guild_id", "guild_id"),
     )
 
-    guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
     owner_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     # cargo dedicado desse parceiro (ex.: @Front Design), criado junto com o
     # canal no modo Canal — modo Forum nao suporta overwrite por topico, entao

@@ -117,11 +117,11 @@ class BackupCog(commands.Cog):
         stage_dir = _BACKUP_DIR / f"{guild.id}-{date_label}"
         zip_path = _BACKUP_DIR / f"backup-{guild.id}-{date_label}.zip"
         try:
-            ticket_short_ids = await self._dump_database(stage_dir / "database", guild.id)
+            ticket_ids = await self._dump_database(stage_dir / "database", guild.id)
             await self._dump_ranking(stage_dir / "ranking", guild.id)
             await self._dump_dashboard(stage_dir / "dashboard", guild.id)
             await self._dump_config(stage_dir / "config", guild.id)
-            self._copy_transcripts(stage_dir / "transcricoes", ticket_short_ids)
+            self._copy_transcripts(stage_dir / "transcricoes", ticket_ids)
 
             self._zip_dir(stage_dir, zip_path)
             await self._maybe_upload(guild, zip_path, date_label)
@@ -129,10 +129,10 @@ class BackupCog(commands.Cog):
             shutil.rmtree(stage_dir, ignore_errors=True)
 
     async def _dump_database(self, out_dir: Path, guild_id: int) -> set[str]:
-        """Devolve os short_id (8 primeiros chars do UUID) dos tickets dessa
-        guild — usado pra filtrar quais transcricoes locais pertencem a ela."""
+        """Devolve os UUIDs completos dos tickets dessa guild — usado pra
+        filtrar quais transcricoes locais pertencem a ela."""
         out_dir.mkdir(parents=True, exist_ok=True)
-        ticket_short_ids: set[str] = set()
+        ticket_ids: set[str] = set()
         async with self.bot.database.session() as session:
             for model, query in _guild_scoped_queries(guild_id).items():
                 result = await session.execute(query)
@@ -142,12 +142,12 @@ class BackupCog(commands.Cog):
                     for row in entities
                 ]
                 if model is Ticket:
-                    ticket_short_ids = {str(row.id)[:8] for row in entities}
+                    ticket_ids = {str(row.id) for row in entities}
                 (out_dir / f"{model.__tablename__}.json").write_text(
                     json.dumps(rows, default=_json_default, ensure_ascii=False, indent=2),
                     encoding="utf-8",
                 )
-        return ticket_short_ids
+        return ticket_ids
 
     async def _dump_config(self, out_dir: Path, guild_id: int) -> None:
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -182,16 +182,16 @@ class BackupCog(commands.Cog):
         (out_dir / "dashboard.json").write_text(json.dumps(data, indent=2), encoding="utf-8")
 
     @staticmethod
-    def _copy_transcripts(out_dir: Path, ticket_short_ids: set[str]) -> None:
+    def _copy_transcripts(out_dir: Path, ticket_ids: set[str]) -> None:
         """So copia as transcricoes (.html/.pdf) dos tickets QUE PERTENCEM a
         esta guild — a pasta local `data/transcripts` e compartilhada entre
-        todas as guilds do bot (nomeada só pelo short_id do ticket), entao
+        todas as guilds do bot (nomeada pelo UUID completo do ticket), entao
         copiar a pasta inteira vazaria transcricoes de outros servidores."""
-        if not TRANSCRIPTS_DIR.exists() or not ticket_short_ids:
+        if not TRANSCRIPTS_DIR.exists() or not ticket_ids:
             return
         out_dir.mkdir(parents=True, exist_ok=True)
         for file_path in TRANSCRIPTS_DIR.iterdir():
-            if file_path.is_file() and file_path.stem in ticket_short_ids:
+            if file_path.is_file() and file_path.stem in ticket_ids:
                 shutil.copy2(file_path, out_dir / file_path.name)
 
     @staticmethod
