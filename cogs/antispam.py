@@ -1,15 +1,16 @@
 from __future__ import annotations
 
 import hashlib
+from contextlib import suppress
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
 import discord
 from discord.ext import commands
 
-from database.models.anti_spam_settings import AntiSpamSettings
 from core.bot import LimerenceBot
 from core.logger import get_logger
+from database.models.anti_spam_settings import AntiSpamSettings
 from database.models.log import LogAction
 from utils.checks import member_has_staff_role
 from utils.constants import EMBED_COLOR_WARNING
@@ -65,6 +66,11 @@ class AntiSpamCog(commands.Cog):
         signature, image_url = await self._signature_for(message)
         if signature is None:
             return
+        # a assinatura e so o hash do conteudo (sem guild_id) — texto/imagem de
+        # spam costuma ser identico entre servidores diferentes, entao a chave
+        # do buffer PRECISA incluir a guild pra nao misturar ocorrencias (e
+        # vazar canais/usuarios) de um servidor no alerta de outro.
+        signature = f"{message.guild.id}:{signature}"
 
         now = message.created_at
         buffer = self._buffers.setdefault(signature, _SignatureBuffer())
@@ -187,10 +193,8 @@ class AntiSpamCog(commands.Cog):
         await channel.send(embed=embed, view=view)
 
         if anti_spam.default_action == "apagar_mensagem":
-            try:
+            with suppress(discord.HTTPException):
                 await message.delete()
-            except discord.HTTPException:
-                pass
 
         await self.bot.log_service.record(
             guild_id=message.guild.id,

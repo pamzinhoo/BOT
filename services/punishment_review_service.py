@@ -110,6 +110,13 @@ class PunishmentReviewService:
         punishment = await self._punishment_service.get_by_id(punishment_id)
         if punishment is None:
             raise PunishmentReviewError("Punição não encontrada.")
+        if punishment.guild_id != reviewer.guild.id:
+            # nunca confiar so no botao/custom_id — a punicao tem que pertencer
+            # a guild de quem esta clicando, senao um staff de outra guild
+            # (com permissao "recurso_banimento" la) conseguiria aceitar/negar
+            # (e ate aplicar ban/kick) uma punicao de uma guild que ele nao
+            # administra.
+            raise PunishmentReviewError("Punição não encontrada.")
         if punishment.status != PunishmentStatus.PENDING_REVIEW:
             raise PunishmentReviewError("Essa punição não está mais em análise.")
         if self.is_self_review(punishment, reviewer.id):

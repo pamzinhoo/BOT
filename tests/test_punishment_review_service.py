@@ -12,13 +12,14 @@ from services.punishment_review_service import (
 
 
 class _FakePunishment:
-    def __init__(self, *, staff_id: int, status: PunishmentStatus, punishment_id=None):
+    def __init__(self, *, staff_id: int, status: PunishmentStatus, punishment_id=None, guild_id: int = 999):
         self.id = punishment_id or uuid.uuid4()
         self.staff_id = staff_id
         self.status = status
         self.user_id = 111
         self.user_name = "Alvo"
         self.punishment_code = "BAN-11111"
+        self.guild_id = guild_id
 
 
 class _FakeAppeal:
@@ -32,18 +33,19 @@ class _FakeDecisionResult:
         self.appeal = appeal
 
 
-class _FakeMember:
-    def __init__(self, member_id: int, name: str = "Staff"):
-        self.id = member_id
-        self._name = name
-
-    def __str__(self) -> str:
-        return self._name
-
-
 class _FakeGuild:
     def __init__(self, guild_id: int = 999):
         self.id = guild_id
+
+
+class _FakeMember:
+    def __init__(self, member_id: int, name: str = "Staff", guild: _FakeGuild | None = None):
+        self.id = member_id
+        self._name = name
+        self.guild = guild or _FakeGuild()
+
+    def __str__(self) -> str:
+        return self._name
 
 
 class _FakePunishmentService:
@@ -246,6 +248,36 @@ async def test_accept_blocks_when_punishment_no_longer_pending_review():
     with pytest.raises(PunishmentReviewError):
         await service.accept(
             guild=_FakeGuild(), punishment_id=punishment.id, reviewer=_FakeMember(2), review_role_id=None
+        )
+    assert fake_service.calls == []
+
+
+async def test_accept_blocks_punishment_from_another_guild():
+    """Auditoria (critico): staff com permissao "recurso_banimento" na SUA
+    guild nao pode aceitar/negar uma punicao que pertence a OUTRA guild —
+    mesmo que o botao/custom_id aponte pra ela (nunca confiar so no cliente)."""
+    punishment = _FakePunishment(staff_id=1, status=PunishmentStatus.PENDING_REVIEW, guild_id=111)
+    fake_service = _FakePunishmentService(punishment, appeal=None)
+    audit = _FakeAuditLogService()
+    service = _make_service(fake_service, audit)
+
+    reviewer = _FakeMember(2, guild=_FakeGuild(guild_id=222))  # guild diferente da punicao
+    with pytest.raises(PunishmentReviewError):
+        await service.accept(guild=reviewer.guild, punishment_id=punishment.id, reviewer=reviewer, review_role_id=None)
+    assert fake_service.calls == []
+
+
+async def test_deny_blocks_punishment_from_another_guild():
+    punishment = _FakePunishment(staff_id=1, status=PunishmentStatus.PENDING_REVIEW, guild_id=111)
+    fake_service = _FakePunishmentService(punishment, appeal=None)
+    audit = _FakeAuditLogService()
+    service = _make_service(fake_service, audit)
+
+    reviewer = _FakeMember(2, guild=_FakeGuild(guild_id=222))
+    with pytest.raises(PunishmentReviewError):
+        await service.deny(
+            guild=reviewer.guild, punishment_id=punishment.id, reviewer=reviewer, reason="motivo",
+            review_role_id=None,
         )
     assert fake_service.calls == []
 
