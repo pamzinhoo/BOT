@@ -12,16 +12,23 @@ from database.repositories.booster_settings_repository import BoosterSettingsRep
 from database.repositories.claim_repository import ClaimRepository
 from database.repositories.command_help_repository import CommandHelpRepository
 from database.repositories.dashboard_settings_repository import DashboardSettingsRepository
+from database.repositories.device_repository import DeviceRepository
 from database.repositories.discount_coupon_repository import (
     DiscountCouponPlanRepository,
     DiscountCouponRedemptionRepository,
     DiscountCouponRepository,
 )
+from database.repositories.download_repository import DownloadRepository
 from database.repositories.enquete_settings_repository import EnqueteSettingsRepository
 from database.repositories.evaluation_repository import EvaluationRepository
 from database.repositories.evaluation_settings_repository import EvaluationSettingsRepository
+from database.repositories.game_manifest_repository import GameManifestRepository
 from database.repositories.guild_repository import GuildRepository
 from database.repositories.guild_settings_repository import GuildSettingsRepository
+from database.repositories.launcher_news_repository import LauncherNewsRepository
+from database.repositories.launcher_session_repository import LauncherSessionRepository
+from database.repositories.launcher_version_repository import LauncherVersionRepository
+from database.repositories.license_repository import LicenseEventRepository, LicenseRepository
 from database.repositories.log_repository import LogRepository
 from database.repositories.monetization_settings_repository import MonetizationSettingsRepository
 from database.repositories.payment_dm_settings_repository import PaymentDmSettingsRepository
@@ -33,11 +40,13 @@ from database.repositories.plan_repository import (
     PlanMessageRepository,
     PlanRepository,
 )
+from database.repositories.player_repository import PlayerRepository
 from database.repositories.poll_repository import (
     PollOptionRepository,
     PollRepository,
     PollVoteRepository,
 )
+from database.repositories.product_repository import ProductRepository
 from database.repositories.punishment_appeal_repository import PunishmentAppealRepository
 from database.repositories.punishment_repository import PunishmentRepository
 from database.repositories.ranking_settings_repository import RankingSettingsRepository
@@ -76,14 +85,22 @@ __all__ = [
     "ClaimRepository",
     "CommandHelpRepository",
     "DashboardSettingsRepository",
+    "DeviceRepository",
     "DiscountCouponPlanRepository",
     "DiscountCouponRedemptionRepository",
     "DiscountCouponRepository",
+    "DownloadRepository",
     "EnqueteSettingsRepository",
     "EvaluationRepository",
     "EvaluationSettingsRepository",
+    "GameManifestRepository",
     "GuildRepository",
     "GuildSettingsRepository",
+    "LauncherNewsRepository",
+    "LauncherSessionRepository",
+    "LauncherVersionRepository",
+    "LicenseEventRepository",
+    "LicenseRepository",
     "LogRepository",
     "MonetizationSettingsRepository",
     "PaymentDmSettingsRepository",
@@ -93,9 +110,11 @@ __all__ = [
     "PlanBenefitRepository",
     "PlanMessageRepository",
     "PlanRepository",
+    "PlayerRepository",
     "PollOptionRepository",
     "PollRepository",
     "PollVoteRepository",
+    "ProductRepository",
     "PunishmentAppealRepository",
     "PunishmentRepository",
     "RankingSettingsRepository",

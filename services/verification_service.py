@@ -193,6 +193,12 @@ class VerificationPrompt:
     decoys: list[str] = field(default_factory=list)
 
 
+@dataclass
+class PublishPanelResult:
+    ok: bool
+    reason: str
+
+
 class VerificationService:
     def __init__(self, database: Database, bot: LimerenceBot) -> None:
         self._database = database
@@ -216,19 +222,22 @@ class VerificationService:
 
     # --- painel fixo (mensagem pinada em verification_channel_id) -----------
 
-    async def publish_panel(self, guild_id: int) -> None:
+    async def publish_panel(self, guild_id: int) -> PublishPanelResult:
         """Posta (ou reposta, se ja existia) a mensagem fixa de verificacao em
         verification_channel_id e fixa (pin) no canal. Chamado quando o canal
-        e configurado/trocado em /config -> Verificação."""
+        e configurado/trocado em /config -> Verificação, ou manualmente pelo
+        botão "Enviar" do painel."""
         settings = await self.get_settings(guild_id)
         if settings.verification_channel_id is None:
-            return
+            return PublishPanelResult(ok=False, reason="Nenhum canal de verificação configurado.")
         guild = self._bot.get_guild(guild_id)
         if guild is None:
-            return
+            return PublishPanelResult(ok=False, reason="Servidor não encontrado.")
         channel = guild.get_channel(settings.verification_channel_id)
         if not isinstance(channel, discord.TextChannel):
-            return
+            return PublishPanelResult(
+                ok=False, reason="Canal configurado não existe mais ou não é um canal de texto."
+            )
 
         from views.embeds import verification_panel_embed
         from views.verification_view import VerificationPanelView
@@ -239,12 +248,21 @@ class VerificationService:
             message = await channel.send(
                 embed=verification_panel_embed(welcome), view=VerificationPanelView()
             )
+        except discord.Forbidden:
+            logger.warning("Sem permissão para publicar painel de verificação na guild %s.", guild_id)
+            return PublishPanelResult(
+                ok=False, reason=f"Sem permissão para enviar mensagens em {channel.mention}."
+            )
         except discord.HTTPException:
             logger.warning("Falha ao publicar painel de verificação na guild %s.", guild_id)
-            return
-        with suppress(discord.HTTPException):
+            return PublishPanelResult(ok=False, reason="Falha ao enviar a mensagem no Discord.")
+        pin_warning = ""
+        try:
             await message.pin(reason="Painel fixo de verificação")
+        except discord.HTTPException:
+            pin_warning = " (sem permissão para fixar a mensagem)"
         await self.update_settings(guild_id, panel_message_id=message.id)
+        return PublishPanelResult(ok=True, reason=f"Painel enviado em {channel.mention}.{pin_warning}")
 
     async def refresh_panel(self, guild_id: int) -> None:
         """Reedita a mensagem fixa ja publicada (ex.: mudou a mensagem inicial

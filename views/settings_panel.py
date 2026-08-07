@@ -49,6 +49,9 @@ def category_defaults(fields: list[SettingsField]) -> dict[str, Any]:
 GetSettings = Callable[[int], Awaitable[Any]]
 UpdateSettings = Callable[..., Awaitable[Any]]
 OnBack = Callable[[discord.Interaction], Awaitable[None]]
+# botao extra opcional do painel (ex.: "Enviar" no painel de Verificação) —
+# recebe o guild_id, devolve (sucesso, mensagem) pra exibir de forma efemera.
+SendAction = Callable[[int], Awaitable[tuple[bool, str]]]
 
 
 def _format_value(field: SettingsField, raw: object) -> str:
@@ -124,6 +127,8 @@ class DomainSettingsView(SafeView):
         get_settings: GetSettings,
         update_settings: UpdateSettings,
         on_back: OnBack,
+        send_action: SendAction | None = None,
+        send_label: str = "📨 Enviar",
     ) -> None:
         super().__init__(timeout=300)
         self.title = title
@@ -131,7 +136,11 @@ class DomainSettingsView(SafeView):
         self.get_settings = get_settings
         self.update_settings = update_settings
         self.on_back = on_back
+        self.send_action = send_action
+        self.send_label = send_label
         self.add_item(_FieldPickSelect(self))
+        if send_action is not None:
+            self.add_item(_SendActionButton(self))
         self.add_item(_ResetCategoryButton(self))
         self.add_item(_BackToMenuButton(on_back))
 
@@ -147,6 +156,8 @@ class DomainSettingsView(SafeView):
                 get_settings=self.get_settings,
                 update_settings=self.update_settings,
                 on_back=self.on_back,
+                send_action=self.send_action,
+                send_label=self.send_label,
             ),
         )
 
@@ -319,6 +330,20 @@ class _BackToDomainButton(discord.ui.Button[Any]):
 
     async def callback(self, interaction: discord.Interaction) -> None:
         await self.parent_view.render(interaction)
+
+
+class _SendActionButton(discord.ui.Button[Any]):
+    def __init__(self, parent: DomainSettingsView) -> None:
+        super().__init__(label=parent.send_label, style=discord.ButtonStyle.success, row=1)
+        self.parent_view = parent
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        assert interaction.guild_id is not None
+        assert self.parent_view.send_action is not None
+        ok, message = await self.parent_view.send_action(interaction.guild_id)
+        await interaction.response.send_message(
+            f"{'✅' if ok else '❌'} {message}", ephemeral=True
+        )
 
 
 class _ResetCategoryButton(discord.ui.Button[Any]):

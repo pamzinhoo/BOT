@@ -284,6 +284,11 @@ async def _plan_edit_embed(
         value=f"{plan.currency} {plan.price_one_time / 100:.2f}" if plan.price_one_time else "—",
     )
     embed.add_field(name="Cargo", value=f"<@&{plan.role_id}>" if plan.role_id else "—")
+    weight = None
+    if plan.role_id is not None:
+        weights = await bot.vote_weight_service.get_weights(plan.guild_id)
+        weight = next((w.weight for w in weights if w.role_id == plan.role_id), None)
+    embed.add_field(name="⚖️ Peso de Voto", value=str(weight) if weight is not None else "— (padrão: 1)")
     embed.add_field(
         name="Benefícios",
         value="\n".join(f"✔ {b.text}" for b in benefits) if benefits else "—",

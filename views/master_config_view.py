@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import functools
 from typing import TYPE_CHECKING, Any
 
 import discord
@@ -19,7 +20,7 @@ from database.models.verification_settings import VerificationSettings
 from services.ranking_service import RankingPeriod
 from views.audit_log_panel_view import AuditLogPanelView, audit_log_summary_embed
 from views.base_view import SafeView
-from views.enquete_panel_view import EnqueteMenuView, enquete_menu_embed
+from views.comunidade_panel_view import ComunidadeMenuView, comunidade_menu_embed
 from views.monetization_panel_view import MonetizationMenuView, monetization_menu_embed
 from views.settings_panel import (
     DomainSettingsView,
@@ -216,6 +217,10 @@ def _ranking_category(bot: LimerenceBot) -> tuple[list[SettingsField], GetSettin
                 await bot.config_service.update_ranking_settings(guild_id, **{key: value})
 
     return fields, get_settings, update_settings
+
+
+async def _ranking_send_action(bot: LimerenceBot, guild_id: int) -> tuple[bool, str]:
+    return await bot.painel_service.publish_ranking(guild_id)
 
 
 def _avaliacoes_category(bot: LimerenceBot) -> tuple[list[SettingsField], GetSettings, UpdateSettings]:
@@ -429,6 +434,11 @@ def _verificacao_category(bot: LimerenceBot) -> tuple[list[SettingsField], GetSe
     return fields, get_settings, update_settings
 
 
+async def _verificacao_send_action(bot: LimerenceBot, guild_id: int) -> tuple[bool, str]:
+    result = await bot.verification_service.publish_panel(guild_id)
+    return result.ok, result.reason
+
+
 def _parcerias_category(bot: LimerenceBot) -> tuple[list[SettingsField], GetSettings, UpdateSettings]:
     fields = [
         SettingsField("enabled", "Sistema Ativado", FieldKind.BOOL, PartnershipSettings),
@@ -539,9 +549,9 @@ async def _open_category(interaction: discord.Interaction, category: str) -> Non
         await render_tickets_menu(interaction, _back_to_main_menu)
         return
 
-    if category == "enquetes":
+    if category == "comunidade":
         await interaction.response.edit_message(
-            content=None, embed=enquete_menu_embed(), view=EnqueteMenuView(on_back=_back_to_main_menu)
+            content=None, embed=comunidade_menu_embed(), view=ComunidadeMenuView(on_back=_back_to_main_menu)
         )
         return
 
@@ -559,12 +569,22 @@ async def _open_category(interaction: discord.Interaction, category: str) -> Non
 
     title, builder = _CATEGORY_BUILDERS[category]
     fields, get_settings, update_settings = builder(bot)
+    send_action = None
+    send_label = "📨 Enviar"
+    if category == "verificacao":
+        send_action = functools.partial(_verificacao_send_action, bot)
+        send_label = "📨 Enviar Painel"
+    elif category == "ranking":
+        send_action = functools.partial(_ranking_send_action, bot)
+        send_label = "📨 Enviar"
     domain_view = DomainSettingsView(
         title=title,
         fields=fields,
         get_settings=get_settings,
         update_settings=update_settings,
         on_back=_back_to_main_menu,
+        send_action=send_action,
+        send_label=send_label,
     )
     settings = await get_settings(interaction.guild_id)
     from views.settings_panel import build_domain_embed
@@ -603,7 +623,7 @@ class _CategorySelect(discord.ui.Select["MainConfigMenuView"]):
             discord.SelectOption(label="🛡️ Verificação", value="verificacao"),
             discord.SelectOption(label="🤝 Parcerias", value="parcerias"),
             discord.SelectOption(label="💰 Monetização", value="monetizacao"),
-            discord.SelectOption(label="🗳️ Enquetes", value="enquetes"),
+            discord.SelectOption(label="🎉 Comunidade", value="comunidade"),
             discord.SelectOption(label="📋 Auditoria", value="auditoria"),
             discord.SelectOption(label="🔔 Alertas", value="alertas"),
             discord.SelectOption(label="⚙️ Geral", value="geral"),

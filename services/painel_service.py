@@ -141,6 +141,34 @@ class PainelService:
             settings = await GuildSettingsRepository(session).get_or_create(guild_id)
             settings.ranking_message_id = new_message.id
 
+    async def publish_ranking(self, guild_id: int) -> tuple[bool, str]:
+        """Publica (ou reposta) a mensagem fixa de ranking em ranking_channel_id.
+        Chamado quando o canal e configurado/trocado em /config -> Ranking, ou
+        manualmente pelo botão "Enviar" do painel."""
+        async with self._database.session() as session:
+            settings = await GuildSettingsRepository(session).get_by_guild_id(guild_id)
+            if settings is None or settings.ranking_channel_id is None:
+                return False, "Nenhum canal de ranking configurado."
+            channel_id = settings.ranking_channel_id
+            message_id = settings.ranking_message_id
+            ranking_settings = await RankingSettingsRepository(session).get_or_create(guild_id)
+            criteria = ranking_settings.criteria
+
+        channel = self._bot.get_channel(channel_id)
+        if not isinstance(channel, discord.TextChannel):
+            return False, "Canal configurado não existe mais ou não é um canal de texto."
+
+        ranking = _sort_by_criteria(
+            await self._ranking_service.compute(guild_id, RankingPeriod.ALLTIME), criteria
+        )
+        try:
+            await self._refresh_ranking_message(guild_id, channel_id, message_id, ranking)
+        except discord.Forbidden:
+            return False, f"Sem permissão para enviar mensagens em {channel.mention}."
+        except discord.HTTPException:
+            return False, "Falha ao enviar a mensagem no Discord."
+        return True, f"Ranking publicado em {channel.mention}."
+
     # --- painel fixo da loja (auto-atualiza quando os planos mudam) ---------
 
     async def publish_shop_panel(self, guild_id: int, channel_id: int) -> None:

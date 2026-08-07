@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 from typing import TYPE_CHECKING, Any
 
 import discord
@@ -60,7 +61,7 @@ class EnqueteMenuView(SafeView):
             fields=_ENQUETE_FIELDS,
             get_settings=get_settings,
             update_settings=bot.poll_service.update_settings,
-            on_back=_back_to_enquete_menu,
+            on_back=functools.partial(_back_to_enquete_menu, self.on_back),
         )
         settings = await get_settings(interaction.guild_id)
         await interaction.response.edit_message(
@@ -73,13 +74,13 @@ class EnqueteMenuView(SafeView):
         bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
         weights = await bot.vote_weight_service.get_weights(interaction.guild_id)
         await interaction.response.edit_message(
-            content=None, embed=vote_weights_embed(weights), view=VoteWeightsListView(weights)
+            content=None, embed=vote_weights_embed(weights), view=VoteWeightsListView(weights, self.on_back)
         )
 
 
-async def _back_to_enquete_menu(interaction: discord.Interaction) -> None:
+async def _back_to_enquete_menu(on_back: Any, interaction: discord.Interaction) -> None:
     await interaction.response.edit_message(
-        content=None, embed=enquete_menu_embed(), view=EnqueteMenuView()
+        content=None, embed=enquete_menu_embed(), view=EnqueteMenuView(on_back=on_back)
     )
 
 
@@ -106,21 +107,23 @@ def vote_weights_embed(weights: list[VoteWeight]) -> discord.Embed:
 
 
 class VoteWeightsListView(SafeView):
-    def __init__(self, weights: list[VoteWeight]) -> None:
+    def __init__(self, weights: list[VoteWeight], on_back: Any = None) -> None:
         super().__init__(timeout=300)
         self.weights = weights
-        self.add_item(_WeightRolePicker())
+        self.on_back = on_back
+        self.add_item(_WeightRolePicker(on_back))
         if weights:
-            self.add_item(_WeightDeleteSelect(weights))
-        self.add_item(_BackToEnqueteMenuButton())
+            self.add_item(_WeightDeleteSelect(weights, on_back))
+        self.add_item(_BackToEnqueteMenuButton(on_back))
 
 
 class _WeightRolePicker(discord.ui.RoleSelect):
-    def __init__(self) -> None:
+    def __init__(self, on_back: Any) -> None:
         super().__init__(placeholder="Escolha um cargo pra definir o peso", min_values=1, max_values=1)
+        self.on_back = on_back
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        await interaction.response.send_modal(_WeightModal(self.values[0]))
+        await interaction.response.send_modal(_WeightModal(self.values[0], self.on_back))
 
 
 class _WeightModal(discord.ui.Modal, title="Definir peso de voto"):
@@ -128,9 +131,10 @@ class _WeightModal(discord.ui.Modal, title="Definir peso de voto"):
         label="Peso (número inteiro maior que zero)", placeholder="Ex: 2", max_length=6
     )
 
-    def __init__(self, role: discord.Role) -> None:
+    def __init__(self, role: discord.Role, on_back: Any = None) -> None:
         super().__init__()
         self.role = role
+        self.on_back = on_back
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         assert interaction.guild_id is not None
@@ -144,17 +148,18 @@ class _WeightModal(discord.ui.Modal, title="Definir peso de voto"):
         await bot.vote_weight_service.set_weight(interaction.guild_id, self.role.id, int(raw))
         weights = await bot.vote_weight_service.get_weights(interaction.guild_id)
         await interaction.response.edit_message(
-            content=None, embed=vote_weights_embed(weights), view=VoteWeightsListView(weights)
+            content=None, embed=vote_weights_embed(weights), view=VoteWeightsListView(weights, self.on_back)
         )
 
 
 class _WeightDeleteSelect(discord.ui.Select[Any]):
-    def __init__(self, weights: list[VoteWeight]) -> None:
+    def __init__(self, weights: list[VoteWeight], on_back: Any = None) -> None:
         options = [
             discord.SelectOption(label=f"Remover peso do cargo {w.role_id}", value=str(w.role_id))
             for w in weights
         ][:25]
         super().__init__(placeholder="Remover um peso existente...", options=options, min_values=1, max_values=1)
+        self.on_back = on_back
 
     async def callback(self, interaction: discord.Interaction) -> None:
         assert interaction.guild_id is not None
@@ -162,13 +167,14 @@ class _WeightDeleteSelect(discord.ui.Select[Any]):
         await bot.vote_weight_service.delete_weight(interaction.guild_id, int(self.values[0]))
         weights = await bot.vote_weight_service.get_weights(interaction.guild_id)
         await interaction.response.edit_message(
-            content=None, embed=vote_weights_embed(weights), view=VoteWeightsListView(weights)
+            content=None, embed=vote_weights_embed(weights), view=VoteWeightsListView(weights, self.on_back)
         )
 
 
 class _BackToEnqueteMenuButton(discord.ui.Button[Any]):
-    def __init__(self) -> None:
+    def __init__(self, on_back: Any = None) -> None:
         super().__init__(label="◀ Voltar", style=discord.ButtonStyle.secondary)
+        self.on_back = on_back
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        await _back_to_enquete_menu(interaction)
+        await _back_to_enquete_menu(self.on_back, interaction)

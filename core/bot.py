@@ -20,6 +20,7 @@ from services.claim_service import ClaimService
 from services.config_service import ConfigService
 from services.coupon_service import CouponService
 from services.evaluation_service import EvaluationService
+from services.giveaway_service import GiveawayService
 from services.guild_service import GuildService
 from services.help_service import HelpService
 from services.log_service import LogService
@@ -96,6 +97,7 @@ class LimerenceBot(commands.Bot):
         )
         self.verification_service = VerificationService(database, self)
         self.partnership_service = PartnershipService(database, self)
+        self.giveaway_service = GiveawayService(database, self)
 
         self.tree.on_error = self._on_app_command_error
         self._patch_view_store_diagnostics()
@@ -167,6 +169,7 @@ class LimerenceBot(commands.Bot):
             )
 
     async def _register_persistent_views(self) -> None:
+        from cogs.giveaways import GiveawayCloseButton, GiveawayEnterButton, GiveawayRerollButton
         from cogs.polls import PollVoteButton
         from views.appeal_view import AppealAcceptButton, AppealButton, AppealDenyButton
         from views.evaluation_view import EvaluationView
@@ -199,6 +202,7 @@ class LimerenceBot(commands.Bot):
             AnalisesNavButton, AnalisesSelect, AnalisesAcceptButton, AnalisesDenyButton, AnalisesBackButton
         )
         self.add_dynamic_items(PollVoteButton)
+        self.add_dynamic_items(GiveawayEnterButton, GiveawayCloseButton, GiveawayRerollButton)
 
         # botoes das mensagens de renovacao de assinatura (vao por DM/canal e
         # precisam responder mesmo depois de um restart)

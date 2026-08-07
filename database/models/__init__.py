@@ -15,14 +15,29 @@ from database.models.booster_settings import BoosterSettings
 from database.models.claim import Claim
 from database.models.command_help import CommandHelp
 from database.models.dashboard_settings import DashboardSettings
+from database.models.device import Device
 from database.models.discount_coupon import DiscountCoupon, DiscountType
 from database.models.discount_coupon_plan import DiscountCouponPlan
 from database.models.discount_coupon_redemption import DiscountCouponRedemption
+from database.models.download import Download, DownloadStatus
 from database.models.enquete_settings import EnqueteSettings
 from database.models.evaluation import Evaluation
 from database.models.evaluation_settings import EvaluationSettings
+from database.models.game_manifest import GameManifestEntry, ManifestEntryType
+from database.models.giveaway import (
+    Giveaway,
+    GiveawayEntry,
+    GiveawayPrizeType,
+    GiveawayStatus,
+    GiveawayWinner,
+)
 from database.models.guild import Guild
 from database.models.guild_settings import GuildSettings
+from database.models.launcher_news import LauncherNews
+from database.models.launcher_session import LauncherSession
+from database.models.launcher_version import LauncherPlatform, LauncherVersion
+from database.models.license import License, LicenseStatus
+from database.models.license_event import LicenseEvent, LicenseEventType
 from database.models.log import LogAction, LogEntry
 from database.models.monetization_gateway_settings import MonetizationGatewaySettings
 from database.models.monetization_settings import MonetizationSettings
@@ -40,7 +55,9 @@ from database.models.pix_manual_settings import PIX_KEY_TYPES, PixManualSettings
 from database.models.plan import Plan
 from database.models.plan_benefit import PlanBenefit
 from database.models.plan_message import PlanMessage, PlanMessageType
+from database.models.player import Player
 from database.models.poll import Poll, PollOption, PollStatus, PollVisibility, PollVote, VoteWeight
+from database.models.product import Product, ProductType
 from database.models.punishment import (
     APPEALABLE_TYPES,
     Punishment,
@@ -103,20 +120,38 @@ __all__ = [
     "CodeCharset",
     "CommandHelp",
     "DashboardSettings",
+    "Device",
     "DiscountCoupon",
     "DiscountCouponPlan",
     "DiscountCouponRedemption",
     "DiscountType",
+    "Download",
+    "DownloadStatus",
     "EnqueteSettings",
     "Evaluation",
     "EvaluationSettings",
     "FORM_FIELD_STYLES",
+    "GameManifestEntry",
+    "Giveaway",
+    "GiveawayEntry",
+    "GiveawayPrizeType",
+    "GiveawayStatus",
+    "GiveawayWinner",
     "Guild",
     "GuildScopedMixin",
     "GuildSettings",
+    "LauncherNews",
+    "LauncherPlatform",
+    "LauncherSession",
+    "LauncherVersion",
+    "License",
+    "LicenseEvent",
+    "LicenseEventType",
+    "LicenseStatus",
     "LogAction",
     "LogEntry",
     "MAX_FORM_FIELDS",
+    "ManifestEntryType",
     "MonetizationGatewaySettings",
     "MonetizationSettings",
     "Partnership",
@@ -135,11 +170,14 @@ __all__ = [
     "PlanBenefit",
     "PlanMessage",
     "PlanMessageType",
+    "Player",
     "Poll",
     "PollOption",
     "PollStatus",
     "PollVisibility",
     "PollVote",
+    "Product",
+    "ProductType",
     "Punishment",
     "PunishmentAppeal",
     "PunishmentReviewRole",

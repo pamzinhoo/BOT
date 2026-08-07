@@ -8,6 +8,7 @@ import discord
 from database.models.audit_log import AuditLogCategory
 from database.models.automod import AutoModLog, AutoModSettings
 from database.models.command_help import CommandHelp
+from database.models.giveaway import Giveaway, GiveawayPrizeType
 from database.models.log import LogAction
 from database.models.partnership import Partnership
 from database.models.payment import PaymentHistory
@@ -909,5 +910,44 @@ def poll_results_embed(
         marker = "🏆 " if total == max_total and max_total > 0 else ""
         embed.add_field(name=f"{marker}{option.name}", value=f"{total} voto(s) ponderado(s)", inline=False)
     embed.set_footer(text=f"{participant_count} participante(s) — encerrada.")
+    embed.timestamp = discord.utils.utcnow()
+    return embed
+
+
+def _giveaway_prize_label(giveaway: Giveaway) -> str:
+    if giveaway.prize_type == GiveawayPrizeType.ROLE and giveaway.prize_role_id is not None:
+        return f"Cargo <@&{giveaway.prize_role_id}>"
+    return giveaway.prize_text or "—"
+
+
+def giveaway_panel_embed(giveaway: Giveaway, entry_count: int) -> discord.Embed:
+    embed = discord.Embed(
+        title=f"🎉 {giveaway.title}",
+        description=giveaway.description or None,
+        color=EMBED_COLOR_PURPLE,
+    )
+    embed.add_field(name="Prêmio", value=_giveaway_prize_label(giveaway), inline=True)
+    embed.add_field(name="Vencedores", value=str(giveaway.winners_count), inline=True)
+    embed.add_field(name="Participantes", value=str(entry_count), inline=True)
+    if giveaway.allowed_role_ids:
+        roles = ", ".join(f"<@&{rid}>" for rid in giveaway.allowed_role_ids)
+        embed.add_field(name="Quem pode participar", value=roles, inline=False)
+    else:
+        embed.add_field(name="Quem pode participar", value="Todo mundo", inline=False)
+    embed.add_field(name="Encerra em", value=discord.utils.format_dt(giveaway.expires_at, style="R"), inline=True)
+    embed.set_footer(text="Clique em Participar abaixo. 1 participação por pessoa.")
+    return embed
+
+
+def giveaway_result_embed(giveaway: Giveaway, winner_ids: list[int], *, is_reroll: bool) -> discord.Embed:
+    title_prefix = "🔁 Novo sorteio" if is_reroll else "🎉 Resultado"
+    embed = discord.Embed(title=f"{title_prefix} — {giveaway.title}", color=EMBED_COLOR_SUCCESS)
+    if winner_ids:
+        embed.add_field(
+            name="Vencedor(es)", value="\n".join(f"<@{uid}>" for uid in winner_ids), inline=False
+        )
+    else:
+        embed.add_field(name="Vencedor(es)", value="Ninguém participou desse sorteio.", inline=False)
+    embed.add_field(name="Prêmio", value=_giveaway_prize_label(giveaway), inline=True)
     embed.timestamp = discord.utils.utcnow()
     return embed
