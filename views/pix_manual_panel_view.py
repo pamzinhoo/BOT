@@ -73,7 +73,7 @@ class _TestPixButton(discord.ui.Button[Any]):
                 "Apenas admins podem testar a configuração do PIX.", ephemeral=True
             )
             return
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         settings = await bot.payment_service.get_pix_manual_settings(interaction.guild_id)
 
         # validacao campo a campo, com mensagem especifica de qual campo esta
@@ -160,7 +160,7 @@ async def render_pix_manual_menu(interaction: discord.Interaction) -> None:
     from views.monetization_panel_view import _back_to_monetization_menu
 
     assert interaction.guild_id is not None
-    bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+    bot: LimerenceBot = interaction.client  # type: ignore[assignment]
 
     async def get_settings(guild_id: int) -> PixManualSettings:
         return await bot.payment_service.get_pix_manual_settings(guild_id)

@@ -6,10 +6,10 @@ from dataclasses import dataclass
 from typing import Any
 
 import discord
-from views.base_view import SafeView
 
 from database.models.audit_log import AuditLogCategory
 from utils.model_defaults import column_default
+from views.base_view import SafeView
 
 
 class FieldKind(enum.Enum):
@@ -83,7 +83,7 @@ def _category_label(title: str) -> str:
 
 async def _log_change(
     interaction: discord.Interaction,
-    parent: "DomainSettingsView",
+    parent: DomainSettingsView,
     field: SettingsField,
     before_raw: object,
     after_raw: object,

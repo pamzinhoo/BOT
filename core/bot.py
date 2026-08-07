@@ -10,6 +10,7 @@ from discord.ext import commands
 
 import cogs
 from config.settings import Settings
+from core.event_bus import EventBus
 from core.logger import get_logger
 from database.database import Database
 from services.audit_log_service import AuditLogService
@@ -22,15 +23,19 @@ from services.coupon_service import CouponService
 from services.evaluation_service import EvaluationService
 from services.guild_service import GuildService
 from services.help_service import HelpService
+from services.license_service import LicenseService
 from services.log_service import LogService
 from services.painel_service import PainelService
 from services.partnership_service import PartnershipService
 from services.payment_service import PaymentService
 from services.plan_service import PlanService
 from services.poll_service import PollService
+from services.product_service import ProductService
 from services.punishment_review_service import PunishmentReviewService
 from services.punishment_service import PunishmentService
 from services.ranking_service import RankingService
+from services.reconciliation_service import ReconciliationService
+from services.role_sync_service import RoleSyncService
 from services.staff_service import StaffService
 from services.subscription_reminder_service import SubscriptionReminderService
 from services.subscription_renewal_config_service import SubscriptionRenewalConfigService
@@ -85,6 +90,12 @@ class LimerenceBot(commands.Bot):
         self.plan_service = PlanService(database, self)
         self.payment_service = PaymentService(database, settings)
         self.coupon_service = CouponService(database, self)
+        self.product_service = ProductService(database)
+        self.event_bus = EventBus()
+        self.license_service = LicenseService(database, self.event_bus)
+        self.role_sync_service = RoleSyncService(database, self)
+        self.role_sync_service.register(self.event_bus)
+        self.reconciliation_service = ReconciliationService(database, self)
         self.subscription_service = SubscriptionService(database, self, self.payment_service)
         self.subscription_renewal_config_service = SubscriptionRenewalConfigService(database)
         self.subscription_reminder_service = SubscriptionReminderService(
@@ -172,6 +183,7 @@ class LimerenceBot(commands.Bot):
         from views.evaluation_view import EvaluationView
         from views.help_views import HelpCategoryView, HelpMainView
         from views.painel_view import PainelView
+        from views.partnership_view import PartnershipInfoView
         from views.pending_punishments_view import (
             AnalisesAcceptButton,
             AnalisesBackButton,
@@ -179,7 +191,6 @@ class LimerenceBot(commands.Bot):
             AnalisesNavButton,
             AnalisesSelect,
         )
-        from views.partnership_view import PartnershipInfoView
         from views.shop_view import ShopPanelView
         from views.ticket_actions_view import TicketActionsView
         from views.ticket_approval_view import TicketApprovalView
@@ -229,7 +240,11 @@ class LimerenceBot(commands.Bot):
         # botoes do sistema de verificacao/CAPTCHA (DM ou canal de fallback) —
         # precisam responder mesmo depois de um restart, com o codigo/sessao
         # ainda validos.
-        from views.verification_view import PickCaptchaButton, TypeCaptchaButton, VerificationPanelView
+        from views.verification_view import (
+            PickCaptchaButton,
+            TypeCaptchaButton,
+            VerificationPanelView,
+        )
 
         self.add_dynamic_items(TypeCaptchaButton, PickCaptchaButton)
         self.add_view(VerificationPanelView())

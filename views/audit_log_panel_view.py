@@ -3,12 +3,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 import discord
-from views.base_view import SafeView
 
 from database.models.audit_log import AuditLogCategory
 from database.models.audit_log_settings import AuditLogSettings
 from utils.constants import AUDIT_CATEGORY_LABELS
 from utils.model_defaults import diff_defaults
+from views.base_view import SafeView
 
 if TYPE_CHECKING:
     from core.bot import LimerenceBot
@@ -86,7 +86,7 @@ class _BackToMainMenuButton(discord.ui.Button[Any]):
         super().__init__(label="◀ Menu principal", style=discord.ButtonStyle.secondary, row=4)
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        from views.master_config_view import main_menu_embed, MainConfigMenuView
+        from views.master_config_view import MainConfigMenuView, main_menu_embed
 
         await interaction.response.edit_message(
             content=None, embed=main_menu_embed(), view=MainConfigMenuView()
@@ -104,7 +104,6 @@ class _ResetAuditButton(discord.ui.Button[Any]):
         super().__init__(label="🔄 Restaurar padrão", style=discord.ButtonStyle.danger, row=row)
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        from core.bot import LimerenceBot  # import tardio evita ciclo
 
         assert interaction.guild_id is not None
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
@@ -145,7 +144,6 @@ class _ConfirmAuditResetButton(discord.ui.Button[Any]):
         super().__init__(label="Confirmar restauração", style=discord.ButtonStyle.danger)
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        from core.bot import LimerenceBot  # import tardio evita ciclo
 
         assert interaction.guild_id is not None
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
@@ -173,7 +171,6 @@ class _CancelAuditResetButton(discord.ui.Button[Any]):
 
     async def callback(self, interaction: discord.Interaction) -> None:
         assert interaction.guild_id is not None
-        from core.bot import LimerenceBot  # import tardio evita ciclo
 
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         settings = await bot.audit_log_service.get_settings(interaction.guild_id)

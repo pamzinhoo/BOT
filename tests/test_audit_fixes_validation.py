@@ -202,8 +202,9 @@ async def test_payment_status_race_only_one_transition_wins(db: Database) -> Non
 async def test_payment_status_history_not_duplicated_by_race(db: Database) -> None:
     """Efeito colateral do teste acima: confirma que so 1 linha de historico
     de status foi gravada (nao 2) — prova que a corrida nao duplicou efeito."""
-    from database.models.payment_status_history import PaymentStatusHistory
     from sqlalchemy import select
+
+    from database.models.payment_status_history import PaymentStatusHistory
 
     settings = get_settings()
     payments = PaymentService(db, settings)

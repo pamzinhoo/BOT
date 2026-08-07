@@ -3,12 +3,17 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 import discord
-from views.base_view import SafeView
 
 from database.models.enquete_settings import EnqueteSettings
 from database.models.poll import VoteWeight
 from utils.constants import EMBED_COLOR_DEFAULT
-from views.settings_panel import DomainSettingsView, FieldKind, GetSettings, SettingsField, UpdateSettings, build_domain_embed
+from views.base_view import SafeView
+from views.settings_panel import (
+    DomainSettingsView,
+    FieldKind,
+    SettingsField,
+    build_domain_embed,
+)
 
 if TYPE_CHECKING:
     from core.bot import LimerenceBot
@@ -50,7 +55,7 @@ class EnqueteMenuView(SafeView):
     @discord.ui.button(label="⚙️ Configurações", style=discord.ButtonStyle.primary)
     async def settings_button(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
         assert interaction.guild_id is not None
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
 
         async def get_settings(guild_id: int) -> EnqueteSettings:
             return await bot.poll_service.get_settings(guild_id)
@@ -70,7 +75,7 @@ class EnqueteMenuView(SafeView):
     @discord.ui.button(label="⚖️ Pesos de Voto", style=discord.ButtonStyle.secondary)
     async def weights_button(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
         assert interaction.guild_id is not None
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         weights = await bot.vote_weight_service.get_weights(interaction.guild_id)
         await interaction.response.edit_message(
             content=None, embed=vote_weights_embed(weights), view=VoteWeightsListView(weights)
@@ -134,7 +139,7 @@ class _WeightModal(discord.ui.Modal, title="Definir peso de voto"):
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         assert interaction.guild_id is not None
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         raw = str(self.weight_input.value).strip()
         if not raw.isdigit() or int(raw) <= 0:
             await interaction.response.send_message(
@@ -158,7 +163,7 @@ class _WeightDeleteSelect(discord.ui.Select[Any]):
 
     async def callback(self, interaction: discord.Interaction) -> None:
         assert interaction.guild_id is not None
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         await bot.vote_weight_service.delete_weight(interaction.guild_id, int(self.values[0]))
         weights = await bot.vote_weight_service.get_weights(interaction.guild_id)
         await interaction.response.edit_message(

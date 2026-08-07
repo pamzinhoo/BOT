@@ -3,10 +3,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import discord
-from views.base_view import SafeView
 
 from database.models.audit_log import AuditLogCategory
 from services.config_transfer_service import ImportFieldChange, apply_import_plan
+from views.base_view import SafeView
 
 if TYPE_CHECKING:
     from core.bot import LimerenceBot

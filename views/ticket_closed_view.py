@@ -4,7 +4,6 @@ import io
 from typing import TYPE_CHECKING
 
 import discord
-from views.base_view import SafeView
 
 from database.models.log import LogAction
 from database.models.ticket import Ticket
@@ -12,6 +11,7 @@ from services.ticket_service import TicketNotFoundError
 from utils.checks import member_can, member_is_staff
 from utils.ticket_lifecycle import schedule_channel_deletion
 from utils.transcript import build_transcript_html, build_transcript_pdf, save_transcript_locally
+from views.base_view import SafeView
 from views.dm_evaluation_view import DMEvaluationView
 
 if TYPE_CHECKING:
@@ -207,7 +207,7 @@ class TicketClosedView(SafeView):
 
     @staticmethod
     async def _dm_evaluation_fallback(
-        bot: "LimerenceBot", guild: discord.Guild | None, ticket: Ticket, channel: discord.TextChannel
+        bot: LimerenceBot, guild: discord.Guild | None, ticket: Ticket, channel: discord.TextChannel
     ) -> None:
         opener = bot.get_user(ticket.opened_by_discord_id)
         if opener is None:

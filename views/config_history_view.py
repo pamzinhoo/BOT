@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 import discord
 from discord import app_commands
+
 from views.base_view import SafeView
 
 if TYPE_CHECKING:
@@ -41,7 +42,7 @@ def _since(periodo: str | None) -> datetime | None:
 
 
 async def render_config_history(
-    bot: "LimerenceBot", guild_id: int, filters: ConfigHistoryFilters
+    bot: LimerenceBot, guild_id: int, filters: ConfigHistoryFilters
 ) -> tuple[discord.Embed, int]:
     """Busca a pagina atual + total de registros. Retorna (embed, total_paginas)."""
     since = _since(filters.periodo)
@@ -107,7 +108,7 @@ class ConfigHistoryView(SafeView):
 
     async def _go(self, interaction: discord.Interaction, page: int) -> None:
         assert interaction.guild_id is not None
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         filters = replace(self.filters, page=max(0, page))
         embed, total_pages = await render_config_history(bot, interaction.guild_id, filters)
         await interaction.response.edit_message(

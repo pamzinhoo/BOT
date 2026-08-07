@@ -5,7 +5,6 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import discord
-import pytest
 
 from database.models.partnership_settings import PartnershipRoleRemovedAction
 from services.partnership_service import (

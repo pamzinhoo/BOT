@@ -6,7 +6,6 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 import discord
-from views.base_view import SafeView
 
 from database.models.punishment import PunishmentStatus
 from services.punishment_review_service import (
@@ -16,6 +15,7 @@ from services.punishment_review_service import (
 )
 from utils.checks import member_can
 from utils.time import humanize_duration
+from views.base_view import SafeView
 from views.embeds import pending_punishment_detail_embed, pending_punishments_embed
 
 if TYPE_CHECKING:
@@ -37,7 +37,7 @@ def _time_remaining_label(punishment) -> str:
 
 
 async def _find_role_divergence(
-    bot: "LimerenceBot", guild_id: int
+    bot: LimerenceBot, guild_id: int
 ) -> list[discord.Member]:
     """Membros com o cargo 'Em Análise' no Discord sem punição PENDING_REVIEW no banco.
     Só um alerta visual pro /analises — nunca usado como fonte pra listar punições."""
@@ -59,7 +59,7 @@ async def _find_role_divergence(
 
 
 async def build_panel(
-    bot: "LimerenceBot", *, guild_id: int, filtro: str, staff_id: int, page: int
+    bot: LimerenceBot, *, guild_id: int, filtro: str, staff_id: int, page: int
 ) -> tuple[discord.Embed, discord.ui.View]:
     items = await bot.punishment_review_service.list_pending(
         guild_id, filtro=filtro, staff_id=staff_id or None
@@ -123,7 +123,7 @@ class AnalisesNavButton(
     @classmethod
     async def from_custom_id(
         cls, interaction: discord.Interaction, item: discord.ui.Item, match: re.Match[str]
-    ) -> "AnalisesNavButton":
+    ) -> AnalisesNavButton:
         return cls(
             guild_id=int(match["guild_id"]),
             filtro=match["filtro"],
@@ -181,7 +181,7 @@ class AnalisesSelect(
     @classmethod
     async def from_custom_id(
         cls, interaction: discord.Interaction, item: discord.ui.Item, match: re.Match[str]
-    ) -> "AnalisesSelect":
+    ) -> AnalisesSelect:
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         guild_id = int(match["guild_id"])
         filtro = match["filtro"]
@@ -244,7 +244,7 @@ class AnalisesBackButton(
     @classmethod
     async def from_custom_id(
         cls, interaction: discord.Interaction, item: discord.ui.Item, match: re.Match[str]
-    ) -> "AnalisesBackButton":
+    ) -> AnalisesBackButton:
         return cls(
             guild_id=int(match["guild_id"]),
             filtro=match["filtro"],
@@ -281,7 +281,7 @@ class AnalisesAcceptButton(
     @classmethod
     async def from_custom_id(
         cls, interaction: discord.Interaction, item: discord.ui.Item, match: re.Match[str]
-    ) -> "AnalisesAcceptButton":
+    ) -> AnalisesAcceptButton:
         return cls(uuid.UUID(match["punishment_id"]))
 
     async def callback(self, interaction: discord.Interaction) -> None:
@@ -418,7 +418,7 @@ class AnalisesDenyButton(
     @classmethod
     async def from_custom_id(
         cls, interaction: discord.Interaction, item: discord.ui.Item, match: re.Match[str]
-    ) -> "AnalisesDenyButton":
+    ) -> AnalisesDenyButton:
         return cls(uuid.UUID(match["punishment_id"]))
 
     async def callback(self, interaction: discord.Interaction) -> None:

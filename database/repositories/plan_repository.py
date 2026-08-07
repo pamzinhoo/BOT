@@ -30,6 +30,18 @@ class PlanRepository(BaseRepository[Plan]):
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
+    async def list_by_product(self, product_id: uuid.UUID) -> list[Plan]:
+        """Cross-guild de proposito (unico lugar do repo que quebra a
+        convencao list_by_guild) — RoleSyncService/ReconciliationService
+        precisam encontrar, pra um Product, TODOS os planos de TODAS as
+        guilds que concedem cargo por ele, pra refletir License->cargo em
+        cada servidor. Nao serve pra UI (nao lista dado de uma guild pra
+        outra), so pra sincronizacao interna backend->Discord."""
+        result = await self.session.execute(
+            select(Plan).where(Plan.product_id == product_id, Plan.role_id.is_not(None))
+        )
+        return list(result.scalars().all())
+
 
 class PlanBenefitRepository(BaseRepository[PlanBenefit]):
     model = PlanBenefit

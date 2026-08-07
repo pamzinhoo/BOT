@@ -3,11 +3,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import discord
-from views.base_view import SafeView
 
 from database.models.ticket import TicketCategory
 from services.ticket_panel_service import SYSTEM_DISABLED_MESSAGE
 from utils.constants import CATEGORY_LABELS, EMBED_COLOR_WARNING
+from views.base_view import SafeView
 from views.embeds import (
     category_confirm_embed,
     category_from_value,

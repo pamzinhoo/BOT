@@ -4,11 +4,11 @@ from datetime import timedelta
 from typing import TYPE_CHECKING
 
 import discord
-from views.base_view import SafeView
 
 from database.models.log import LogAction
 from utils.checks import member_is_staff
 from utils.constants import EMBED_COLOR_DANGER, EMBED_COLOR_SUCCESS
+from views.base_view import SafeView
 
 if TYPE_CHECKING:
     from core.bot import LimerenceBot
@@ -38,7 +38,7 @@ async def _deny_if_not_staff(interaction: discord.Interaction) -> bool:
 
 
 async def _finish(
-    interaction: discord.Interaction, view: "BlacklistActionView", verdict: str, color: discord.Color
+    interaction: discord.Interaction, view: BlacklistActionView, verdict: str, color: discord.Color
 ) -> None:
     for item in view.children:
         item.disabled = True  # type: ignore[attr-defined]

@@ -8,8 +8,9 @@ from discord.ext import commands, tasks
 
 from core.bot import LimerenceBot
 from core.logger import get_logger
+from database.models.audit_log import AuditLogCategory
 from database.models.guild_settings import GuildSettings
-from database.models.punishment import APPEALABLE_TYPES, PunishmentType
+from database.models.punishment import APPEALABLE_TYPES, PunishmentStatus, PunishmentType
 from database.models.punishment_appeal import AppealMethod
 from services.punishment_service import AppealError, PunishmentError
 from utils.appeal_dm import DMAppealRateLimiter, parse_recorrer_dm_command
@@ -21,8 +22,6 @@ from utils.checks import (
     member_is_owner_or_ceo,
 )
 from utils.time import InvalidDurationError, humanize_duration, parse_duration
-from database.models.audit_log import AuditLogCategory
-from database.models.punishment import PunishmentStatus
 from views.appeal_view import punishment_dm_view, send_appeal_to_review_channel
 from views.embeds import (
     appeal_denied_dm_embed,

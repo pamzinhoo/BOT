@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import discord
-from views.base_view import SafeView
 
 from utils.checks import member_is_staff
+from views.base_view import SafeView
 
 
 class ConfirmCloseView(SafeView):

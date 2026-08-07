@@ -14,6 +14,13 @@ from providers.base import ChargeRequest, ChargeResult, PaymentGatewayError, Pay
 logger = get_logger("mercadopago")
 
 _BASE_URL = "https://api.mercadopago.com"
+# Janela de tolerancia pro `ts` do x-signature — sem isso, uma notificacao
+# valida capturada (proxy malicioso, log vazado) pode ser reenviada pra
+# sempre com assinatura ainda valida (replay attack). O processamento a
+# jusante (confirm_payment/reject_payment/...) ja e idempotente por status
+# (Fase 1), entao o impacto de um replay era baixo, mas rejeitar `ts` velho
+# fecha a janela na borda, antes mesmo de tocar o banco.
+_WEBHOOK_MAX_AGE_SECONDS = 300
 
 _STATUS_MAP: dict[str, PaymentStatus] = {
     "pending": PaymentStatus.PENDING,
@@ -196,4 +203,15 @@ class MercadoPagoProvider(PaymentProvider):
 
         manifest = f"id:{data_id};request-id:{request_id};ts:{ts};"
         digest = hmac.new(secret.encode(), manifest.encode(), hashlib.sha256).hexdigest()
-        return hmac.compare_digest(digest, v1)
+        if not hmac.compare_digest(digest, v1):
+            return False
+
+        try:
+            ts_seconds = int(ts) / 1000 if len(ts) > 10 else int(ts)
+        except ValueError:
+            return False
+        age = abs(datetime.now(UTC).timestamp() - ts_seconds)
+        if age > _WEBHOOK_MAX_AGE_SECONDS:
+            logger.warning("Webhook Mercado Pago rejeitado: ts com %.0fs de idade (replay?).", age)
+            return False
+        return True

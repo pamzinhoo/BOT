@@ -135,7 +135,7 @@ class CouponService:
     matematica. Cogs/Views nunca calculam desconto nem checam limite — so
     chamam este servico."""
 
-    def __init__(self, database: Database, bot: "LimerenceBot | None" = None) -> None:
+    def __init__(self, database: Database, bot: LimerenceBot | None = None) -> None:
         self._database = database
         self._bot = bot
 

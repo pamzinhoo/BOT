@@ -4,7 +4,6 @@ import uuid
 from typing import TYPE_CHECKING, Any
 
 import discord
-from views.base_view import SafeView
 
 from database.models.subscription import SubscriptionStatus
 from database.models.subscription_renewal import (
@@ -18,6 +17,7 @@ from services.subscription_renewal_config_service import (
     GRACE_PERIOD_CHOICES,
 )
 from utils.constants import EMBED_COLOR_DEFAULT
+from views.base_view import SafeView
 
 if TYPE_CHECKING:
     from core.bot import LimerenceBot
@@ -58,7 +58,7 @@ PAGE_SIZE = 5
 async def _log_change(
     interaction: discord.Interaction, config_name: str, old_value: str, new_value: str
 ) -> None:
-    bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+    bot: LimerenceBot = interaction.client  # type: ignore[assignment]
     assert interaction.guild_id is not None
     await bot.audit_log_service.record_config_change(
         guild_id=interaction.guild_id,
@@ -76,7 +76,7 @@ def _onoff(value: bool) -> str:
 
 
 async def renewal_menu_embed(
-    bot: "LimerenceBot", guild_id: int, settings: SubscriptionRenewalSettings
+    bot: LimerenceBot, guild_id: int, settings: SubscriptionRenewalSettings
 ) -> discord.Embed:
     days = await bot.subscription_renewal_config_service.list_reminder_days(guild_id)
     embed = discord.Embed(
@@ -125,7 +125,7 @@ async def renewal_menu_embed(
 
 async def render_renewal_menu(interaction: discord.Interaction) -> None:
     assert interaction.guild_id is not None
-    bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+    bot: LimerenceBot = interaction.client  # type: ignore[assignment]
     settings = await bot.subscription_renewal_config_service.get_settings(interaction.guild_id)
     embed = await renewal_menu_embed(bot, interaction.guild_id, settings)
     view = SubscriptionRenewalMenuView(settings)
@@ -148,7 +148,7 @@ class SubscriptionRenewalMenuView(SafeView):
     @discord.ui.button(label="✅ Ativar renovações", style=discord.ButtonStyle.success, row=0)
     async def toggle_enabled(self, interaction: discord.Interaction, _b: discord.ui.Button) -> None:
         assert interaction.guild_id is not None
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         before = self.settings.enabled
         await bot.subscription_renewal_config_service.update_settings(
             interaction.guild_id, enabled=not before
@@ -255,7 +255,7 @@ class _DeliveryModeSelect(discord.ui.Select[Any]):
 
     async def callback(self, interaction: discord.Interaction) -> None:
         assert interaction.guild_id is not None
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         mode = self.values[0]
         dm = mode in ("dm", "both")
         channel = mode in ("channel", "both")
@@ -279,7 +279,7 @@ class _RenewalChannelPicker(discord.ui.ChannelSelect):
 
     async def callback(self, interaction: discord.Interaction) -> None:
         assert interaction.guild_id is not None
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         settings = await bot.subscription_renewal_config_service.get_settings(interaction.guild_id)
         before = f"<#{settings.renewal_channel_id}>" if settings.renewal_channel_id else "—"
         channel_id = self.values[0].id
@@ -304,7 +304,7 @@ class _IntervalSelect(discord.ui.Select[Any]):
 
     async def callback(self, interaction: discord.Interaction) -> None:
         assert interaction.guild_id is not None
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         settings = await bot.subscription_renewal_config_service.get_settings(interaction.guild_id)
         before = f"{settings.check_interval_hours}h"
         hours = int(self.values[0])
@@ -332,7 +332,7 @@ class _GraceSelect(discord.ui.Select[Any]):
 
     async def callback(self, interaction: discord.Interaction) -> None:
         assert interaction.guild_id is not None
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         settings = await bot.subscription_renewal_config_service.get_settings(interaction.guild_id)
         before = f"{settings.grace_period_days} dia(s)"
         days = int(self.values[0])
@@ -369,7 +369,7 @@ class _RemovalToggleSelect(discord.ui.Select[Any]):
 
     async def callback(self, interaction: discord.Interaction) -> None:
         assert interaction.guild_id is not None
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         attr = self.values[0]
         settings = await bot.subscription_renewal_config_service.get_settings(interaction.guild_id)
         before = bool(getattr(settings, attr))
@@ -385,7 +385,7 @@ class _RemovalToggleSelect(discord.ui.Select[Any]):
 
 async def render_days_menu(interaction: discord.Interaction) -> None:
     assert interaction.guild_id is not None
-    bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+    bot: LimerenceBot = interaction.client  # type: ignore[assignment]
     days = await bot.subscription_renewal_config_service.list_reminder_days(interaction.guild_id)
     embed = discord.Embed(
         title="⏰ Avisos antes do vencimento",
@@ -460,7 +460,7 @@ class _ReminderDayToggleButton(discord.ui.Button[Any]):
         self.day_id = day_id
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         day = await bot.subscription_renewal_config_service.toggle_reminder_day(
             self.day_id, guild_id=interaction.guild_id
         )
@@ -483,7 +483,7 @@ class _ReminderDayMoveButton(discord.ui.Button[Any]):
         self.delta = delta
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         await bot.subscription_renewal_config_service.move_reminder_day(
             self.day_id, guild_id=interaction.guild_id, delta=self.delta
         )
@@ -496,7 +496,7 @@ class _ReminderDayRemoveButton(discord.ui.Button[Any]):
         self.day_id = day_id
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         await bot.subscription_renewal_config_service.remove_reminder_day(
             self.day_id, guild_id=interaction.guild_id
         )
@@ -519,7 +519,7 @@ class _AddReminderDayModal(discord.ui.Modal, title="Novo aviso de renovação"):
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         assert interaction.guild_id is not None
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         raw = str(self.days_input.value).strip()
         if not raw.isdigit():
             await interaction.response.send_message("Digite um número inteiro.", ephemeral=True)
@@ -552,7 +552,7 @@ class _MessageTypeSelect(discord.ui.Select[Any]):
 
     async def callback(self, interaction: discord.Interaction) -> None:
         assert interaction.guild_id is not None
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         message_type = SubscriptionMessageType(self.values[0])
         content = await bot.subscription_renewal_config_service.get_message_content(
             interaction.guild_id, message_type
@@ -573,7 +573,7 @@ class _MessageEditModal(discord.ui.Modal):
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         assert interaction.guild_id is not None
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         content = str(self.content_input.value).strip()
         label = _MESSAGE_TYPE_LABELS[self.message_type]
         if content:
@@ -600,7 +600,7 @@ class _MessageEditModal(discord.ui.Modal):
 
 async def render_buttons_menu(interaction: discord.Interaction) -> None:
     assert interaction.guild_id is not None
-    bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+    bot: LimerenceBot = interaction.client  # type: ignore[assignment]
     buttons = await bot.subscription_renewal_config_service.list_buttons(interaction.guild_id)
     embed = discord.Embed(
         title="🔘 Botões das mensagens de renovação",
@@ -667,7 +667,7 @@ class _ButtonToggleButton(discord.ui.Button[Any]):
 
     async def callback(self, interaction: discord.Interaction) -> None:
         assert interaction.guild_id is not None
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         button = await bot.subscription_renewal_config_service.toggle_button(
             interaction.guild_id, self.key
         )
@@ -687,7 +687,7 @@ class _ButtonEditButton(discord.ui.Button[Any]):
 
     async def callback(self, interaction: discord.Interaction) -> None:
         assert interaction.guild_id is not None
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         buttons = await bot.subscription_renewal_config_service.list_buttons(interaction.guild_id)
         current = next((b for b in buttons if b.key == self.key), None)
         await interaction.response.send_modal(
@@ -716,7 +716,7 @@ class _ButtonEditModal(discord.ui.Modal):
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         assert interaction.guild_id is not None
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         label = str(self.label_input.value).strip() or None
         emoji = str(self.emoji_input.value).strip() or None
         await bot.subscription_renewal_config_service.update_button(
@@ -748,7 +748,7 @@ async def render_admin_panel(interaction: discord.Interaction, *, page: int) -> 
     from datetime import UTC, datetime, timedelta
 
     assert interaction.guild_id is not None
-    bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+    bot: LimerenceBot = interaction.client  # type: ignore[assignment]
     settings = await bot.subscription_renewal_config_service.get_settings(interaction.guild_id)
     subscriptions = await bot.subscription_service.list_guild_subscriptions(interaction.guild_id)
     subscriptions.sort(

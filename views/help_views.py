@@ -4,10 +4,10 @@ from typing import TYPE_CHECKING
 
 import discord
 from discord import app_commands
-from views.base_view import SafeView
 
 from utils.checks import member_is_admin, member_is_staff
 from utils.constants import HELP_CATEGORIES, HELP_CATEGORY_LABELS
+from views.base_view import SafeView
 from views.embeds import help_category_embed, help_general_embed, help_main_embed
 
 if TYPE_CHECKING:
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 _EXCLUDED_QUALIFIED_NAMES = {"config painel"}
 
 
-def _all_commands(bot: "LimerenceBot", guild: discord.abc.Snowflake | None) -> list[tuple[str, str]]:
+def _all_commands(bot: LimerenceBot, guild: discord.abc.Snowflake | None) -> list[tuple[str, str]]:
     """Todos os slash commands registrados na tree (inclusive subcomandos de
     grupo), em ordem alfabetica pelo nome completo. /config painel fica de
     fora — o resto de /config aparece normalmente.

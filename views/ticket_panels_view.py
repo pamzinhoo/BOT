@@ -4,7 +4,6 @@ import uuid
 from typing import TYPE_CHECKING, Any
 
 import discord
-from views.base_view import SafeView
 
 from database.models.ticket_panel import TicketPanel
 from database.models.ticket_panel_form_field import (
@@ -14,6 +13,7 @@ from database.models.ticket_panel_form_field import (
 )
 from services.ticket_panel_service import BUTTON_STYLE_LABELS, TicketPanelError
 from utils.constants import EMBED_COLOR_DEFAULT, EMBED_COLOR_WARNING
+from views.base_view import SafeView
 
 if TYPE_CHECKING:
     from core.bot import LimerenceBot
@@ -304,7 +304,7 @@ class _BackToTicketsMenuButton(discord.ui.Button[Any]):
 # ============================ editor do painel =============================
 
 
-async def panel_edit_embed(bot: "LimerenceBot", panel: TicketPanel) -> discord.Embed:
+async def panel_edit_embed(bot: LimerenceBot, panel: TicketPanel) -> discord.Embed:
     color = (
         discord.Color(panel.embed_color) if panel.embed_color is not None else EMBED_COLOR_WARNING
     )

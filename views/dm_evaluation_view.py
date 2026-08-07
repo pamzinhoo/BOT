@@ -4,19 +4,19 @@ import uuid
 from typing import TYPE_CHECKING
 
 import discord
-from views.base_view import SafeView
 
 from database.models.log import LogAction
 from services.evaluation_service import EvaluationError
 from utils.achievements import announce_achievements
 from utils.constants import EMBED_COLOR_DEFAULT
+from views.base_view import SafeView
 
 if TYPE_CHECKING:
     from core.bot import LimerenceBot
 
 
 class _DMCommentModal(discord.ui.Modal, title="Deixe um comentário (opcional)"):
-    comment: discord.ui.TextInput["_DMCommentModal"] = discord.ui.TextInput(
+    comment: discord.ui.TextInput[_DMCommentModal] = discord.ui.TextInput(
         label="Comentário", style=discord.TextStyle.paragraph, required=False, max_length=500
     )
 

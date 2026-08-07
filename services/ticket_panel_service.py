@@ -92,7 +92,7 @@ class TicketPanelService:
     reabrir, transcricao e estatisticas continuam sendo do TicketService +
     TicketActionsView. Aqui so mora o que e especifico de painel."""
 
-    def __init__(self, database: Database, bot: "LimerenceBot") -> None:
+    def __init__(self, database: Database, bot: LimerenceBot) -> None:
         self._database = database
         self._bot = bot
 

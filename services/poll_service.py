@@ -71,7 +71,7 @@ class PollService:
     def __init__(
         self,
         database: Database,
-        bot: "LimerenceBot",
+        bot: LimerenceBot,
         vote_weight_service: VoteWeightService,
         subscription_service: SubscriptionService,
     ) -> None:

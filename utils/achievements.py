@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
 
 async def announce_achievements(
-    bot: "LimerenceBot", channel: discord.abc.Messageable, staff_id: uuid.UUID, keys: list[str]
+    bot: LimerenceBot, channel: discord.abc.Messageable, staff_id: uuid.UUID, keys: list[str]
 ) -> None:
     if not keys:
         return

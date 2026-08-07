@@ -5,7 +5,7 @@ import hashlib
 import json
 import tomllib
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -167,14 +167,14 @@ _SERVICE_METHODS: dict[str, str] = {
 }
 
 
-async def _get_table_settings(bot: "LimerenceBot", table: str, guild_id: int) -> object:
+async def _get_table_settings(bot: LimerenceBot, table: str, guild_id: int) -> object:
     suffix = _SERVICE_METHODS[table]
     if suffix == "audit":
         return await bot.audit_log_service.get_settings(guild_id)
     return await getattr(bot.config_service, f"get_{suffix}")(guild_id)
 
 
-async def _update_table_settings(bot: "LimerenceBot", table: str, guild_id: int, **fields: object) -> None:
+async def _update_table_settings(bot: LimerenceBot, table: str, guild_id: int, **fields: object) -> None:
     suffix = _SERVICE_METHODS[table]
     if suffix == "audit":
         await bot.audit_log_service.update_settings(guild_id, **fields)
@@ -207,7 +207,7 @@ def _checksum(data: dict) -> str:
     return hashlib.sha256(canonical.encode()).hexdigest()
 
 
-async def export_guild_config(bot: "LimerenceBot", guild: discord.Guild) -> dict:
+async def export_guild_config(bot: LimerenceBot, guild: discord.Guild) -> dict:
     data: dict = {
         "config_version": CONFIG_EXPORT_VERSION,
         "exported_at": datetime.now(UTC).isoformat(),
@@ -318,7 +318,7 @@ def _validate_structure(data: dict) -> None:
 
 
 async def build_import_plan(
-    bot: "LimerenceBot",
+    bot: LimerenceBot,
     guild: discord.Guild,
     data: dict,
     *,
@@ -398,7 +398,7 @@ async def build_import_plan(
     return plan, changes, integrity
 
 
-async def apply_import_plan(bot: "LimerenceBot", guild_id: int, plan: dict[str, dict[str, object]]) -> None:
+async def apply_import_plan(bot: LimerenceBot, guild_id: int, plan: dict[str, dict[str, object]]) -> None:
     for table, fields in plan.items():
         await _update_table_settings(bot, table, guild_id, **fields)
 
