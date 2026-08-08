@@ -19,6 +19,14 @@ class LicenseEventRequest(BaseModel):
     occurred_at: datetime
 
 
+class PlayerVerifiedRequest(BaseModel):
+    """Disparado pelo Backend apos um login com Discord bem-sucedido no
+    launcher (ver providers/internal_events_client.py::notify_player_verified
+    no repo do backend)."""
+
+    discord_id: int
+
+
 class GuildReconciliationResultResponse(BaseModel):
     guild_id: int
     roles_granted: int

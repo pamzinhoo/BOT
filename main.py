@@ -12,6 +12,23 @@ from core.logger import get_logger, setup_logging
 from database.database import init_database
 
 
+async def _run_startup_migrations(database, logger) -> None:
+    """Fix pontual, mesmo padrao usado no backend (ver backend/api/main.py):
+    adiciona a coluna verified_role_id em guild_settings sem depender de
+    `alembic upgrade head` rodar (nada aqui invoca alembic automaticamente).
+    Idempotente, seguro rodar toda subida."""
+    from sqlalchemy import text
+
+    try:
+        async with database.engine.begin() as conn:
+            await conn.execute(
+                text("ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS verified_role_id BIGINT")
+            )
+        logger.info("Startup migrations (guild_settings.verified_role_id) OK.")
+    except Exception:
+        logger.exception("Falha ao rodar startup migrations do bot — verificar schema manualmente.")
+
+
 async def main() -> None:
     try:
         settings = get_settings()
@@ -23,6 +40,7 @@ async def main() -> None:
     logger = get_logger("main")
 
     database = init_database(settings.database_url, echo=False)
+    await _run_startup_migrations(database, logger)
     bot = LimerenceBot(settings=settings, database=database)
 
     api_app = create_app(bot)

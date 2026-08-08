@@ -8,6 +8,7 @@ from api.dependencies import enforce_rate_limit, get_client_ip, verify_internal_
 from api.schemas.internal import (
     GuildReconciliationResultResponse,
     LicenseEventRequest,
+    PlayerVerifiedRequest,
     ReconciliationReportResponse,
 )
 from core.events import LicenseEventPayload
@@ -53,6 +54,15 @@ async def receive_license_event(request: Request, body: LicenseEventRequest) -> 
         occurred_at=body.occurred_at,
     )
     await bot.role_sync_service.handle_license_event(payload)
+
+
+@router.post("/player-verified", status_code=204)
+async def receive_player_verified(request: Request, body: PlayerVerifiedRequest) -> None:
+    """Login com Discord concluido no launcher -> concede o cargo de
+    verificado (GuildSettings.verified_role_id) em toda guild configurada
+    onde esse discord_id for membro."""
+    bot: LimerenceBot = request.app.state.bot
+    await bot.role_sync_service.handle_player_verified(body.discord_id)
 
 
 @router.post("/reconcile", response_model=ReconciliationReportResponse)

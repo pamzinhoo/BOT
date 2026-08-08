@@ -20,3 +20,9 @@ class GuildSettingsRepository(BaseRepository[GuildSettings]):
         if settings is not None:
             return settings
         return await self.add(GuildSettings(guild_id=guild_id))
+
+    async def list_with_verified_role(self) -> list[GuildSettings]:
+        result = await self.session.execute(
+            select(GuildSettings).where(GuildSettings.verified_role_id.is_not(None))
+        )
+        return list(result.scalars().all())

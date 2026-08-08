@@ -10,6 +10,7 @@ from core.logger import get_logger
 from database.database import Database
 from database.models.audit_log import AuditLogCategory
 from database.models.plan import Plan
+from database.repositories.guild_settings_repository import GuildSettingsRepository
 from database.repositories.plan_repository import PlanRepository
 from database.repositories.player_repository import PlayerRepository
 
@@ -55,6 +56,43 @@ class RoleSyncService:
                     plan.id,
                     plan.guild_id,
                     player.discord_id,
+                )
+
+    async def handle_player_verified(self, discord_id: int) -> None:
+        """Login com Discord concluido no launcher -> concede o cargo de
+        verificado (GuildSettings.verified_role_id) em toda guild onde esse
+        discord_id ja for membro e o cargo estiver configurado (/config ->
+        Cargos). Se o membro ainda nao estiver na guild, simplesmente nao
+        concede nada agora — nao ha reconciliacao periodica pra isso (ao
+        contrario de licenca), entao so funciona se o dono do Discord ja
+        tiver entrado no servidor antes ou depois de logar."""
+        async with self._database.session() as session:
+            guild_settings_list = await GuildSettingsRepository(session).list_with_verified_role()
+
+        for guild_settings in guild_settings_list:
+            guild = self._bot.get_guild(guild_settings.guild_id)
+            if guild is None or guild_settings.verified_role_id is None:
+                continue
+            role = guild.get_role(guild_settings.verified_role_id)
+            if role is None:
+                continue
+            try:
+                member = await self._get_member(guild, discord_id)
+                if member is None or role in member.roles:
+                    continue
+                await member.add_roles(role, reason="Login com Discord no launcher")
+                await self._bot.audit_log_service.record(
+                    guild_id=guild.id,
+                    category=AuditLogCategory.SUBSCRIPTION,
+                    action="Cargo de verificado concedido (login no launcher)",
+                    target_id=discord_id,
+                    details={"role_id": role.id},
+                )
+            except Exception:
+                logger.exception(
+                    "Falha ao conceder cargo de verificado (guild %s) para discord_id %s.",
+                    guild_settings.guild_id,
+                    discord_id,
                 )
 
     # --- Discord ----------------------------------------------------------

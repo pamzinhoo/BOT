@@ -47,6 +47,7 @@ class GuildSettings(Base, UUIDPrimaryKeyMixin):
     review_channel_id: Mapped[int | None] = mapped_column(BigInteger)
     review_timeout_minutes: Mapped[int | None] = mapped_column(Integer)
     player_role_id: Mapped[int | None] = mapped_column(BigInteger)
+    verified_role_id: Mapped[int | None] = mapped_column(BigInteger)
     moderation_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     require_proof: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     extra_config: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
