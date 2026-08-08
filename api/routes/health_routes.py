@@ -11,6 +11,7 @@ router = APIRouter()
 
 
 @router.get("/health")
+@router.head("/health")
 async def health(request: Request) -> dict[str, object]:
     bot: LimerenceBot = request.app.state.bot
     return {"status": "ok", "environment": bot.settings.environment}
