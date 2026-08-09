@@ -19,15 +19,22 @@ logger = get_logger("database")
 class Database:
     """Ponto unico de acesso ao engine e as sessoes assincronas do banco."""
 
-    def __init__(self, database_url: str, *, echo: bool = False) -> None:
+    def __init__(
+        self,
+        database_url: str,
+        *,
+        echo: bool = False,
+        pool_size: int = 10,
+        max_overflow: int = 20,
+    ) -> None:
         self._engine: AsyncEngine = create_async_engine(
-        database_url,
-        echo=echo,
-        pool_pre_ping=True,
-        connect_args={
-            "statement_cache_size": 0
-        },
-)
+            database_url,
+            echo=echo,
+            pool_pre_ping=True,
+            pool_size=pool_size,
+            max_overflow=max_overflow,
+            connect_args={"statement_cache_size": 0},
+        )
         self._session_factory = async_sessionmaker(
             bind=self._engine,
             expire_on_commit=False,
@@ -63,9 +70,11 @@ class Database:
 _database: Database | None = None
 
 
-def init_database(database_url: str, *, echo: bool = False) -> Database:
+def init_database(
+    database_url: str, *, echo: bool = False, pool_size: int = 10, max_overflow: int = 20
+) -> Database:
     global _database
-    _database = Database(database_url, echo=echo)
+    _database = Database(database_url, echo=echo, pool_size=pool_size, max_overflow=max_overflow)
     return _database
 
 

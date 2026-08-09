@@ -62,6 +62,16 @@ class Settings:
     discord_application_id: int | None = field(default=None)
     test_guild_id: int | None = field(default=None)
 
+    # Pool do SQLAlchemy/asyncpg compartilhado entre o bot (Discord) e a API
+    # embutida (auth/download/license do Launcher, ver main.py) — as duas
+    # coisas rodam no mesmo processo e batem no MESMO Postgres do backend
+    # (repo `limerence`). O default implicito do SQLAlchemy (5 + 10 overflow
+    # = 15 conexoes) fica curto com uso concorrente pesado; configuravel aqui
+    # em vez de fixo no codigo pra poder ajustar conforme o limite real de
+    # conexoes do plano do Postgres (Supabase/pooler).
+    db_pool_size: int = field(default=10)
+    db_max_overflow: int = field(default=20)
+
     payment_mode: str = field(default="sandbox")
     public_base_url: str = field(default="")
     api_host: str = field(default="127.0.0.1")
@@ -221,6 +231,8 @@ class Settings:
             log_level=log_level,
             discord_application_id=_optional_int("DISCORD_APPLICATION_ID"),
             test_guild_id=_optional_int("TEST_GUILD_ID"),
+            db_pool_size=_optional_int("DB_POOL_SIZE") or 10,
+            db_max_overflow=_optional_int("DB_MAX_OVERFLOW") or 20,
             payment_mode=payment_mode,
             public_base_url=public_base_url,
             api_host=_optional("API_HOST") or "127.0.0.1",

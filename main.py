@@ -39,7 +39,12 @@ async def main() -> None:
     setup_logging(settings.log_level)
     logger = get_logger("main")
 
-    database = init_database(settings.database_url, echo=False)
+    database = init_database(
+        settings.database_url,
+        echo=False,
+        pool_size=settings.db_pool_size,
+        max_overflow=settings.db_max_overflow,
+    )
     await _run_startup_migrations(database, logger)
     bot = LimerenceBot(settings=settings, database=database)
 
