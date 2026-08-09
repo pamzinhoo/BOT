@@ -5,11 +5,11 @@ import uuid
 from typing import TYPE_CHECKING
 
 import discord
-from views.base_view import SafeView
 
 from database.models.audit_log import AuditLogCategory
 from services.punishment_service import AppealError
 from utils.checks import member_can, member_is_owner_or_ceo
+from views.base_view import SafeView
 from views.embeds import (
     appeal_accepted_dm_embed,
     appeal_denied_dm_embed,
@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 
 
 async def send_appeal_to_review_channel(
-    bot: "LimerenceBot", appeal, *, executor_name: str | None = None
+    bot: LimerenceBot, appeal, *, executor_name: str | None = None
 ) -> None:
     """Posta o embed de recurso no canal de recursos da guild e registra a auditoria
     (Etapa 17/DM fallback). Compartilhado entre AppealModal, /recorrer e o fallback por DM."""
@@ -189,7 +189,7 @@ class AppealButton(
     @classmethod
     async def from_custom_id(
         cls, interaction: discord.Interaction, item: discord.ui.Item, match: re.Match[str]
-    ) -> "AppealButton":
+    ) -> AppealButton:
         return cls(uuid.UUID(match["punishment_id"]))
 
     async def callback(self, interaction: discord.Interaction) -> None:
@@ -216,7 +216,7 @@ class AppealAcceptButton(
     @classmethod
     async def from_custom_id(
         cls, interaction: discord.Interaction, item: discord.ui.Item, match: re.Match[str]
-    ) -> "AppealAcceptButton":
+    ) -> AppealAcceptButton:
         return cls(uuid.UUID(match["appeal_id"]))
 
     async def callback(self, interaction: discord.Interaction) -> None:
@@ -291,7 +291,7 @@ class AppealDenyButton(
     @classmethod
     async def from_custom_id(
         cls, interaction: discord.Interaction, item: discord.ui.Item, match: re.Match[str]
-    ) -> "AppealDenyButton":
+    ) -> AppealDenyButton:
         return cls(uuid.UUID(match["appeal_id"]))
 
     async def callback(self, interaction: discord.Interaction) -> None:

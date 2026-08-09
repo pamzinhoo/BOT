@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import BigInteger, Boolean, Integer, DateTime
+from sqlalchemy import BigInteger, Boolean, DateTime, Integer
 from sqlalchemy.orm import Mapped, mapped_column
 
 from database.models.base import Base, UUIDPrimaryKeyMixin

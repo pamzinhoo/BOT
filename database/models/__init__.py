@@ -1,6 +1,7 @@
 from database.models.achievement import Achievement
 from database.models.anti_spam_settings import AntiSpamSettings
 from database.models.audit_log import AuditLogCategory, AuditLogEntry
+from database.models.audit_log_launcher import AuditLogLauncher, AuditLogLauncherAction
 from database.models.audit_log_settings import AuditLogSettings
 from database.models.automod import (
     AutoModCategory,
@@ -12,6 +13,7 @@ from database.models.automod import (
 from database.models.base import Base, GuildScopedMixin, TimestampMixin, UUIDPrimaryKeyMixin
 from database.models.booster import Booster
 from database.models.booster_settings import BoosterSettings
+from database.models.bot_status_settings import BotStatusSettings
 from database.models.claim import Claim
 from database.models.command_help import CommandHelp
 from database.models.dashboard_settings import DashboardSettings
@@ -106,6 +108,8 @@ __all__ = [
     "AppealStatus",
     "AuditLogCategory",
     "AuditLogEntry",
+    "AuditLogLauncher",
+    "AuditLogLauncherAction",
     "AuditLogSettings",
     "AutoModCategory",
     "AutoModLog",
@@ -116,6 +120,7 @@ __all__ = [
     "BillingCycle",
     "Booster",
     "BoosterSettings",
+    "BotStatusSettings",
     "Claim",
     "CodeCharset",
     "CommandHelp",

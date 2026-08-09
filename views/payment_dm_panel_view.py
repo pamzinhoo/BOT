@@ -4,10 +4,10 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 import discord
-from views.base_view import SafeView
 
 from database.models.payment_dm_settings import PaymentDmSettings
 from utils.constants import EMBED_COLOR_DANGER, EMBED_COLOR_DEFAULT, EMBED_COLOR_SUCCESS
+from views.base_view import SafeView
 from views.embeds import PAYMENT_DM_DEFAULTS
 
 if TYPE_CHECKING:
@@ -97,7 +97,7 @@ def _menu_embed(settings: PaymentDmSettings) -> discord.Embed:
 
 async def render_payment_dm_menu(interaction: discord.Interaction) -> None:
     assert interaction.guild_id is not None
-    bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+    bot: LimerenceBot = interaction.client  # type: ignore[assignment]
     settings = await bot.payment_service.get_payment_dm_settings(interaction.guild_id)
     await interaction.response.edit_message(content=None, embed=_menu_embed(settings), view=PaymentDmMenuView())
 
@@ -125,7 +125,7 @@ async def _render_state_editor(interaction: discord.Interaction, *, approved: bo
     assert interaction.guild_id is not None
     if not isinstance(interaction.user, discord.Member):
         return
-    bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+    bot: LimerenceBot = interaction.client  # type: ignore[assignment]
     settings = await bot.payment_service.get_payment_dm_settings(interaction.guild_id)
     label = "✅ Pagamento Aprovado" if approved else "❌ Pagamento Rejeitado"
     header = discord.Embed(
@@ -145,21 +145,21 @@ class _StateEditorView(SafeView):
     @discord.ui.button(label="📝 Texto e cor", style=discord.ButtonStyle.primary)
     async def text_button(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
         assert interaction.guild_id is not None
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         settings = await bot.payment_service.get_payment_dm_settings(interaction.guild_id)
         await interaction.response.send_modal(_TextModal(self.approved, settings))
 
     @discord.ui.button(label="🖼️ Imagem e thumbnail", style=discord.ButtonStyle.primary)
     async def images_button(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
         assert interaction.guild_id is not None
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         settings = await bot.payment_service.get_payment_dm_settings(interaction.guild_id)
         await interaction.response.send_modal(_ImagesModal(self.approved, settings))
 
     @discord.ui.button(label="🔛 Ativar/Desativar", style=discord.ButtonStyle.secondary)
     async def toggle_button(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
         assert interaction.guild_id is not None
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         settings = await bot.payment_service.get_payment_dm_settings(interaction.guild_id)
         key = "approved_enabled" if self.approved else "rejected_enabled"
         await bot.payment_service.update_payment_dm_settings(
@@ -172,7 +172,7 @@ class _StateEditorView(SafeView):
         assert interaction.guild_id is not None
         if not isinstance(interaction.user, discord.Member):
             return
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         settings = await bot.payment_service.get_payment_dm_settings(interaction.guild_id)
         embed = _preview_embed(settings, approved=self.approved, member=interaction.user)
         try:
@@ -234,7 +234,7 @@ class _TextModal(discord.ui.Modal, title="Embed — texto e cor"):
                     "Cor inválida — use um hexadecimal (ex: #57F287).", ephemeral=True
                 )
                 return
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         prefix = "approved" if self.approved else "rejected"
         await bot.payment_service.update_payment_dm_settings(
             interaction.guild_id,
@@ -276,7 +276,7 @@ class _ImagesModal(discord.ui.Modal, title="Embed — imagens"):
                     "URL inválida — precisa começar com http:// ou https://.", ephemeral=True
                 )
                 return
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         prefix = "approved" if self.approved else "rejected"
         await bot.payment_service.update_payment_dm_settings(
             interaction.guild_id,

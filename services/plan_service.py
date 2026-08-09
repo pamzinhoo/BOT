@@ -153,7 +153,7 @@ class PlanService:
     valor fixo, tudo lido do banco por guild. Cogs/Views nunca tocam nos
     repositorios diretamente, so este servico."""
 
-    def __init__(self, database: Database, bot: "LimerenceBot | None" = None) -> None:
+    def __init__(self, database: Database, bot: LimerenceBot | None = None) -> None:
         self._database = database
         self._bot = bot
 

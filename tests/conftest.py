@@ -10,6 +10,10 @@ _ENV_KEYS = (
     "ENVIRONMENT",
     "DATABASE_URL",
     "LOG_LEVEL",
+    "DISCORD_OAUTH_CLIENT_ID",
+    "DISCORD_OAUTH_CLIENT_SECRET",
+    "DISCORD_OAUTH_REDIRECT_URI",
+    "JWT_SECRET_KEY",
 )
 
 
@@ -28,6 +32,9 @@ def valid_env(monkeypatch: pytest.MonkeyPatch, clean_env: None) -> None:
         "DATABASE_URL", "postgresql+asyncpg://user:pass@localhost:5432/bot_limerence"
     )
     monkeypatch.setenv("LOG_LEVEL", "DEBUG")
+    monkeypatch.setenv("DISCORD_OAUTH_CLIENT_ID", "fake-client-id")
+    monkeypatch.setenv("DISCORD_OAUTH_CLIENT_SECRET", "fake-client-secret")
+    monkeypatch.setenv("JWT_SECRET_KEY", "fake-jwt-secret-for-tests-min-32-bytes-long")
 
 
 @pytest.fixture(autouse=True)

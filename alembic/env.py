@@ -23,6 +23,14 @@ config.set_main_option("sqlalchemy.url", get_settings().database_url)
 
 target_metadata = Base.metadata
 
+# O bot e o backend (repo separado `limerence`) compartilham o MESMO banco
+# Postgres, mas cada um tem seu proprio historico de migrations Alembic.
+# Sem uma version_table dedicada, os dois escrevem na mesma tabela
+# `alembic_version` e se sobrescrevem — o proximo `alembic upgrade head` de
+# qualquer um dos dois lados acha uma revision que nao existe no seu proprio
+# historico e quebra o boot inteiro (CommandError: Can't locate revision).
+_VERSION_TABLE = "alembic_version_bot"
+
 
 def run_migrations_offline() -> None:
     url = config.get_main_option("sqlalchemy.url")
@@ -31,13 +39,14 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        version_table=_VERSION_TABLE,
     )
     with context.begin_transaction():
         context.run_migrations()
 
 
 def _do_run_migrations(connection: Connection) -> None:
-    context.configure(connection=connection, target_metadata=target_metadata)
+    context.configure(connection=connection, target_metadata=target_metadata, version_table=_VERSION_TABLE)
     with context.begin_transaction():
         context.run_migrations()
 

@@ -140,6 +140,9 @@ def _cargos_category(bot: LimerenceBot) -> tuple[list[SettingsField], GetSetting
         SettingsField(
             "player_role_id", "Jogador (restaurado após ban revogado)", FieldKind.ROLE, GuildSettings
         ),
+        SettingsField(
+            "verified_role_id", "Verificado (login com Discord no jogo)", FieldKind.ROLE, GuildSettings
+        ),
     ]
 
     async def get_settings(guild_id: int) -> Any:

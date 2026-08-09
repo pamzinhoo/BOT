@@ -7,7 +7,6 @@ from typing import Any
 import discord
 from discord import app_commands
 from discord.ext import commands, tasks
-from views.base_view import SafeView
 
 from core.bot import LimerenceBot
 from core.logger import get_logger
@@ -16,6 +15,7 @@ from database.models.poll import PollOption
 from services.poll_service import AlreadyVotedError, EnqueteDisabledError, InvalidOptionsError
 from utils.checks import is_admin
 from utils.time import InvalidDurationError, parse_duration
+from views.base_view import SafeView
 from views.embeds import poll_creation_embed, poll_results_embed
 
 logger = get_logger("polls")
@@ -44,7 +44,7 @@ class PollVoteButton(
     @classmethod
     async def from_custom_id(
         cls, interaction: discord.Interaction, item: discord.ui.Item, match: Any
-    ) -> "PollVoteButton":
+    ) -> PollVoteButton:
         return cls(uuid.UUID(match["poll_id"]), uuid.UUID(match["option_id"]), label="Votar")
 
     async def callback(self, interaction: discord.Interaction) -> None:

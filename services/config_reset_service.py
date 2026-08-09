@@ -9,7 +9,7 @@ if TYPE_CHECKING:
     from core.bot import LimerenceBot
 
 
-async def reset_all_guild_config(bot: "LimerenceBot", guild_id: int) -> dict[str, int]:
+async def reset_all_guild_config(bot: LimerenceBot, guild_id: int) -> dict[str, int]:
     """Restaura TODAS as categorias configuráveis do servidor pro padrão de fábrica
     (mesmo usado quando a guild configura o bot pela primeira vez). Não apaga
     tickets, estatísticas, ranking, auditoria, logs, histórico, transcrições ou

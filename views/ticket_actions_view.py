@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import discord
-from views.base_view import SafeView
 
 from database.models.log import LogAction
 from database.models.ticket import TicketStatus
@@ -13,6 +12,7 @@ from services.ticket_service import TicketNotClaimedError, TicketNotFoundError
 from utils.achievements import announce_achievements
 from utils.checks import member_can, member_is_staff
 from utils.constants import EMBED_COLOR_DANGER
+from views.base_view import SafeView
 from views.confirm_close_view import ConfirmCloseView
 from views.evaluation_view import EvaluationView
 from views.ticket_closed_view import TicketClosedView

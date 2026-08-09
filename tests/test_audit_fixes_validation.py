@@ -31,7 +31,7 @@ from database.models.ticket_panel import TicketPanel
 from services.coupon_service import CouponGlobalLimitReachedError, CouponService
 from services.payment_service import PaymentService
 from services.plan_service import PlanService
-from services.punishment_service import AppealError, PunishmentService
+from services.punishment_service import AppealError, PunishmentError, PunishmentService
 from services.ticket_panel_service import TicketPanelService
 
 # guild_id fora da faixa real de snowflakes do Discord (que sao ~19 digitos
@@ -202,8 +202,9 @@ async def test_payment_status_race_only_one_transition_wins(db: Database) -> Non
 async def test_payment_status_history_not_duplicated_by_race(db: Database) -> None:
     """Efeito colateral do teste acima: confirma que so 1 linha de historico
     de status foi gravada (nao 2) — prova que a corrida nao duplicou efeito."""
-    from database.models.payment_status_history import PaymentStatusHistory
     from sqlalchemy import select
+
+    from database.models.payment_status_history import PaymentStatusHistory
 
     settings = get_settings()
     payments = PaymentService(db, settings)
@@ -404,5 +405,162 @@ async def test_cross_guild_ticket_panel_select_blocks_wrong_guild(db: Database) 
             "regressao: o painel de edicao do ticket-panel de outra guild foi renderizado "
             "(cross-guild ticket panel edit — bug C2)"
         )
+    finally:
+        await _cleanup(db)
+
+
+# --- auditoria de producao (multi-tenant/seguranca) ------------------------
+#
+# accept_appeal/deny_appeal ja tinham a guarda cross-guild (teste acima). Os
+# testes abaixo cobrem os OUTROS 4 metodos de services/punishment_service.py
+# que faltavam a mesma guarda: resolve_review, apply_pending, revoke e
+# cancel_pending — todos recebem `punishment_id` + uma guild/membro de quem
+# esta agindo, e nenhum deles conferia que a punicao pertencia aquela guild
+# antes de aplicar a acao (ou, no caso de resolve_review, antes de banir/
+# expulsar um membro da guild ERRADA usando os dados da punicao certa).
+
+
+@pytest.mark.asyncio
+async def test_resolve_review_blocks_punishment_from_another_guild(db: Database) -> None:
+    service = PunishmentService(db)
+    async with db.session() as session:
+        punishment = Punishment(
+            guild_id=GUILD_A,
+            punishment_code=f"TEST-{uuid.uuid4().hex[:8]}",
+            user_id=111,
+            staff_id=222,
+            type=PunishmentType.BAN,
+            reason="teste de auditoria — resolve_review cross-guild",
+            status=PunishmentStatus.PENDING_REVIEW,
+        )
+        session.add(punishment)
+        await session.flush()
+        punishment_id = punishment.id
+
+    try:
+        wrong_guild = _FakeGuild(id=GUILD_B)  # punicao e da GUILD_A
+
+        with pytest.raises(PunishmentError, match="não encontrad"):
+            await service.resolve_review(
+                guild=wrong_guild,  # type: ignore[arg-type]
+                punishment_id=punishment_id,
+                approved=False,
+                reviewer_id=999,
+                reviewer_name="Staff Errado",
+                reason="tentativa cross-guild",
+                review_role_id=None,
+            )
+
+        async with db.session() as session:
+            fresh = await session.get(Punishment, punishment_id)
+            assert fresh is not None
+            assert fresh.status == PunishmentStatus.PENDING_REVIEW, (
+                "regressao: resolve_review aplicou a punicao (ban/kick) usando a guild "
+                "de quem chamou, mesmo a punicao sendo de outra guild"
+            )
+    finally:
+        await _cleanup(db)
+
+
+@pytest.mark.asyncio
+async def test_apply_pending_blocks_punishment_from_another_guild(db: Database) -> None:
+    service = PunishmentService(db)
+    async with db.session() as session:
+        punishment = Punishment(
+            guild_id=GUILD_A,
+            punishment_code=f"TEST-{uuid.uuid4().hex[:8]}",
+            user_id=111,
+            staff_id=222,
+            type=PunishmentType.KICK,
+            reason="teste de auditoria — apply_pending cross-guild",
+            status=PunishmentStatus.NOTIFIED,
+        )
+        session.add(punishment)
+        await session.flush()
+        punishment_id = punishment.id
+
+    try:
+        wrong_guild = _FakeGuild(id=GUILD_B)
+        target = _FakeGuild(id=111)  # so precisa existir; a guarda barra antes de qualquer chamada Discord
+
+        with pytest.raises(PunishmentError, match="não encontrad"):
+            await service.apply_pending(
+                guild=wrong_guild, punishment_id=punishment_id, target=target  # type: ignore[arg-type]
+            )
+
+        async with db.session() as session:
+            fresh = await session.get(Punishment, punishment_id)
+            assert fresh is not None
+            assert fresh.status == PunishmentStatus.NOTIFIED
+    finally:
+        await _cleanup(db)
+
+
+@pytest.mark.asyncio
+async def test_revoke_blocks_punishment_from_another_guild(db: Database) -> None:
+    service = PunishmentService(db)
+    async with db.session() as session:
+        punishment = Punishment(
+            guild_id=GUILD_A,
+            punishment_code=f"TEST-{uuid.uuid4().hex[:8]}",
+            user_id=111,
+            staff_id=222,
+            type=PunishmentType.TIMEOUT,
+            reason="teste de auditoria — revoke cross-guild",
+            status=PunishmentStatus.ACTIVE,
+            duration_seconds=3600,
+        )
+        session.add(punishment)
+        await session.flush()
+        punishment_id = punishment.id
+
+    try:
+        wrong_guild = _FakeGuild(id=GUILD_B)
+        revoker = _FakeGuild(id=999)
+
+        with pytest.raises(PunishmentError, match="não encontrad"):
+            await service.revoke(
+                guild=wrong_guild, punishment_id=punishment_id, revoked_by=revoker,  # type: ignore[arg-type]
+                reason="tentativa cross-guild",
+            )
+
+        async with db.session() as session:
+            fresh = await session.get(Punishment, punishment_id)
+            assert fresh is not None
+            assert fresh.status == PunishmentStatus.ACTIVE
+            assert fresh.revoked_at is None
+    finally:
+        await _cleanup(db)
+
+
+@pytest.mark.asyncio
+async def test_cancel_pending_blocks_punishment_from_another_guild(db: Database) -> None:
+    service = PunishmentService(db)
+    async with db.session() as session:
+        punishment = Punishment(
+            guild_id=GUILD_A,
+            punishment_code=f"TEST-{uuid.uuid4().hex[:8]}",
+            user_id=111,
+            staff_id=222,
+            type=PunishmentType.ADVERTENCIA,
+            reason="teste de auditoria — cancel_pending cross-guild",
+            status=PunishmentStatus.PENDING,
+        )
+        session.add(punishment)
+        await session.flush()
+        punishment_id = punishment.id
+
+    try:
+        import types
+
+        staff = types.SimpleNamespace(id=999, guild=_FakeGuild(id=GUILD_B))
+
+        with pytest.raises(PunishmentError, match="não encontrad"):
+            await service.cancel_pending(punishment_id=punishment_id, staff=staff)  # type: ignore[arg-type]
+
+        async with db.session() as session:
+            fresh = await session.get(Punishment, punishment_id)
+            assert fresh is not None
+            assert fresh.status == PunishmentStatus.PENDING
     finally:
         await _cleanup(db)

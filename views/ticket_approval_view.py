@@ -3,13 +3,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 import discord
-from views.base_view import SafeView
 
 from services.ticket_panel_service import (
     TicketPanelError,
     member_matches_panel_claim_roles,
 )
 from utils.checks import member_can
+from views.base_view import SafeView
 
 if TYPE_CHECKING:
     from core.bot import LimerenceBot

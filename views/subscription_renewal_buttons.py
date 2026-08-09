@@ -5,12 +5,12 @@ import uuid
 from typing import TYPE_CHECKING, Any
 
 import discord
-from views.base_view import SafeView
 
 from database.models.subscription_renewal import (
     SubscriptionRenewalButton,
     SubscriptionRenewalButtonKey,
 )
+from views.base_view import SafeView
 
 if TYPE_CHECKING:
     from core.bot import LimerenceBot
@@ -31,7 +31,7 @@ _STYLES = {
 
 
 async def _resolve_member(
-    bot: "LimerenceBot", guild_id: int, user_id: int
+    bot: LimerenceBot, guild_id: int, user_id: int
 ) -> discord.Member | None:
     """As mensagens de renovação vão por DM, onde `interaction.user` é um User e
     `interaction.guild` é None — o guild_id vem no custom_id justamente pra
@@ -74,7 +74,7 @@ class RenewSubscriptionButton(
     @classmethod
     async def from_custom_id(
         cls, interaction: discord.Interaction, item: discord.ui.Item, match: re.Match[str]
-    ) -> "RenewSubscriptionButton":
+    ) -> RenewSubscriptionButton:
         label, emoji = _LABEL_FALLBACK[SubscriptionRenewalButtonKey.RENEW]
         return cls(
             int(match["guild_id"]), uuid.UUID(match["subscription_id"]), label=label, emoji=emoji
@@ -83,9 +83,13 @@ class RenewSubscriptionButton(
     async def callback(self, interaction: discord.Interaction) -> None:
         from views.shop_view import start_purchase_flow
 
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         subscription = await bot.subscription_service.get_subscription(self.subscription_id)
-        if subscription is None or subscription.user_id != interaction.user.id:
+        if (
+            subscription is None
+            or subscription.user_id != interaction.user.id
+            or subscription.guild_id != self.guild_id
+        ):
             await interaction.response.send_message(
                 "Esta assinatura não é sua ou não existe mais.", ephemeral=True
             )
@@ -128,14 +132,14 @@ class ViewPlanButton(
     @classmethod
     async def from_custom_id(
         cls, interaction: discord.Interaction, item: discord.ui.Item, match: re.Match[str]
-    ) -> "ViewPlanButton":
+    ) -> ViewPlanButton:
         label, emoji = _LABEL_FALLBACK[SubscriptionRenewalButtonKey.VIEW_PLAN]
         return cls(int(match["guild_id"]), uuid.UUID(match["plan_id"]), label=label, emoji=emoji)
 
     async def callback(self, interaction: discord.Interaction) -> None:
         from views.shop_view import plan_card_embed
 
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         plan = await bot.plan_service.get_plan(self.plan_id)
         if plan is None:
             await interaction.response.send_message("Plano não encontrado.", ephemeral=True)
@@ -167,14 +171,14 @@ class OpenStoreButton(
     @classmethod
     async def from_custom_id(
         cls, interaction: discord.Interaction, item: discord.ui.Item, match: re.Match[str]
-    ) -> "OpenStoreButton":
+    ) -> OpenStoreButton:
         label, emoji = _LABEL_FALLBACK[SubscriptionRenewalButtonKey.OPEN_STORE]
         return cls(int(match["guild_id"]), label=label, emoji=emoji)
 
     async def callback(self, interaction: discord.Interaction) -> None:
         from views.shop_view import ShopView
 
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         plans = await bot.plan_service.list_plans(self.guild_id, only_active=True)
         if not plans:
             await interaction.response.send_message(
@@ -209,7 +213,7 @@ class CloseRenewalMessageButton(
     @classmethod
     async def from_custom_id(
         cls, interaction: discord.Interaction, item: discord.ui.Item, match: re.Match[str]
-    ) -> "CloseRenewalMessageButton":
+    ) -> CloseRenewalMessageButton:
         label, emoji = _LABEL_FALLBACK[SubscriptionRenewalButtonKey.CLOSE]
         return cls(label=label, emoji=emoji)
 

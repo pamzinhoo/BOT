@@ -18,6 +18,7 @@ from database.models.subscription_history import SubscriptionEventType, Subscrip
 from database.repositories.monetization_settings_repository import MonetizationSettingsRepository
 from database.repositories.payment_dm_settings_repository import PaymentDmSettingsRepository
 from database.repositories.plan_repository import PlanMessageRepository, PlanRepository
+from database.repositories.player_repository import PlayerRepository
 from database.repositories.subscription_history_repository import SubscriptionHistoryRepository
 from database.repositories.subscription_repository import SubscriptionRepository
 from providers.base import ChargeRequest, ChargeResult
@@ -66,7 +67,7 @@ class SubscriptionService:
     assinaturas de Planos. Toda entrega de cargo, DM e log passa por aqui —
     Cogs/Views nunca falam direto com repositorios/provider."""
 
-    def __init__(self, database: Database, bot: "LimerenceBot", payment_service: PaymentService) -> None:
+    def __init__(self, database: Database, bot: LimerenceBot, payment_service: PaymentService) -> None:
         self._database = database
         self._bot = bot
         self._payments = payment_service
@@ -261,7 +262,17 @@ class SubscriptionService:
             )
 
         if plan is not None:
-            await self._deliver_role(subscription, plan)
+            if plan.product_id is None:
+                # sem Product vinculado: caminho legado, bot entrega o cargo
+                # direto (nao ha License pra gerar evento)
+                await self._deliver_role(subscription, plan)
+            else:
+                # com Product vinculado: bot NAO e mais fonte de verdade do
+                # beneficio — _grant_license concede a License, que publica
+                # evento no EventBus, e RoleSyncService (reagindo ao evento)
+                # e quem entrega o cargo. Entregar aqui tambem duplicaria a
+                # causalidade que a Fase 5 pede pra quebrar.
+                await self._grant_license(subscription, plan, payment)
             await self._send_plan_message(subscription, plan, PlanMessageType.PURCHASE)
             try:
                 await self._send_payment_dm(subscription, plan, payment, approved=True, executor=executor)
@@ -455,8 +466,12 @@ class SubscriptionService:
             return subscription
 
         # recompensas permanentes (pagamento unico) nunca sao removidas no cancelamento
-        if remove_role and subscription.billing_cycle != BillingCycle.ONE_TIME:
-            await self._remove_role(subscription, plan)
+        if subscription.billing_cycle != BillingCycle.ONE_TIME:
+            if plan.product_id is None:
+                if remove_role:
+                    await self._remove_role(subscription, plan)
+            else:
+                await self._revoke_license(subscription, plan, reason="Assinatura cancelada")
 
         await self._send_plan_message(subscription, plan, PlanMessageType.CANCELLATION)
         await self._log(subscription, plan, "🚫 Assinatura cancelada.")
@@ -531,8 +546,12 @@ class SubscriptionService:
         if plan is None:
             return subscription
         # recompensa permanente (pagamento unico) nunca e removida
-        if remove_role and subscription.billing_cycle != BillingCycle.ONE_TIME:
-            await self._remove_role(subscription, plan)
+        if subscription.billing_cycle != BillingCycle.ONE_TIME:
+            if plan.product_id is None:
+                if remove_role:
+                    await self._remove_role(subscription, plan)
+            else:
+                await self._revoke_license(subscription, plan, reason="Assinatura expirada")
         await self._log(subscription, plan, "⌛ Assinatura expirada.")
         return subscription
 
@@ -614,9 +633,12 @@ class SubscriptionService:
         if plan is None:
             return
 
-        await self._remove_role(subscription, plan)
-        await self._send_plan_message(subscription, plan, PlanMessageType.CANCELLATION)
         label = "Chargeback recebido" if chargeback else "Reembolso realizado"
+        if plan.product_id is None:
+            await self._remove_role(subscription, plan)
+        else:
+            await self._revoke_license(subscription, plan, reason=label)
+        await self._send_plan_message(subscription, plan, PlanMessageType.CANCELLATION)
         await self._log(subscription, plan, f"⚠️ {label} — assinatura cancelada e cargo removido.")
         await self._audit(subscription, plan, action=label)
 
@@ -802,6 +824,52 @@ class SubscriptionService:
             reason=reason,
             details={"plan": plan.name, "subscription_id": str(subscription.id)},
         )
+
+    async def _grant_license(self, subscription: Subscription, plan: Plan, payment: PaymentHistory) -> None:
+        """Concede/renova a License do Product vinculado ao plano (se algum).
+        Acoplamento opcional de proposito, mesmo padrao de _notify_renewed: se
+        license_service nao estiver montado (ex.: testes) ou o plano nao tiver
+        product_id, o fluxo de pagamento continua funcionando igual — License
+        e um beneficio adicional sobre o cargo Discord, nunca um requisito
+        pra aprovar o pagamento."""
+        if plan.product_id is None:
+            return
+        license_service = getattr(self._bot, "license_service", None)
+        if license_service is None:
+            return
+        try:
+            async with self._database.session() as session:
+                player = await PlayerRepository(session).get_or_create_by_discord_id(
+                    subscription.user_id, discord_username=None, linked_at=datetime.now(UTC)
+                )
+            await license_service.grant_or_renew(
+                player.id,
+                plan.product_id,
+                purchase_source=f"subscription:{plan.name}",
+                external_reference=str(payment.id),
+                expires_at=subscription.current_period_end,
+                auto_renew=subscription.billing_cycle != BillingCycle.ONE_TIME,
+            )
+        except Exception:
+            logger.exception("Falha ao conceder licenca da assinatura %s.", subscription.id)
+
+    async def _revoke_license(self, subscription: Subscription, plan: Plan, *, reason: str) -> None:
+        """Revoga a License do Product vinculado ao plano (se algum) — mesmo
+        acoplamento opcional de _grant_license. So age se o Player ja existir
+        (sem player nunca houve License pra revogar)."""
+        if plan.product_id is None:
+            return
+        license_service = getattr(self._bot, "license_service", None)
+        if license_service is None:
+            return
+        try:
+            async with self._database.session() as session:
+                player = await PlayerRepository(session).get_by_discord_id(subscription.user_id)
+            if player is None:
+                return
+            await license_service.revoke_by_player_product(player.id, plan.product_id, reason=reason)
+        except Exception:
+            logger.exception("Falha ao revogar licenca da assinatura %s.", subscription.id)
 
     async def _notify_renewed(self, subscription: Subscription, plan: Plan) -> None:
         """Avisa o serviço de renovação que o período andou pra frente. Acoplamento

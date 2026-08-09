@@ -3,11 +3,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 import discord
-from views.base_view import SafeView
 
 from database.models.ticket_panel import TicketPanel
 from database.models.ticket_panel_form_field import TicketPanelFormField
 from services.ticket_panel_service import button_style_from_value
+from views.base_view import SafeView
 
 if TYPE_CHECKING:
     from core.bot import LimerenceBot

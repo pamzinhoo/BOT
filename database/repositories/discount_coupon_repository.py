@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 
 from database.models.discount_coupon import DiscountCoupon
 from database.models.discount_coupon_plan import DiscountCouponPlan
@@ -73,8 +73,11 @@ class DiscountCouponPlanRepository(BaseRepository[DiscountCouponPlan]):
         return list(result.scalars().all())
 
     async def replace_for_coupon(self, coupon_id: uuid.UUID, plan_ids: list[uuid.UUID]) -> None:
-        for row in await self.list_by_coupon(coupon_id):
-            await self.session.delete(row)
+        await self.session.execute(
+            delete(DiscountCouponPlan).where(DiscountCouponPlan.coupon_id == coupon_id)
+        )
+        for plan_id in dict.fromkeys(plan_ids):
+            self.session.add(DiscountCouponPlan(coupon_id=coupon_id, plan_id=plan_id))
         await self.session.flush()
         for plan_id in dict.fromkeys(plan_ids):
             self.session.add(DiscountCouponPlan(coupon_id=coupon_id, plan_id=plan_id))

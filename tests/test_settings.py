@@ -67,3 +67,67 @@ def test_get_settings_is_cached(valid_env):
     first = get_settings()
     second = get_settings()
     assert first is second
+
+
+# --- seguranca (Fase 6) ------------------------------------------------------
+
+
+def test_load_raises_when_jwt_secret_too_short(valid_env, monkeypatch):
+    monkeypatch.setenv("JWT_SECRET_KEY", "short-secret")
+    with pytest.raises(SettingsError, match="JWT_SECRET_KEY"):
+        Settings.load()
+
+
+def test_load_accepts_jwt_secret_at_minimum_length(valid_env, monkeypatch):
+    monkeypatch.setenv("JWT_SECRET_KEY", "x" * 32)
+    settings = Settings.load()
+    assert len(settings.jwt_secret_key) == 32
+
+
+def test_load_raises_when_internal_api_secret_too_short(valid_env, monkeypatch):
+    monkeypatch.setenv("INTERNAL_API_SECRET", "too-short")
+    with pytest.raises(SettingsError, match="INTERNAL_API_SECRET"):
+        Settings.load()
+
+
+def test_load_accepts_internal_api_secret_at_minimum_length(valid_env, monkeypatch):
+    monkeypatch.setenv("INTERNAL_API_SECRET", "y" * 32)
+    settings = Settings.load()
+    assert settings.internal_api_secret == "y" * 32
+
+
+def test_internal_api_secret_optional_by_default(valid_env):
+    settings = Settings.load()
+    assert settings.internal_api_secret is None
+    assert settings.internal_api_configured is False
+
+
+def test_load_raises_when_production_public_base_url_not_https(valid_env, monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("PUBLIC_BASE_URL", "http://example.com")
+    with pytest.raises(SettingsError, match="HTTPS"):
+        Settings.load()
+
+
+def test_load_accepts_production_with_https_public_base_url(valid_env, monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("PUBLIC_BASE_URL", "https://example.com")
+    settings = Settings.load()
+    assert settings.public_base_url == "https://example.com"
+
+
+def test_development_allows_http_public_base_url(valid_env, monkeypatch):
+    monkeypatch.setenv("PUBLIC_BASE_URL", "http://localhost:8000")
+    settings = Settings.load()
+    assert settings.public_base_url == "http://localhost:8000"
+
+
+def test_cors_allowed_origins_defaults_to_empty(valid_env):
+    settings = Settings.load()
+    assert settings.cors_allowed_origins == ()
+
+
+def test_cors_allowed_origins_parses_comma_separated_list(valid_env, monkeypatch):
+    monkeypatch.setenv("CORS_ALLOWED_ORIGINS", "https://a.example.com, https://b.example.com")
+    settings = Settings.load()
+    assert settings.cors_allowed_origins == ("https://a.example.com", "https://b.example.com")

@@ -5,7 +5,9 @@ from typing import TYPE_CHECKING
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
+from api.dependencies import enforce_rate_limit, get_client_ip
 from core.logger import get_logger
+from core.rate_limiter import RateLimiter
 from providers.base import PaymentGatewayError
 
 if TYPE_CHECKING:
@@ -16,11 +18,17 @@ logger = get_logger("webhook_routes")
 
 router = APIRouter()
 
+# Webhook publico (autenticado so por assinatura HMAC no corpo, nao por
+# token) — limite generoso por IP: o gateway pode reenviar em rajada em
+# retry, mas nao infinitamente.
+_webhook_limiter = RateLimiter(max_hits=120, window_seconds=60)
+
 
 @router.post("/webhooks/mercadopago")
 async def mercadopago_webhook(request: Request) -> JSONResponse:
-    bot: "LimerenceBot" = request.app.state.bot
-    webhook_service: "WebhookService" = request.app.state.webhook_service
+    bot: LimerenceBot = request.app.state.bot
+    webhook_service: WebhookService = request.app.state.webhook_service
+    await enforce_rate_limit(_webhook_limiter, get_client_ip(request) or "unknown")
 
     if not bot.settings.webhook_enabled:
         logger.warning(

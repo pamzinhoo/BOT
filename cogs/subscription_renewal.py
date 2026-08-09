@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import time
 
+import discord
 from discord.ext import commands, tasks
 
 from core.bot import LimerenceBot
@@ -26,6 +27,12 @@ class SubscriptionRenewalCog(commands.Cog):
 
     def cog_unload(self) -> None:
         self.check_subscription_renewals.cancel()
+
+    @commands.Cog.listener()
+    async def on_guild_remove(self, guild: discord.Guild) -> None:
+        # sem isso o dict de throttle so cresce pra sempre (bot saindo/entrando
+        # em centenas de servidores ao longo do tempo, uso comercial).
+        self._last_check.pop(guild.id, None)
 
     @tasks.loop(minutes=_TICK_MINUTES)
     async def check_subscription_renewals(self) -> None:

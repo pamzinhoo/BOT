@@ -1,4 +1,5 @@
 from database.repositories.anti_spam_settings_repository import AntiSpamSettingsRepository
+from database.repositories.audit_log_launcher_repository import AuditLogLauncherRepository
 from database.repositories.audit_log_repository import AuditLogRepository
 from database.repositories.audit_log_settings_repository import AuditLogSettingsRepository
 from database.repositories.automod_repository import (
@@ -74,6 +75,7 @@ from database.repositories.vote_weight_repository import VoteWeightRepository
 
 __all__ = [
     "AntiSpamSettingsRepository",
+    "AuditLogLauncherRepository",
     "AuditLogRepository",
     "AuditLogSettingsRepository",
     "AutoModLogRepository",

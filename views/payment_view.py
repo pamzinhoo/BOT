@@ -5,13 +5,13 @@ import io
 from typing import TYPE_CHECKING
 
 import discord
-from views.base_view import SafeView
 
 from database.models.payment import PaymentHistory, PaymentStatus
 from database.models.plan import Plan
 from providers.base import PaymentGatewayError
 from providers.manual import ManualProvider
 from utils.constants import EMBED_COLOR_DEFAULT, EMBED_COLOR_SUCCESS
+from views.base_view import SafeView
 
 if TYPE_CHECKING:
     from core.bot import LimerenceBot
@@ -77,7 +77,7 @@ class PaymentEmbedView(SafeView):
 
     @discord.ui.button(label="📋 Copiar código PIX", style=discord.ButtonStyle.secondary)
     async def copy_button(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         payment = await bot.payment_service.get(self.payment_id)
         if payment is None or not payment.pix_qr_code:
             await interaction.response.send_message("Código PIX indisponível.", ephemeral=True)
@@ -86,7 +86,7 @@ class PaymentEmbedView(SafeView):
 
     @discord.ui.button(label="🔄 Atualizar status", style=discord.ButtonStyle.primary)
     async def refresh_button(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         await interaction.response.defer(ephemeral=True)
         payment = await bot.payment_service.get(self.payment_id)
         if payment is None:
@@ -117,7 +117,7 @@ class PaymentEmbedView(SafeView):
 
     @discord.ui.button(label="🚫 Cancelar cobrança", style=discord.ButtonStyle.danger)
     async def cancel_button(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         await interaction.response.defer(ephemeral=True)
         payment = await bot.payment_service.get(self.payment_id)
         if payment is None or payment.status != PaymentStatus.PENDING:

@@ -4,13 +4,13 @@ import uuid
 from typing import TYPE_CHECKING, Any
 
 import discord
-from views.base_view import SafeView
 
 from database.models.monetization_gateway_settings import MonetizationGatewaySettings
 from database.models.monetization_settings import MonetizationSettings
 from database.models.plan import Plan
 from database.models.plan_message import PlanMessageType
 from utils.constants import EMBED_COLOR_DEFAULT, EMBED_COLOR_WARNING
+from views.base_view import SafeView
 from views.settings_panel import DomainSettingsView, FieldKind, SettingsField
 
 _GATEWAY_FIELDS = [
@@ -79,7 +79,7 @@ class MonetizationMenuView(SafeView):
     @discord.ui.button(label="📋 Planos", style=discord.ButtonStyle.primary)
     async def plans_button(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
         assert interaction.guild_id is not None
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         plans = await bot.plan_service.list_plans(interaction.guild_id)
         await interaction.response.edit_message(
             content=None, embed=plans_list_embed(plans), view=PlansListView(plans)
@@ -88,7 +88,7 @@ class MonetizationMenuView(SafeView):
     @discord.ui.button(label="⚙️ Configurações da Loja", style=discord.ButtonStyle.secondary)
     async def settings_button(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
         assert interaction.guild_id is not None
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
 
         async def get_settings(guild_id: int) -> MonetizationSettings:
             return await bot.subscription_service.get_settings(guild_id)
@@ -117,7 +117,7 @@ class MonetizationMenuView(SafeView):
     @discord.ui.button(label="🔌 Gateway de Pagamentos", style=discord.ButtonStyle.secondary)
     async def gateway_button(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
         assert interaction.guild_id is not None
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
 
         async def get_settings(guild_id: int) -> MonetizationGatewaySettings:
             return await bot.payment_service.get_gateway_settings(guild_id)
@@ -215,7 +215,7 @@ class _PlanSelect(discord.ui.Select[Any]):
         super().__init__(placeholder="Selecione um plano pra editar...", options=options, min_values=1, max_values=1)
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         plan = await bot.plan_service.get_plan(uuid.UUID(self.values[0]))
         if plan is None or plan.guild_id != interaction.guild_id:
             await interaction.response.send_message("Plano não encontrado.", ephemeral=True)
@@ -240,7 +240,7 @@ class _CreatePlanModal(discord.ui.Modal, title="Criar Plano"):
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         assert interaction.guild_id is not None
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         try:
             plan = await bot.plan_service.create_plan(
                 interaction.guild_id, str(self.name_input.value).strip(), executor=interaction.user
@@ -263,7 +263,7 @@ class _BackToMonetizationMenuButton(discord.ui.Button[Any]):
 
 
 async def _plan_edit_embed(
-    bot: "LimerenceBot", plan: Plan, *, benefits: list["PlanBenefit"] | None = None
+    bot: LimerenceBot, plan: Plan, *, benefits: list[PlanBenefit] | None = None
 ) -> discord.Embed:
     if benefits is None:
         benefits = await bot.plan_service.list_benefits(plan.id)
@@ -326,7 +326,7 @@ class PlanEditView(SafeView):
 
     @discord.ui.button(label="📜 Benefícios", style=discord.ButtonStyle.secondary, row=1)
     async def benefits_button(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         benefits = await bot.plan_service.list_benefits(self.plan.id)
         await interaction.response.send_modal(_BenefitsModal(self.plan, benefits))
 
@@ -348,7 +348,7 @@ class PlanEditView(SafeView):
 
     @discord.ui.button(label="⭐ Recomendado", style=discord.ButtonStyle.secondary, row=2)
     async def toggle_recommended(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         plan = await bot.plan_service.update_plan(
             self.plan.id, is_recommended=not self.plan.is_recommended, executor=interaction.user
         )
@@ -356,7 +356,7 @@ class PlanEditView(SafeView):
 
     @discord.ui.button(label="✅ Ativo/Inativo", style=discord.ButtonStyle.secondary, row=2)
     async def toggle_active(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         plan = await bot.plan_service.update_plan(
             self.plan.id, is_active=not self.plan.is_active, executor=interaction.user
         )
@@ -376,13 +376,13 @@ class PlanEditView(SafeView):
     @discord.ui.button(label="◀ Voltar", style=discord.ButtonStyle.secondary, row=3)
     async def back_button(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
         assert interaction.guild_id is not None
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         plans = await bot.plan_service.list_plans(interaction.guild_id)
         await interaction.response.edit_message(content=None, embed=plans_list_embed(plans), view=PlansListView(plans))
 
 
 async def _render_plan_edit(interaction: discord.Interaction, plan: Plan) -> None:
-    bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+    bot: LimerenceBot = interaction.client  # type: ignore[assignment]
     if interaction.response.is_done():
         await interaction.edit_original_response(embed=await _plan_edit_embed(bot, plan), view=PlanEditView(plan))
     else:
@@ -407,7 +407,7 @@ class _ConfirmDeleteButton(discord.ui.Button[Any]):
 
     async def callback(self, interaction: discord.Interaction) -> None:
         assert interaction.guild_id is not None
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         await bot.plan_service.delete_plan(self.plan.id, executor=interaction.user)
         plans = await bot.plan_service.list_plans(interaction.guild_id)
         await interaction.response.edit_message(content=None, embed=plans_list_embed(plans), view=PlansListView(plans))
@@ -420,7 +420,7 @@ class _RolePicker(discord.ui.RoleSelect):
         self.plan = plan
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         plan = await bot.plan_service.update_plan(
             self.plan.id, role_id=self.values[0].id, executor=interaction.user
         )
@@ -437,7 +437,7 @@ class _MessageTypeSelect(discord.ui.Select[Any]):
         self.plan = plan
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         message_type = PlanMessageType(self.values[0])
         record = await bot.plan_service.get_message(self.plan.id, message_type)
         await interaction.response.send_modal(
@@ -465,7 +465,7 @@ class _PlanInfoModal(discord.ui.Modal, title="Editar informações"):
         self.add_item(self.description_input)
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         plan = await bot.plan_service.update_plan(
             self.plan.id,
             name=str(self.name_input.value).strip(),
@@ -510,7 +510,7 @@ class _PlanPriceModal(discord.ui.Modal, title="Editar preços"):
         self.add_item(self.one_time_input)
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         try:
             monthly = _parse_reais(str(self.monthly_input.value))
             yearly = _parse_reais(str(self.yearly_input.value))
@@ -537,7 +537,7 @@ class _PlanColorModal(discord.ui.Modal, title="Editar cor"):
             self.color_input.default = f"#{plan.color:06X}"
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         raw = str(self.color_input.value).strip().lstrip("#")
         if not raw:
             plan = await bot.plan_service.update_plan(self.plan.id, color=None, executor=interaction.user)
@@ -563,7 +563,7 @@ class _PlanPositionModal(discord.ui.Modal, title="Editar ordem"):
         self.position_input.default = str(plan.position)
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         raw = str(self.position_input.value).strip()
         if not raw.lstrip("-").isdigit():
             await interaction.response.send_message("Digite um número inteiro.", ephemeral=True)
@@ -586,7 +586,7 @@ class _BenefitsModal(discord.ui.Modal, title="Editar benefícios"):
         self.benefits_input.default = "\n".join(b.text for b in benefits)
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         lines = str(self.benefits_input.value).splitlines()
         await bot.plan_service.set_benefits(self.plan.id, lines, executor=interaction.user)
         await _render_plan_edit(interaction, self.plan)
@@ -603,7 +603,7 @@ class _VoteWeightModal(discord.ui.Modal, title="Peso de voto do plano"):
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         assert interaction.guild_id is not None
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         raw = str(self.weight_input.value).strip()
         if not raw.isdigit() or int(raw) <= 0:
             await interaction.response.send_message(
@@ -632,7 +632,7 @@ class _MessageEditModal(discord.ui.Modal):
         )
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         content = str(self.content_input.value).strip()
         if content:
             await bot.plan_service.set_message(self.plan.id, self.message_type, content)

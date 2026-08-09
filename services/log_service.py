@@ -25,7 +25,7 @@ _TICKET_ACTION_LABELS: dict[LogAction, str] = {
 
 
 class LogService:
-    def __init__(self, database: Database, bot: "LimerenceBot") -> None:
+    def __init__(self, database: Database, bot: LimerenceBot) -> None:
         self._database = database
         self._bot = bot
 

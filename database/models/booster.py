@@ -16,7 +16,7 @@ class Booster(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     __tablename__ = "boosters"
     __table_args__ = (UniqueConstraint("guild_id", "user_id", name="uq_boosters_guild_user"),)
 
-    guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
     user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     boost_since: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     boost_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

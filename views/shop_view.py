@@ -5,7 +5,6 @@ import uuid
 from typing import TYPE_CHECKING, Any
 
 import discord
-from views.base_view import SafeView
 
 from core.logger import get_logger
 from database.models.payment import PaymentHistory
@@ -16,6 +15,7 @@ from services.coupon_service import CouponError
 from services.subscription_service import DuplicateSubscriptionError, MissingPriceError
 from utils.checks import member_is_admin
 from utils.constants import EMBED_COLOR_WARNING
+from views.base_view import SafeView
 
 if TYPE_CHECKING:
     from core.bot import LimerenceBot
@@ -111,7 +111,7 @@ class ShopPanelView(SafeView):
         label="🛒 Ver planos", style=discord.ButtonStyle.success, custom_id="limerence:shop:open"
     )
     async def open_shop(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         assert interaction.guild_id is not None
         plans = await bot.plan_service.list_plans(interaction.guild_id, only_active=True)
         if not plans:
@@ -239,7 +239,7 @@ async def _start_purchase(
     A etapa de "quem vai pagar" (Modal) so aparece quando o provider resolvido
     pra guild e o ManualProvider (PIX manual) — gateways automaticos tem seu
     proprio checkout, ninguem precisa identificar quem fez o PIX."""
-    bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+    bot: LimerenceBot = interaction.client  # type: ignore[assignment]
     member = member if member is not None else interaction.user  # type: ignore[assignment]
     if not isinstance(member, discord.Member):
         return
@@ -421,7 +421,7 @@ class _CouponCodeModal(discord.ui.Modal, title="Cupom de desconto"):
         self.renewal = renewal
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         original = _price_for(self.plan, self.cycle)
         if original is None:
             await interaction.response.send_message(
@@ -516,7 +516,7 @@ class _ConfirmCouponPurchaseView(SafeView):
 
 
 async def _notify_approval_channel(
-    bot: "LimerenceBot",
+    bot: LimerenceBot,
     member: discord.Member,
     plan: Plan,
     cycle: BillingCycle,
@@ -579,6 +579,20 @@ async def _deny_if_not_admin(interaction: discord.Interaction) -> bool:
     return False
 
 
+async def _load_payment_for_guild(
+    interaction: discord.Interaction, payment_id: uuid.UUID
+) -> PaymentHistory | None:
+    """Confere que o pagamento pertence a guild de quem esta clicando — nenhum
+    admin pode aprovar/rejeitar/cancelar pagamento de outro servidor, nem por
+    custom_id forjado (mesma defesa usada no painel de cupons)."""
+    bot: LimerenceBot = interaction.client  # type: ignore[assignment]
+    payment = await bot.payment_service.get(payment_id)
+    if payment is None or payment.guild_id != interaction.guild_id:
+        await interaction.response.send_message("Pagamento não encontrado.", ephemeral=True)
+        return None
+    return payment
+
+
 async def _disable_and_edit(interaction: discord.Interaction) -> None:
     """So atualiza a mensagem (botoes desabilitados) — nunca deve derrubar a
     acao que ja foi executada com sucesso no banco. Qualquer falha aqui
@@ -620,14 +634,16 @@ class PaymentApproveButton(
 
     @classmethod
     async def from_custom_id(
-        cls, interaction: discord.Interaction, item: discord.ui.Item, match: "re.Match[str]"
-    ) -> "PaymentApproveButton":
+        cls, interaction: discord.Interaction, item: discord.ui.Item, match: re.Match[str]
+    ) -> PaymentApproveButton:
         return cls(uuid.UUID(match["payment_id"]))
 
     async def callback(self, interaction: discord.Interaction) -> None:
         if await _deny_if_not_admin(interaction):
             return
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        if await _load_payment_for_guild(interaction, self.payment_id) is None:
+            return
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         await interaction.response.defer(ephemeral=True)
         subscription = await bot.subscription_service.confirm_payment(
             self.payment_id, executor=interaction.user
@@ -659,14 +675,16 @@ class PaymentRejectButton(
 
     @classmethod
     async def from_custom_id(
-        cls, interaction: discord.Interaction, item: discord.ui.Item, match: "re.Match[str]"
-    ) -> "PaymentRejectButton":
+        cls, interaction: discord.Interaction, item: discord.ui.Item, match: re.Match[str]
+    ) -> PaymentRejectButton:
         return cls(uuid.UUID(match["payment_id"]))
 
     async def callback(self, interaction: discord.Interaction) -> None:
         if await _deny_if_not_admin(interaction):
             return
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        if await _load_payment_for_guild(interaction, self.payment_id) is None:
+            return
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         await interaction.response.defer(ephemeral=True)
         changed = await bot.subscription_service.reject_payment(self.payment_id, executor=interaction.user)
         if not changed:
@@ -693,14 +711,16 @@ class PaymentPendingButton(
 
     @classmethod
     async def from_custom_id(
-        cls, interaction: discord.Interaction, item: discord.ui.Item, match: "re.Match[str]"
-    ) -> "PaymentPendingButton":
+        cls, interaction: discord.Interaction, item: discord.ui.Item, match: re.Match[str]
+    ) -> PaymentPendingButton:
         return cls(uuid.UUID(match["payment_id"]))
 
     async def callback(self, interaction: discord.Interaction) -> None:
         if await _deny_if_not_admin(interaction):
             return
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        if await _load_payment_for_guild(interaction, self.payment_id) is None:
+            return
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         await interaction.response.defer(ephemeral=True)
         payment = await bot.subscription_service.mark_payment_pending(
             self.payment_id, executor=interaction.user
@@ -729,14 +749,16 @@ class PaymentCancelButton(
 
     @classmethod
     async def from_custom_id(
-        cls, interaction: discord.Interaction, item: discord.ui.Item, match: "re.Match[str]"
-    ) -> "PaymentCancelButton":
+        cls, interaction: discord.Interaction, item: discord.ui.Item, match: re.Match[str]
+    ) -> PaymentCancelButton:
         return cls(uuid.UUID(match["payment_id"]))
 
     async def callback(self, interaction: discord.Interaction) -> None:
         if await _deny_if_not_admin(interaction):
             return
-        bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
+        if await _load_payment_for_guild(interaction, self.payment_id) is None:
+            return
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         await interaction.response.defer(ephemeral=True)
         changed = await bot.subscription_service.cancel_payment(self.payment_id, executor=interaction.user)
         if not changed:

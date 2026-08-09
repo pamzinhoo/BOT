@@ -21,7 +21,7 @@ class Partnership(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         Index("ix_partnerships_guild_id", "guild_id"),
     )
 
-    guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
     owner_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     channel_id: Mapped[int | None] = mapped_column(BigInteger)
     # cargo dedicado desse parceiro (ex.: @Front Design), criado junto com o

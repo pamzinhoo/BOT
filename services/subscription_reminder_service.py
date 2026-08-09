@@ -74,7 +74,7 @@ class SubscriptionReminderService:
     def __init__(
         self,
         database: Database,
-        bot: "LimerenceBot",
+        bot: LimerenceBot,
         config_service: SubscriptionRenewalConfigService,
         subscription_service: SubscriptionService,
     ) -> None:

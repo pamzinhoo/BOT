@@ -12,7 +12,7 @@ class Staff(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     __tablename__ = "staff"
     __table_args__ = (UniqueConstraint("guild_id", "discord_user_id", name="uq_staff_guild_user"),)
 
-    guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
     discord_user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     display_name: Mapped[str] = mapped_column(String(100), nullable=False)
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)

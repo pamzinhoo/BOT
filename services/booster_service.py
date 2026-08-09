@@ -47,7 +47,7 @@ class BoosterService:
     on_member_update (nunca via mensagens automaticas do Discord), entrega/remove
     cargo, persiste historico e dispara DM/mensagem publica/log configuraveis."""
 
-    def __init__(self, database: Database, bot: "LimerenceBot") -> None:
+    def __init__(self, database: Database, bot: LimerenceBot) -> None:
         self._database = database
         self._bot = bot
 

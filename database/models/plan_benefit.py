@@ -15,7 +15,7 @@ class PlanBenefit(Base, UUIDPrimaryKeyMixin):
     __tablename__ = "plan_benefits"
 
     plan_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("plans.id", ondelete="CASCADE"), nullable=False
+        ForeignKey("plans.id", ondelete="CASCADE"), nullable=False, index=True
     )
     text: Mapped[str] = mapped_column(String(200), nullable=False)
     position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
