@@ -12,6 +12,33 @@ from core.logger import get_logger, setup_logging
 from database.database import init_database
 
 
+_MAX_LOGIN_RETRIES = 5
+_BASE_BACKOFF_SECONDS = 30
+
+
+async def _start_bot_with_retry(bot: LimerenceBot, token: str, logger) -> None:
+    """discord.py nao trata 429 de login como rate limit normal (aquele e
+    tratado internamente) — um 429 na PROPRIA chamada de login (ex.: Cloudflare
+    bloqueando por excesso de tentativas de conexao em pouco tempo, comum apos
+    varios redeploys seguidos) sobe como HTTPException e derruba o processo
+    inteiro. Sem esse retry, Render reinicia o processo imediatamente apos o
+    crash, o que bate no Discord de novo enquanto o bloqueio ainda esta ativo
+    e gera um loop de deploys falhando em sequencia."""
+    for attempt in range(1, _MAX_LOGIN_RETRIES + 1):
+        try:
+            await bot.start(token)
+            return
+        except discord.HTTPException as exc:
+            if exc.status != 429 or attempt == _MAX_LOGIN_RETRIES:
+                raise
+            wait = _BASE_BACKOFF_SECONDS * (2 ** (attempt - 1))
+            logger.warning(
+                "Login rate limited pelo Discord (429), tentativa %s/%s. Aguardando %ss...",
+                attempt, _MAX_LOGIN_RETRIES, wait,
+            )
+            await asyncio.sleep(wait)
+
+
 async def main() -> None:
     try:
         settings = get_settings()
@@ -35,7 +62,10 @@ async def main() -> None:
 
     try:
         logger.info("Iniciando BOT LIMERENCE (ambiente: %s)...", settings.environment)
-        await asyncio.gather(bot.start(settings.discord_token), api_server.serve())
+        await asyncio.gather(
+            _start_bot_with_retry(bot, settings.discord_token, logger),
+            api_server.serve(),
+        )
     except discord.LoginFailure:
         logger.critical("Falha no login: DISCORD_TOKEN invalido.")
     finally:
