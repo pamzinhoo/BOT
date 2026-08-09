@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import shutil
 import zipfile
@@ -30,9 +31,31 @@ from utils.transcript import TRANSCRIPTS_DIR
 logger = get_logger("backup")
 
 _BACKUP_DIR = Path("data/backups")
-_DUMPED_TABLES = [
-    Achievement, Claim, Evaluation, GuildSettings, LogEntry, Staff, StaffStats, Ticket, TicketMessage,
-]
+
+# cada consulta ja vem filtrada por guild_id — direto pras tabelas que tem a
+# coluna, e via JOIN pras que so guardam staff_id/ticket_id (auditoria:
+# achados que NAO tem guild_id direto e dependem de join pra isolar por
+# tenant corretamente).
+def _guild_scoped_queries(guild_id: int) -> dict[type, object]:
+    return {
+        Achievement: select(Achievement).join(Staff, Staff.id == Achievement.staff_id).where(
+            Staff.guild_id == guild_id
+        ),
+        Claim: select(Claim).join(Ticket, Ticket.id == Claim.ticket_id).where(Ticket.guild_id == guild_id),
+        Evaluation: select(Evaluation).join(Ticket, Ticket.id == Evaluation.ticket_id).where(
+            Ticket.guild_id == guild_id
+        ),
+        GuildSettings: select(GuildSettings).where(GuildSettings.guild_id == guild_id),
+        LogEntry: select(LogEntry).where(LogEntry.guild_id == guild_id),
+        Staff: select(Staff).where(Staff.guild_id == guild_id),
+        StaffStats: select(StaffStats).join(Staff, Staff.id == StaffStats.staff_id).where(
+            Staff.guild_id == guild_id
+        ),
+        Ticket: select(Ticket).where(Ticket.guild_id == guild_id),
+        TicketMessage: select(TicketMessage).join(Ticket, Ticket.id == TicketMessage.ticket_id).where(
+            Ticket.guild_id == guild_id
+        ),
+    }
 
 
 def _json_default(value: object) -> object:
@@ -48,9 +71,11 @@ def _json_default(value: object) -> object:
 
 
 class BackupCog(commands.Cog):
-    """Backup diario: dump de todas as tabelas + transcricoes salvas + snapshot
-    de ranking/dashboard, tudo zipado. Salva sempre local; sobe no canal
-    configurado se o zip couber no limite de upload do servidor."""
+    """Backup diario: 1 ZIP POR GUILD (nunca um zip compartilhado entre
+    servidores — ver achado de auditoria abaixo), com dump de todas as
+    tabelas relevantes JA FILTRADAS por guild_id, transcricoes dos tickets
+    dessa guild e snapshot de ranking/dashboard/config. Sobe no canal
+    configurado da PROPRIA guild se o zip couber no limite de upload."""
 
     def __init__(self, bot: LimerenceBot) -> None:
         self.bot = bot
@@ -75,79 +100,102 @@ class BackupCog(commands.Cog):
         await self._check_monthly_top1(today)
 
         date_label = today.strftime("%Y-%m-%d")
-        stage_dir = _BACKUP_DIR / date_label
-        stage_dir.mkdir(parents=True, exist_ok=True)
-
-        await self._dump_database(stage_dir / "database")
-        await self._dump_ranking(stage_dir / "ranking")
-        await self._dump_dashboard(stage_dir / "dashboard")
-        await self._dump_config(stage_dir / "config")
-        self._copy_transcripts(stage_dir / "transcricoes")
-
-        zip_path = _BACKUP_DIR / f"backup-{date_label}.zip"
-        self._zip_dir(stage_dir, zip_path)
-        shutil.rmtree(stage_dir)
-
         for guild in self.bot.guilds:
-            await self._maybe_upload(guild, zip_path, date_label)
+            try:
+                await self._backup_guild(guild, date_label)
+            except Exception:
+                logger.exception("Falha ao gerar backup da guild %s.", guild.id)
 
-    async def _dump_database(self, out_dir: Path) -> None:
+    async def _backup_guild(self, guild: discord.Guild, date_label: str) -> None:
+        """ACHADO DE AUDITORIA (critico, corrigido): a versao anterior gerava
+        UM UNICO zip com o dump de TODAS as guilds juntas e fazia upload
+        desse MESMO zip pro canal de backup de CADA servidor — ou seja, todo
+        cliente recebia no proprio canal os tickets/staff/avaliacoes/logs de
+        TODOS os outros clientes do bot. Agora cada guild tem seu proprio
+        stage dir, seu proprio zip (so com os dados filtrados por guild_id
+        via `_guild_scoped_queries`), e so o canal DAQUELA guild recebe esse
+        zip especifico."""
+        stage_dir = _BACKUP_DIR / f"{guild.id}-{date_label}"
+        zip_path = _BACKUP_DIR / f"backup-{guild.id}-{date_label}.zip"
+        try:
+            ticket_ids = await self._dump_database(stage_dir / "database", guild.id)
+            await self._dump_ranking(stage_dir / "ranking", guild.id)
+            await self._dump_dashboard(stage_dir / "dashboard", guild.id)
+            await self._dump_config(stage_dir / "config", guild.id)
+            # copia de arquivo e compactacao sao sincronas/IO-bound — com
+            # centenas de guilds, rodar isso direto no loop travaria o bot
+            # inteiro pela duracao do backup diario inteiro, nao so dessa guild.
+            await asyncio.to_thread(self._copy_transcripts, stage_dir / "transcricoes", ticket_ids)
+            await asyncio.to_thread(self._zip_dir, stage_dir, zip_path)
+            await self._maybe_upload(guild, zip_path, date_label)
+        finally:
+            shutil.rmtree(stage_dir, ignore_errors=True)
+
+    async def _dump_database(self, out_dir: Path, guild_id: int) -> set[str]:
+        """Devolve os UUIDs completos dos tickets dessa guild — usado pra
+        filtrar quais transcricoes locais pertencem a ela."""
         out_dir.mkdir(parents=True, exist_ok=True)
+        ticket_ids: set[str] = set()
         async with self.bot.database.session() as session:
-            for model in _DUMPED_TABLES:
-                result = await session.execute(select(model))
+            for model, query in _guild_scoped_queries(guild_id).items():
+                result = await session.execute(query)
+                entities = result.scalars().all()
                 rows = [
                     {column.name: getattr(row, column.name) for column in model.__table__.columns}
-                    for row in result.scalars().all()
+                    for row in entities
                 ]
+                if model is Ticket:
+                    ticket_ids = {str(row.id) for row in entities}
                 (out_dir / f"{model.__tablename__}.json").write_text(
                     json.dumps(rows, default=_json_default, ensure_ascii=False, indent=2),
                     encoding="utf-8",
                 )
+        return ticket_ids
 
-    async def _dump_config(self, out_dir: Path) -> None:
+    async def _dump_config(self, out_dir: Path, guild_id: int) -> None:
         out_dir.mkdir(parents=True, exist_ok=True)
-        for guild in self.bot.guilds:
-            settings = await self.bot.config_service.get_settings(guild.id)
-            data = {
-                column.name: getattr(settings, column.name)
-                for column in GuildSettings.__table__.columns
+        settings = await self.bot.config_service.get_settings(guild_id)
+        data = {
+            column.name: getattr(settings, column.name) for column in GuildSettings.__table__.columns
+        }
+        (out_dir / "config.json").write_text(
+            json.dumps(data, default=_json_default, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+
+    async def _dump_ranking(self, out_dir: Path, guild_id: int) -> None:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        ranking = await self.bot.ranking_service.compute(guild_id, RankingPeriod.ALLTIME)
+        data = [
+            {
+                "staff": entry.staff.display_name,
+                "tickets": entry.tickets,
+                "avaliacao_media": entry.avaliacao_media,
             }
-            (out_dir / f"{guild.id}.json").write_text(
-                json.dumps(data, default=_json_default, ensure_ascii=False, indent=2), encoding="utf-8"
-            )
+            for entry in ranking
+        ]
+        (out_dir / "ranking.json").write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    async def _dump_ranking(self, out_dir: Path) -> None:
+    async def _dump_dashboard(self, out_dir: Path, guild_id: int) -> None:
         out_dir.mkdir(parents=True, exist_ok=True)
-        for guild in self.bot.guilds:
-            ranking = await self.bot.ranking_service.compute(guild.id, RankingPeriod.ALLTIME)
-            data = [
-                {
-                    "staff": entry.staff.display_name,
-                    "tickets": entry.tickets,
-                    "avaliacao_media": entry.avaliacao_media,
-                }
-                for entry in ranking
-            ]
-            (out_dir / f"{guild.id}.json").write_text(
-                json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
-            )
-
-    async def _dump_dashboard(self, out_dir: Path) -> None:
-        out_dir.mkdir(parents=True, exist_ok=True)
-        for guild in self.bot.guilds:
-            open_tickets = await self.bot.ticket_service.list_open_by_guild(guild.id)
-            data = {
-                "open_tickets": len(open_tickets),
-                "snapshot_at": datetime.now(UTC).isoformat(),
-            }
-            (out_dir / f"{guild.id}.json").write_text(json.dumps(data, indent=2), encoding="utf-8")
+        open_tickets = await self.bot.ticket_service.list_open_by_guild(guild_id)
+        data = {
+            "open_tickets": len(open_tickets),
+            "snapshot_at": datetime.now(UTC).isoformat(),
+        }
+        (out_dir / "dashboard.json").write_text(json.dumps(data, indent=2), encoding="utf-8")
 
     @staticmethod
-    def _copy_transcripts(out_dir: Path) -> None:
-        if not TRANSCRIPTS_DIR.exists():
+    def _copy_transcripts(out_dir: Path, ticket_ids: set[str]) -> None:
+        """So copia as transcricoes (.html/.pdf) dos tickets QUE PERTENCEM a
+        esta guild — a pasta local `data/transcripts` e compartilhada entre
+        todas as guilds do bot (nomeada pelo UUID completo do ticket), entao
+        copiar a pasta inteira vazaria transcricoes de outros servidores."""
+        if not TRANSCRIPTS_DIR.exists() or not ticket_ids:
             return
-        shutil.copytree(TRANSCRIPTS_DIR, out_dir, dirs_exist_ok=True)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        for file_path in TRANSCRIPTS_DIR.iterdir():
+            if file_path.is_file() and file_path.stem in ticket_ids:
+                shutil.copy2(file_path, out_dir / file_path.name)
 
     @staticmethod
     def _zip_dir(stage_dir: Path, zip_path: Path) -> None:

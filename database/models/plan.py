@@ -24,7 +24,7 @@ class Plan(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     __tablename__ = "plans"
     __table_args__ = (UniqueConstraint("guild_id", "name", name="uq_plans_guild_name"),)
 
-    guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     product_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("products.id", ondelete="SET NULL"), index=True

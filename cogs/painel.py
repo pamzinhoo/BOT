@@ -26,6 +26,12 @@ class PainelCog(commands.Cog):
     def cog_unload(self) -> None:
         self.auto_update_dashboards.cancel()
 
+    @commands.Cog.listener()
+    async def on_guild_remove(self, guild: discord.Guild) -> None:
+        # sem isso o dict de throttle so cresce pra sempre (bot saindo/entrando
+        # em centenas de servidores ao longo do tempo, uso comercial).
+        self._last_auto_update.pop(guild.id, None)
+
     @tasks.loop(minutes=_AUTO_UPDATE_TICK_MINUTES)
     async def auto_update_dashboards(self) -> None:
         for dashboard_settings in await self.bot.config_service.list_dashboards_with_auto_update():

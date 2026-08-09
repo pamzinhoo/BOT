@@ -37,7 +37,7 @@ class VerificationSession(Base, UUIDPrimaryKeyMixin):
         Index("ix_verification_sessions_guild_user", "guild_id", "user_id"),
     )
 
-    guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
     user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
     method: Mapped[VerificationMethod] = mapped_column(

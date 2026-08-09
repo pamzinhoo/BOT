@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from database.models.plan import Plan
 from database.models.plan_benefit import PlanBenefit
@@ -55,9 +55,7 @@ class PlanBenefitRepository(BaseRepository[PlanBenefit]):
         return list(result.scalars().all())
 
     async def delete_all_for_plan(self, plan_id: uuid.UUID) -> None:
-        benefits = await self.list_by_plan(plan_id)
-        for benefit in benefits:
-            await self.session.delete(benefit)
+        await self.session.execute(delete(PlanBenefit).where(PlanBenefit.plan_id == plan_id))
         await self.session.flush()
 
 

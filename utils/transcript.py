@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import html
 import io
 from dataclasses import dataclass
@@ -156,6 +157,13 @@ async def build_transcript_pdf(channel: discord.TextChannel, ticket: Ticket) -> 
         messages=messages or "<p>Nenhuma mensagem neste canal.</p>",
     )
 
+    return await asyncio.to_thread(_render_pdf, pdf_html)
+
+
+def _render_pdf(pdf_html: str) -> bytes:
+    # xhtml2pdf e sincrono/CPU-bound — rodar direto no loop bloquearia o bot
+    # inteiro (todas as guilds) pelo tempo de renderizacao a cada ticket
+    # fechado, entao isso precisa rodar numa thread separada.
     buffer = io.BytesIO()
     pisa.CreatePDF(pdf_html, dest=buffer)
     return buffer.getvalue()
@@ -164,8 +172,14 @@ async def build_transcript_pdf(channel: discord.TextChannel, ticket: Ticket) -> 
 def save_transcript_locally(ticket: Ticket, html_content: str, pdf_content: bytes) -> None:
     """Guarda uma copia local (html+pdf) pra entrar no backup diario — os
     canais de ticket sao apagados depois do fechamento, entao esse e o unico
-    registro que sobrevive alem do que foi mandado pro Discord."""
+    registro que sobrevive alem do que foi mandado pro Discord.
+
+    O arquivo usa o UUID completo do ticket (nao so os 8 primeiros chars) —
+    a pasta e compartilhada entre TODAS as guilds do bot, e um prefixo curto
+    tem chance real de colisao entre tickets de guilds diferentes conforme o
+    volume cresce, o que faria a transcricao de um cliente sobrescrever a de
+    outro silenciosamente."""
     TRANSCRIPTS_DIR.mkdir(parents=True, exist_ok=True)
-    short_id = str(ticket.id)[:8]
-    (TRANSCRIPTS_DIR / f"{short_id}.html").write_text(html_content, encoding="utf-8")
-    (TRANSCRIPTS_DIR / f"{short_id}.pdf").write_bytes(pdf_content)
+    file_id = str(ticket.id)
+    (TRANSCRIPTS_DIR / f"{file_id}.html").write_text(html_content, encoding="utf-8")
+    (TRANSCRIPTS_DIR / f"{file_id}.pdf").write_bytes(pdf_content)

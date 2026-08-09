@@ -579,6 +579,20 @@ async def _deny_if_not_admin(interaction: discord.Interaction) -> bool:
     return False
 
 
+async def _load_payment_for_guild(
+    interaction: discord.Interaction, payment_id: uuid.UUID
+) -> PaymentHistory | None:
+    """Confere que o pagamento pertence a guild de quem esta clicando — nenhum
+    admin pode aprovar/rejeitar/cancelar pagamento de outro servidor, nem por
+    custom_id forjado (mesma defesa usada no painel de cupons)."""
+    bot: LimerenceBot = interaction.client  # type: ignore[assignment]
+    payment = await bot.payment_service.get(payment_id)
+    if payment is None or payment.guild_id != interaction.guild_id:
+        await interaction.response.send_message("Pagamento não encontrado.", ephemeral=True)
+        return None
+    return payment
+
+
 async def _disable_and_edit(interaction: discord.Interaction) -> None:
     """So atualiza a mensagem (botoes desabilitados) — nunca deve derrubar a
     acao que ja foi executada com sucesso no banco. Qualquer falha aqui
@@ -627,6 +641,8 @@ class PaymentApproveButton(
     async def callback(self, interaction: discord.Interaction) -> None:
         if await _deny_if_not_admin(interaction):
             return
+        if await _load_payment_for_guild(interaction, self.payment_id) is None:
+            return
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         await interaction.response.defer(ephemeral=True)
         subscription = await bot.subscription_service.confirm_payment(
@@ -666,6 +682,8 @@ class PaymentRejectButton(
     async def callback(self, interaction: discord.Interaction) -> None:
         if await _deny_if_not_admin(interaction):
             return
+        if await _load_payment_for_guild(interaction, self.payment_id) is None:
+            return
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         await interaction.response.defer(ephemeral=True)
         changed = await bot.subscription_service.reject_payment(self.payment_id, executor=interaction.user)
@@ -699,6 +717,8 @@ class PaymentPendingButton(
 
     async def callback(self, interaction: discord.Interaction) -> None:
         if await _deny_if_not_admin(interaction):
+            return
+        if await _load_payment_for_guild(interaction, self.payment_id) is None:
             return
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         await interaction.response.defer(ephemeral=True)
@@ -735,6 +755,8 @@ class PaymentCancelButton(
 
     async def callback(self, interaction: discord.Interaction) -> None:
         if await _deny_if_not_admin(interaction):
+            return
+        if await _load_payment_for_guild(interaction, self.payment_id) is None:
             return
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         await interaction.response.defer(ephemeral=True)

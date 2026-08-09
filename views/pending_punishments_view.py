@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import uuid
+from contextlib import suppress
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
@@ -22,6 +23,7 @@ if TYPE_CHECKING:
     from core.bot import LimerenceBot
 
 _DENIAL_MESSAGE = "❌ Você não possui permissão para visualizar punições em análise."
+_WRONG_GUILD_MESSAGE = "❌ Este painel não pertence a este servidor."
 _STATE_PATTERN = (
     r"(?P<guild_id>\d+):(?P<filtro>[a-z]+):(?P<staff_id>\d+):(?P<page>\d+)"
 )
@@ -34,6 +36,14 @@ def _time_remaining_label(punishment) -> str:
     if remaining_seconds <= 0:
         return "Expirado"
     return humanize_duration(int(remaining_seconds))
+
+
+def _wrong_guild(interaction: discord.Interaction, guild_id: int) -> bool:
+    """O estado do painel (guild_id/filtro/pagina) vem do custom_id do botao —
+    nunca confiar nele sem checar contra a guild de verdade da interacao,
+    senao um custom_id forjado (ou reaproveitado) mostraria a fila de
+    punicoes em analise de OUTRO servidor."""
+    return interaction.guild_id != guild_id
 
 
 async def _find_role_divergence(
@@ -133,6 +143,9 @@ class AnalisesNavButton(
         )
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        if _wrong_guild(interaction, self.guild_id):
+            await interaction.response.send_message(_WRONG_GUILD_MESSAGE, ephemeral=True)
+            return
         if not await member_can(interaction, "analises"):
             await interaction.response.send_message(_DENIAL_MESSAGE, ephemeral=True)
             return
@@ -195,6 +208,9 @@ class AnalisesSelect(
         return cls(guild_id=guild_id, filtro=filtro, staff_id=staff_id, page=page, options=_select_options(page_items))
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        if _wrong_guild(interaction, self.guild_id):
+            await interaction.response.send_message(_WRONG_GUILD_MESSAGE, ephemeral=True)
+            return
         if not await member_can(interaction, "analises"):
             await interaction.response.send_message(_DENIAL_MESSAGE, ephemeral=True)
             return
@@ -205,7 +221,7 @@ class AnalisesSelect(
             return
 
         review_item = await bot.punishment_review_service.get_item(uuid.UUID(value))
-        if review_item is None:
+        if review_item is None or review_item.punishment.guild_id != interaction.guild_id:
             await interaction.response.send_message("Punição não encontrada.", ephemeral=True)
             return
 
@@ -253,6 +269,9 @@ class AnalisesBackButton(
         )
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        if _wrong_guild(interaction, self.guild_id):
+            await interaction.response.send_message(_WRONG_GUILD_MESSAGE, ephemeral=True)
+            return
         if not await member_can(interaction, "analises"):
             await interaction.response.send_message(_DENIAL_MESSAGE, ephemeral=True)
             return
@@ -310,7 +329,7 @@ class AnalisesAcceptButton(
         from views.embeds import appeal_accepted_dm_embed, punishment_revoked_log_embed
 
         if isinstance(interaction.message, discord.Message):
-            try:
+            with suppress(discord.HTTPException):
                 await interaction.message.edit(
                     embed=discord.Embed(
                         title="✅ Recurso aceito pelo painel /analises",
@@ -319,8 +338,6 @@ class AnalisesAcceptButton(
                     ),
                     view=None,
                 )
-            except discord.HTTPException:
-                pass
 
         if settings.log_punishments_channel_id is not None:
             log_channel = guild.get_channel(settings.log_punishments_channel_id)
@@ -329,10 +346,8 @@ class AnalisesAcceptButton(
 
         user = guild.get_member(result.punishment.user_id) or bot.get_user(result.punishment.user_id)
         if user is not None:
-            try:
+            with suppress(discord.HTTPException):
                 await user.send(embed=appeal_accepted_dm_embed(result.punishment, str(member)))
-            except discord.HTTPException:
-                pass
 
         await interaction.followup.send("Recurso aceito. Punição revogada.", ephemeral=True)
 
@@ -373,7 +388,7 @@ class AnalisesDenyModal(discord.ui.Modal, title="Negar recurso"):
         from views.embeds import appeal_denied_dm_embed, punishment_log_embed
 
         if isinstance(interaction.message, discord.Message):
-            try:
+            with suppress(discord.HTTPException):
                 await interaction.message.edit(
                     embed=discord.Embed(
                         title="❌ Recurso negado pelo painel /analises",
@@ -382,8 +397,6 @@ class AnalisesDenyModal(discord.ui.Modal, title="Negar recurso"):
                     ),
                     view=None,
                 )
-            except discord.HTTPException:
-                pass
 
         if settings.log_punishments_channel_id is not None:
             log_channel = guild.get_channel(settings.log_punishments_channel_id)
@@ -392,10 +405,8 @@ class AnalisesDenyModal(discord.ui.Modal, title="Negar recurso"):
 
         user = guild.get_member(result.punishment.user_id) or bot.get_user(result.punishment.user_id)
         if user is not None:
-            try:
+            with suppress(discord.HTTPException):
                 await user.send(embed=appeal_denied_dm_embed(str(self.motivo), str(member)))
-            except discord.HTTPException:
-                pass
 
         await interaction.response.send_message("Recurso negado.", ephemeral=True)
 

@@ -33,7 +33,7 @@ class Subscription(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         UniqueConstraint("guild_id", "user_id", "plan_id", name="uq_subscription_guild_user_plan"),
     )
 
-    guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
     user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     plan_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("plans.id", ondelete="RESTRICT"), nullable=False)
 

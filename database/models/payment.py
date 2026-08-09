@@ -40,7 +40,7 @@ class PaymentHistory(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         UniqueConstraint("provider", "external_id", name="uq_payment_provider_external_id"),
     )
 
-    guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
     user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     plan_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("plans.id", ondelete="RESTRICT"), nullable=False)
     subscription_id: Mapped[uuid.UUID | None] = mapped_column(

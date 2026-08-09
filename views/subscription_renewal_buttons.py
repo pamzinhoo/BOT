@@ -85,7 +85,11 @@ class RenewSubscriptionButton(
 
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         subscription = await bot.subscription_service.get_subscription(self.subscription_id)
-        if subscription is None or subscription.user_id != interaction.user.id:
+        if (
+            subscription is None
+            or subscription.user_id != interaction.user.id
+            or subscription.guild_id != self.guild_id
+        ):
             await interaction.response.send_message(
                 "Esta assinatura não é sua ou não existe mais.", ephemeral=True
             )

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import random
 import uuid
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
@@ -242,6 +243,10 @@ class PunishmentService:
             punishment = await PunishmentRepository(session).get_by_id(punishment_id)
             if punishment is None:
                 raise PunishmentError("Punição não encontrada.")
+            if punishment.guild_id != guild.id:
+                # defesa em profundidade: nunca aplicar a acao (ban/kick) usando
+                # a guild de quem chamou se a punicao pertence a outra guild.
+                raise PunishmentError("Punição não encontrada.")
             if punishment.status != PunishmentStatus.PENDING_REVIEW:
                 raise PunishmentError("Essa punição não está mais em análise.")
 
@@ -322,6 +327,8 @@ class PunishmentService:
             punishment = await PunishmentRepository(session).get_by_id(punishment_id)
             if punishment is None:
                 raise PunishmentError("Punição não encontrada.")
+            if punishment.guild_id != guild.id:
+                raise PunishmentError("Punição não encontrada.")
             if punishment.status not in UNRESOLVED_STATUSES:
                 raise PunishmentError("Essa punição já foi processada (não está mais pendente).")
 
@@ -366,6 +373,8 @@ class PunishmentService:
         async with self._database.session() as session:
             punishment = await PunishmentRepository(session).get_by_id(punishment_id)
             if punishment is None:
+                raise PunishmentError("Punição não encontrada.")
+            if punishment.guild_id != staff.guild.id:
                 raise PunishmentError("Punição não encontrada.")
             if punishment.status not in UNRESOLVED_STATUSES:
                 raise PunishmentError("Essa punição já foi processada (não está mais pendente).")
@@ -421,6 +430,8 @@ class PunishmentService:
             punishment = await PunishmentRepository(session).get_by_id(punishment_id)
             if punishment is None:
                 raise PunishmentError("Punição não encontrada.")
+            if punishment.guild_id != guild.id:
+                raise PunishmentError("Punição não encontrada.")
             if punishment.status == PunishmentStatus.REVOKED:
                 raise PunishmentError("Essa punição já foi revogada.")
 
@@ -457,10 +468,8 @@ class PunishmentService:
         role = member.guild.get_role(player_role_id)
         if role is None or role in member.roles:
             return
-        try:
+        with suppress(discord.HTTPException):
             await member.add_roles(role, reason="Cargo de jogador restaurado após ban revogado")
-        except discord.HTTPException:
-            pass
 
     async def submit_appeal(
         self,
