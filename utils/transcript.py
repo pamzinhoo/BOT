@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import html
 import io
 from dataclasses import dataclass
@@ -156,6 +157,13 @@ async def build_transcript_pdf(channel: discord.TextChannel, ticket: Ticket) -> 
         messages=messages or "<p>Nenhuma mensagem neste canal.</p>",
     )
 
+    return await asyncio.to_thread(_render_pdf, pdf_html)
+
+
+def _render_pdf(pdf_html: str) -> bytes:
+    # xhtml2pdf e sincrono/CPU-bound — rodar direto no loop bloquearia o bot
+    # inteiro (todas as guilds) pelo tempo de renderizacao a cada ticket
+    # fechado, entao isso precisa rodar numa thread separada.
     buffer = io.BytesIO()
     pisa.CreatePDF(pdf_html, dest=buffer)
     return buffer.getvalue()

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import io
 
 import discord
@@ -95,7 +96,11 @@ class PainelService:
         )
 
         if top_entries and show_chart:
-            chart_bytes = render_ranking_chart(top_entries)
+            # matplotlib e sincrono/CPU-bound — chamado direto travaria o bot
+            # inteiro (todas as guilds, inclusive verificacao/interacoes em
+            # andamento) pelo tempo de renderizacao, e isso acontece toda vez
+            # que o dashboard atualiza (a cada evento + a cada 1min por guild).
+            chart_bytes = await asyncio.to_thread(render_ranking_chart, top_entries)
             chart_file = discord.File(io.BytesIO(chart_bytes), filename="ranking.png")
             embed.set_image(url="attachment://ranking.png")
             await message.edit(embed=embed, attachments=[chart_file])

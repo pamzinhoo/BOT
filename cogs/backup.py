@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import shutil
 import zipfile
@@ -121,9 +122,11 @@ class BackupCog(commands.Cog):
             await self._dump_ranking(stage_dir / "ranking", guild.id)
             await self._dump_dashboard(stage_dir / "dashboard", guild.id)
             await self._dump_config(stage_dir / "config", guild.id)
-            self._copy_transcripts(stage_dir / "transcricoes", ticket_ids)
-
-            self._zip_dir(stage_dir, zip_path)
+            # copia de arquivo e compactacao sao sincronas/IO-bound — com
+            # centenas de guilds, rodar isso direto no loop travaria o bot
+            # inteiro pela duracao do backup diario inteiro, nao so dessa guild.
+            await asyncio.to_thread(self._copy_transcripts, stage_dir / "transcricoes", ticket_ids)
+            await asyncio.to_thread(self._zip_dir, stage_dir, zip_path)
             await self._maybe_upload(guild, zip_path, date_label)
         finally:
             shutil.rmtree(stage_dir, ignore_errors=True)
