@@ -98,6 +98,9 @@ class AppealModal(discord.ui.Modal, title="Recurso de punição"):
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
+        # Deferir de imediato: submit_appeal e um write no banco antes de termos
+        # algo pra responder, o que facilmente passa dos 3s de prazo.
+        await interaction.response.defer()
         try:
             appeal = await bot.punishment_service.submit_appeal(
                 punishment_id=self.punishment_id,
@@ -106,10 +109,10 @@ class AppealModal(discord.ui.Modal, title="Recurso de punição"):
                 additional_info=str(self.informacoes_adicionais) or None,
             )
         except AppealError as exc:
-            await interaction.response.send_message(str(exc), ephemeral=True)
+            await interaction.followup.send(str(exc), ephemeral=True)
             return
 
-        await interaction.response.send_message(
+        await interaction.followup.send(
             "Recurso enviado! A staff vai analisar e você será notificado por aqui.", ephemeral=True
         )
 
@@ -138,6 +141,9 @@ class DenyAppealModal(discord.ui.Modal, title="Negar recurso"):
             return
         guild = interaction.guild
 
+        # Deferir de imediato: deny_appeal e um write no banco seguido de
+        # edicao de mensagem e DM — tudo isso facilmente passa dos 3s de prazo.
+        await interaction.response.defer()
         settings = await bot.config_service.get_settings(guild.id)
         try:
             result = await bot.punishment_service.deny_appeal(
@@ -149,7 +155,7 @@ class DenyAppealModal(discord.ui.Modal, title="Negar recurso"):
                 bypass_self_review=await member_is_owner_or_ceo(interaction),
             )
         except AppealError as exc:
-            await interaction.response.send_message(str(exc), ephemeral=True)
+            await interaction.followup.send(str(exc), ephemeral=True)
             return
 
         message = await _resolve_review_message(interaction, result.appeal)
@@ -166,7 +172,7 @@ class DenyAppealModal(discord.ui.Modal, title="Negar recurso"):
             except discord.HTTPException:
                 pass
 
-        await interaction.response.send_message("Recurso negado.", ephemeral=True)
+        await interaction.followup.send("Recurso negado.", ephemeral=True)
 
 
 class AppealButton(

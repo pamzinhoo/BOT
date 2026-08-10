@@ -111,30 +111,6 @@ class LimerenceBot(commands.Bot):
         self.giveaway_service = GiveawayService(database, self)
 
         self.tree.on_error = self._on_app_command_error
-        self._patch_view_store_diagnostics()
-
-    def _patch_view_store_diagnostics(self) -> None:
-        """DEBUG TEMPORARIO: loga quando uma interacao de componente nao acha
-        nenhum item registrado (dispatch silencioso, sem excecao, sem log).
-        Remover depois de identificar a causa do bug do painel de config."""
-        store = self._connection._view_store
-        original = store.dispatch_view
-
-        def _patched(component_type: int, custom_id: str, interaction: discord.Interaction) -> None:
-            msg = interaction.message
-            message_id = msg.id if msg is not None else None
-            key = (component_type, custom_id)
-            known = store._views.get(message_id, {})
-            if key not in known and key not in store._views.get(None, {}):
-                logger.warning(
-                    "DISPATCH MISS: message_id=%s custom_id=%s tipo=%s tem %d itens conhecidos pra essa mensagem (chaves=%s)",
-                    message_id, custom_id, component_type, len(known), list(known.keys()),
-                )
-            else:
-                logger.info("DISPATCH OK: message_id=%s custom_id=%s", message_id, custom_id)
-            return original(component_type, custom_id, interaction)
-
-        store.dispatch_view = _patched  # type: ignore[method-assign]
 
     async def _on_app_command_error(
         self, interaction: discord.Interaction, error: app_commands.AppCommandError

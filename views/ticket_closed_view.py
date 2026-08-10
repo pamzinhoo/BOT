@@ -19,9 +19,11 @@ if TYPE_CHECKING:
 
 
 async def _deny_if_not_staff(interaction: discord.Interaction) -> bool:
+    # Os 3 botoes desta view sempre deferem antes de chamar isto (nenhum
+    # deles abre modal), entao a recusa sai por followup.
     if await member_is_staff(interaction):
         return False
-    await interaction.response.send_message(
+    await interaction.followup.send(
         "Apenas a staff pode usar esses botões.", ephemeral=True
     )
     return True
@@ -30,7 +32,7 @@ async def _deny_if_not_staff(interaction: discord.Interaction) -> bool:
 async def _deny_if_cant(interaction: discord.Interaction, action: str) -> bool:
     if await member_can(interaction, action):
         return False
-    await interaction.response.send_message(
+    await interaction.followup.send(
         "Você não tem permissão para usar esse botão.", ephemeral=True
     )
     return True
@@ -50,6 +52,10 @@ class TicketClosedView(SafeView):
         emoji="📄",
     )
     async def transcript(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        # Deferir de imediato: nao ha ramo de modal aqui, e as checagens
+        # (staff, ticket, comportamento do painel) + geracao da transcricao
+        # sao varias idas ao banco/HTTP que facilmente passam dos 3s.
+        await interaction.response.defer(ephemeral=True, thinking=True)
         if await _deny_if_not_staff(interaction):
             return
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
@@ -59,18 +65,17 @@ class TicketClosedView(SafeView):
 
         ticket = await bot.ticket_service.get_by_channel_id(interaction.channel_id)
         if ticket is None:
-            await interaction.response.send_message("Ticket não encontrado.", ephemeral=True)
+            await interaction.followup.send("Ticket não encontrado.", ephemeral=True)
             return
 
         behaviour = await bot.ticket_panel_service.behaviour_for_ticket(ticket, ticket.guild_id)
         if not behaviour.transcript_enabled:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "A transcrição está desativada no painel que originou este ticket.",
                 ephemeral=True,
             )
             return
 
-        await interaction.response.defer(ephemeral=True, thinking=True)
         html_content = await build_transcript_html(channel, ticket)
         pdf_content = await build_transcript_pdf(channel, ticket)
         save_transcript_locally(ticket, html_content, pdf_content)
@@ -116,6 +121,9 @@ class TicketClosedView(SafeView):
         emoji="🔓",
     )
     async def reopen(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        # Deferir de imediato: sem ramo de modal, e reopen_ticket ja e uma
+        # escrita no banco antes de qualquer resposta.
+        await interaction.response.defer()
         if await _deny_if_cant(interaction, "reabrir"):
             return
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
@@ -130,12 +138,12 @@ class TicketClosedView(SafeView):
         try:
             ticket = await bot.ticket_service.reopen_ticket(interaction.channel_id)
         except TicketNotFoundError as exc:
-            await interaction.response.send_message(str(exc), ephemeral=True)
+            await interaction.followup.send(str(exc), ephemeral=True)
             return
 
         for item in self.children:
             item.disabled = True  # type: ignore[attr-defined]
-        await interaction.response.edit_message(view=self)
+        await interaction.edit_original_response(view=self)
 
         await channel.send(
             content=f"🔓 Ticket reaberto por {member.mention}.", view=TicketActionsView()
@@ -158,6 +166,9 @@ class TicketClosedView(SafeView):
         emoji="🗑️",
     )
     async def delete(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        # Deferir de imediato: sem ramo de modal, e a checagem de permissao +
+        # get_by_channel_id ja rodam antes de qualquer resposta.
+        await interaction.response.defer()
         if await _deny_if_cant(interaction, "excluir"):
             return
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
@@ -171,7 +182,7 @@ class TicketClosedView(SafeView):
 
         for item in self.children:
             item.disabled = True  # type: ignore[attr-defined]
-        await interaction.response.edit_message(view=self)
+        await interaction.edit_original_response(view=self)
 
         behaviour = (
             await bot.ticket_panel_service.behaviour_for_ticket(ticket, guild.id)

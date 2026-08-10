@@ -47,14 +47,19 @@ class GiveawayEnterButton(
         if not isinstance(member, discord.Member):
             return
 
+        # Defere de imediato: get_giveaway/can_enter/enter sao chamadas ao
+        # banco que podem passar dos 3s de prazo do Discord antes da 1a
+        # resposta, num botao publico de participacao.
+        await interaction.response.defer()
+
         giveaway = await bot.giveaway_service.get_giveaway(self.giveaway_id)
         if giveaway is None or giveaway.guild_id != interaction.guild_id:
-            await interaction.response.send_message("Sorteio não encontrado.", ephemeral=True)
+            await interaction.followup.send("Sorteio não encontrado.", ephemeral=True)
             return
 
         can_enter, reason = await bot.giveaway_service.can_enter(giveaway, member)
         if not can_enter:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 reason or "Você não pode participar desse sorteio.", ephemeral=True
             )
             return
@@ -62,10 +67,10 @@ class GiveawayEnterButton(
         try:
             await bot.giveaway_service.enter(giveaway, member)
         except AlreadyEnteredError as exc:
-            await interaction.response.send_message(str(exc), ephemeral=True)
+            await interaction.followup.send(str(exc), ephemeral=True)
             return
 
-        await interaction.response.send_message("✅ Você está participando do sorteio!", ephemeral=True)
+        await interaction.followup.send("✅ Você está participando do sorteio!", ephemeral=True)
 
         count = await bot.giveaway_service.count_entries(giveaway.id)
         if interaction.message is not None:

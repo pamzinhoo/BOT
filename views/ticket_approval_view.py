@@ -15,28 +15,36 @@ if TYPE_CHECKING:
     from core.bot import LimerenceBot
 
 
-async def _deny_if_cant_review(interaction: discord.Interaction) -> bool:
+async def _deny_if_cant_review(
+    interaction: discord.Interaction, *, already_deferred: bool = False
+) -> bool:
     """Mesma regra do botao Assumir: permissao global de `claim` + o filtro
-    extra de cargos do painel (panel.claim_role_ids), quando configurado."""
+    extra de cargos do painel (panel.claim_role_ids), quando configurado.
+
+    `already_deferred` diz se o chamador ja deu `defer()` antes de chamar esta
+    funcao — nesse caso as mensagens de recusa saem por `followup.send`. O
+    Reprovar chama isto SEM deferir (pode terminar em `send_modal`, que exige
+    a interacao ainda nao respondida), enquanto o Aprovar defere primeiro
+    (nunca abre modal)."""
+
+    async def _deny(content: str) -> None:
+        if already_deferred:
+            await interaction.followup.send(content, ephemeral=True)
+        else:
+            await interaction.response.send_message(content, ephemeral=True)
+
     if not isinstance(interaction.user, discord.Member) or interaction.channel_id is None:
-        await interaction.response.send_message(
-            "Este botão só funciona dentro de um servidor.", ephemeral=True
-        )
+        await _deny("Este botão só funciona dentro de um servidor.")
         return True
     if not await member_can(interaction, "claim"):
-        await interaction.response.send_message(
-            "Você não tem permissão para analisar este ticket.", ephemeral=True
-        )
+        await _deny("Você não tem permissão para analisar este ticket.")
         return True
 
     bot: LimerenceBot = interaction.client  # type: ignore[assignment]
     ticket = await bot.ticket_panel_service.get_ticket_by_channel(interaction.channel_id)
     panel = await bot.ticket_panel_service.get_panel_for_ticket(ticket) if ticket else None
     if not member_matches_panel_claim_roles(interaction.user, panel):
-        await interaction.response.send_message(
-            "Apenas os cargos responsáveis por este painel podem analisar o ticket.",
-            ephemeral=True,
-        )
+        await _deny("Apenas os cargos responsáveis por este painel podem analisar o ticket.")
         return True
     return False
 
@@ -95,9 +103,12 @@ class TicketApprovalView(SafeView):
         custom_id="limerence:ticket_approval:approve",
     )
     async def approve(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
-        if await _deny_if_cant_review(interaction):
-            return
+        # Deferir de imediato: este ramo nunca abre modal (isso e so o
+        # Reprovar), entao pode deferir antes mesmo da checagem de permissao
+        # — _deny_if_cant_review + review_ticket fazem varias idas ao banco.
         await interaction.response.defer(ephemeral=True)
+        if await _deny_if_cant_review(interaction, already_deferred=True):
+            return
         await _finish(interaction, approved=True, reason=None)
 
     @discord.ui.button(
@@ -107,6 +118,10 @@ class TicketApprovalView(SafeView):
         custom_id="limerence:ticket_approval:reprove",
     )
     async def reprove(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        # Sem defer aqui: quando a permissao passa, este ramo abre um modal
+        # (send_modal exige a interacao ainda nao respondida/deferida). A
+        # checagem em si (_deny_if_cant_review) e rapida o bastante pra caber
+        # nos 3s mesmo sem deferir antes.
         if await _deny_if_cant_review(interaction):
             return
         await interaction.response.send_modal(_ReproveReasonModal())

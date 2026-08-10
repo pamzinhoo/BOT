@@ -146,8 +146,12 @@ class AnalisesNavButton(
         if _wrong_guild(interaction, self.guild_id):
             await interaction.response.send_message(_WRONG_GUILD_MESSAGE, ephemeral=True)
             return
+        # Deferir de imediato: member_can consulta permission_settings no banco e
+        # build_panel faz list_pending + divergencia de cargo, facilmente passando
+        # dos 3s que o Discord da pra responder a interacao.
+        await interaction.response.defer()
         if not await member_can(interaction, "analises"):
-            await interaction.response.send_message(_DENIAL_MESSAGE, ephemeral=True)
+            await interaction.followup.send(_DENIAL_MESSAGE, ephemeral=True)
             return
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
 
@@ -161,7 +165,7 @@ class AnalisesNavButton(
         embed, view = await build_panel(
             bot, guild_id=self.guild_id, filtro=self.filtro, staff_id=self.staff_id, page=target_page
         )
-        await interaction.response.edit_message(embed=embed, view=view)
+        await interaction.edit_original_response(embed=embed, view=view)
 
 
 class AnalisesSelect(
@@ -211,18 +215,20 @@ class AnalisesSelect(
         if _wrong_guild(interaction, self.guild_id):
             await interaction.response.send_message(_WRONG_GUILD_MESSAGE, ephemeral=True)
             return
+        # Deferir de imediato: member_can e get_item vao ao banco antes de termos
+        # algo pra mostrar, o que facilmente passa dos 3s de prazo da interacao.
+        await interaction.response.defer()
         if not await member_can(interaction, "analises"):
-            await interaction.response.send_message(_DENIAL_MESSAGE, ephemeral=True)
+            await interaction.followup.send(_DENIAL_MESSAGE, ephemeral=True)
             return
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         value = self.item.values[0]
         if value == "none":
-            await interaction.response.defer()
             return
 
         review_item = await bot.punishment_review_service.get_item(uuid.UUID(value))
         if review_item is None or review_item.punishment.guild_id != interaction.guild_id:
-            await interaction.response.send_message("Punição não encontrada.", ephemeral=True)
+            await interaction.followup.send("Punição não encontrada.", ephemeral=True)
             return
 
         embed = pending_punishment_detail_embed(
@@ -235,7 +241,7 @@ class AnalisesSelect(
             staff_id=self.staff_id,
             page=self.page,
         )
-        await interaction.response.edit_message(embed=embed, view=view)
+        await interaction.edit_original_response(embed=embed, view=view)
 
 
 class AnalisesBackButton(
@@ -272,14 +278,17 @@ class AnalisesBackButton(
         if _wrong_guild(interaction, self.guild_id):
             await interaction.response.send_message(_WRONG_GUILD_MESSAGE, ephemeral=True)
             return
+        # Deferir de imediato: member_can e build_panel vao ao banco antes de
+        # termos algo pra mostrar, o que facilmente passa dos 3s de prazo.
+        await interaction.response.defer()
         if not await member_can(interaction, "analises"):
-            await interaction.response.send_message(_DENIAL_MESSAGE, ephemeral=True)
+            await interaction.followup.send(_DENIAL_MESSAGE, ephemeral=True)
             return
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         embed, view = await build_panel(
             bot, guild_id=self.guild_id, filtro=self.filtro, staff_id=self.staff_id, page=self.page
         )
-        await interaction.response.edit_message(embed=embed, view=view)
+        await interaction.edit_original_response(embed=embed, view=view)
 
 
 class AnalisesAcceptButton(
@@ -372,6 +381,9 @@ class AnalisesDenyModal(discord.ui.Modal, title="Negar recurso"):
             return
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
 
+        # Deferir de imediato: deny() e um write no banco seguido de edicao de
+        # mensagem, log e DM — tudo isso facilmente passa dos 3s de prazo.
+        await interaction.response.defer()
         settings = await bot.config_service.get_settings(guild.id)
         try:
             result = await bot.punishment_review_service.deny(
@@ -382,7 +394,7 @@ class AnalisesDenyModal(discord.ui.Modal, title="Negar recurso"):
                 review_role_id=settings.review_role_id,
             )
         except PunishmentReviewError as exc:
-            await interaction.response.send_message(str(exc), ephemeral=True)
+            await interaction.followup.send(str(exc), ephemeral=True)
             return
 
         from views.embeds import appeal_denied_dm_embed, punishment_log_embed
@@ -408,7 +420,7 @@ class AnalisesDenyModal(discord.ui.Modal, title="Negar recurso"):
             with suppress(discord.HTTPException):
                 await user.send(embed=appeal_denied_dm_embed(str(self.motivo), str(member)))
 
-        await interaction.response.send_message("Recurso negado.", ephemeral=True)
+        await interaction.followup.send("Recurso negado.", ephemeral=True)
 
 
 class AnalisesDenyButton(
