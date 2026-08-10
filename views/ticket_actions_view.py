@@ -130,6 +130,7 @@ class TicketActionsView(SafeView):
                 "Apenas a staff pode usar esse botão.", ephemeral=True
             )
             return
+        await interaction.response.defer(ephemeral=True)
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         guild = interaction.guild
         member = interaction.user
@@ -144,13 +145,13 @@ class TicketActionsView(SafeView):
 
         ticket = await bot.ticket_service.get_by_channel_id(interaction.channel_id)
         if ticket is None:
-            await interaction.response.send_message("Ticket não encontrado.", ephemeral=True)
+            await interaction.followup.send("Ticket não encontrado.", ephemeral=True)
             return
 
         if ticket.voice_channel_id is not None:
             existing = guild.get_channel(ticket.voice_channel_id)
             if isinstance(existing, discord.VoiceChannel):
-                await interaction.response.send_message(
+                await interaction.followup.send(
                     f"Já existe um canal de voz para este ticket: {existing.mention}",
                     ephemeral=True,
                 )
@@ -188,14 +189,14 @@ class TicketActionsView(SafeView):
                 reason=f"Canal de voz do ticket criado por {member}",
             )
         except discord.HTTPException:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "Não foi possível criar o canal de voz. Tente novamente mais tarde.",
                 ephemeral=True,
             )
             return
 
         await bot.ticket_service.set_voice_channel(interaction.channel_id, voice_channel.id)
-        await interaction.response.send_message(
+        await interaction.followup.send(
             f"Canal de voz criado: {voice_channel.mention}", ephemeral=False
         )
 

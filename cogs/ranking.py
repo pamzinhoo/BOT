@@ -30,6 +30,7 @@ class RankingCog(commands.Cog):
     ) -> None:
         if interaction.guild_id is None:
             return
+        await interaction.response.defer()
         if periodo is not None:
             period = RankingPeriod(periodo.value)
             label = periodo.name
@@ -40,7 +41,7 @@ class RankingCog(commands.Cog):
                 (c.name for c in _PERIOD_CHOICES if c.value == period.value), "Geral"
             )
         entries = await self.bot.ranking_service.compute(interaction.guild_id, period)
-        await interaction.response.send_message(embed=ranking_embed(entries, label))
+        await interaction.followup.send(embed=ranking_embed(entries, label))
 
 
 async def setup(bot: LimerenceBot) -> None:

@@ -115,12 +115,14 @@ class TicketsMenuView(SafeView):
     async def panels_button(
         self, interaction: discord.Interaction, _button: discord.ui.Button
     ) -> None:
+        await interaction.response.defer()
         await _render_panels_list(interaction, self.on_back)
 
     @discord.ui.button(label="🚫 Desativar sistema", style=discord.ButtonStyle.danger, row=0)
     async def toggle_system(
         self, interaction: discord.Interaction, _button: discord.ui.Button
     ) -> None:
+        await interaction.response.defer()
         assert interaction.guild_id is not None
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         settings = await bot.config_service.get_ticket_settings(interaction.guild_id)
@@ -149,6 +151,7 @@ class TicketsMenuView(SafeView):
         from views.master_config_view import _tickets_category
         from views.settings_panel import DomainSettingsView, build_domain_embed
 
+        await interaction.response.defer()
         assert interaction.guild_id is not None
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         fields, get_settings, update_settings = _tickets_category(bot)
@@ -165,7 +168,7 @@ class TicketsMenuView(SafeView):
             on_back=_back,
         )
         settings = await get_settings(interaction.guild_id)
-        await interaction.response.edit_message(
+        await interaction.edit_original_response(
             content=None,
             embed=build_domain_embed(view.title, fields, settings),
             view=view,
@@ -242,10 +245,11 @@ class _PanelSelect(discord.ui.Select[Any]):
         self.on_back = on_back
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         panel = await bot.ticket_panel_service.get_panel(uuid.UUID(self.values[0]))
         if panel is None or panel.guild_id != interaction.guild_id:
-            await interaction.response.send_message("Painel não encontrado.", ephemeral=True)
+            await interaction.followup.send("Painel não encontrado.", ephemeral=True)
             return
         await _render_panel_edit(interaction, panel, self.on_back)
 
@@ -271,6 +275,7 @@ class _CreatePanelModal(discord.ui.Modal, title="Criar Painel de Tickets"):
         self.on_back = on_back
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         assert interaction.guild_id is not None
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         try:
@@ -278,7 +283,7 @@ class _CreatePanelModal(discord.ui.Modal, title="Criar Painel de Tickets"):
                 interaction.guild_id, str(self.name_input.value)
             )
         except TicketPanelError as exc:
-            await interaction.response.send_message(str(exc), ephemeral=True)
+            await interaction.followup.send(str(exc), ephemeral=True)
             return
         await bot.audit_log_service.record_config_change(
             guild_id=interaction.guild_id,
@@ -298,6 +303,7 @@ class _BackToTicketsMenuButton(discord.ui.Button[Any]):
         self.on_back = on_back
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         await render_tickets_menu(interaction, self.on_back)
 
 
@@ -483,6 +489,7 @@ class TicketPanelEditView(SafeView):
 
     @discord.ui.button(label="📝 Formulário", style=discord.ButtonStyle.secondary, row=1)
     async def form_button(self, interaction: discord.Interaction, _b: discord.ui.Button) -> None:
+        await interaction.response.defer()
         await _render_form_editor(interaction, self.panel, self.on_back)
 
     # --- linha 2: aprovação e publicação ---
@@ -526,6 +533,7 @@ class TicketPanelEditView(SafeView):
                 "Este painel ainda não foi publicado em nenhum canal.", ephemeral=True
             )
             return
+        await interaction.response.defer()
         panel = await bot.ticket_panel_service.refresh_panel(self.panel.id)
         await _render_panel_edit(interaction, panel or self.panel, self.on_back)
 
@@ -539,6 +547,7 @@ class TicketPanelEditView(SafeView):
                 "Este painel não está publicado.", ephemeral=True
             )
             return
+        await interaction.response.defer()
         panel = await bot.ticket_panel_service.unpublish_panel(self.panel.id)
         await _log_panel_change(interaction, panel, "Publicação", "publicado", "despublicado")
         await _render_panel_edit(interaction, panel, self.on_back)
@@ -548,6 +557,7 @@ class TicketPanelEditView(SafeView):
     async def toggle_enabled(
         self, interaction: discord.Interaction, _b: discord.ui.Button
     ) -> None:
+        await interaction.response.defer()
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         before = self.panel.enabled
         panel = await bot.ticket_panel_service.update_panel(self.panel.id, enabled=not before)
@@ -572,6 +582,7 @@ class TicketPanelEditView(SafeView):
 
     @discord.ui.button(label="◀ Voltar", style=discord.ButtonStyle.secondary, row=3)
     async def back_button(self, interaction: discord.Interaction, _b: discord.ui.Button) -> None:
+        await interaction.response.defer()
         await _render_panels_list(interaction, self.on_back)
 
 
@@ -582,6 +593,7 @@ class _BackToPanelEditButton(discord.ui.Button[Any]):
         self.on_back = on_back
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         panel = await bot.ticket_panel_service.get_panel(self.panel.id) or self.panel
         await _render_panel_edit(interaction, panel, self.on_back)
@@ -594,6 +606,7 @@ class _ConfirmDeletePanelButton(discord.ui.Button[Any]):
         self.on_back = on_back
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         assert interaction.guild_id is not None
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         name = self.panel.name
@@ -630,6 +643,7 @@ class _PanelNameModal(discord.ui.Modal, title="Nome do painel"):
         if not new_name:
             await interaction.response.send_message("O nome não pode ficar vazio.", ephemeral=True)
             return
+        await interaction.response.defer()
         before = self.panel.name
         panel = await bot.ticket_panel_service.update_panel(self.panel.id, name=new_name)
         await _log_panel_change(interaction, panel, "Nome", before, new_name)
@@ -688,6 +702,7 @@ class _EmbedTextModal(discord.ui.Modal, title="Embed — texto e cor"):
                     "Cor inválida — use um hexadecimal (ex: #5865F2).", ephemeral=True
                 )
                 return
+        await interaction.response.defer()
         panel = await bot.ticket_panel_service.update_panel(
             self.panel.id,
             embed_title=str(self.title_input.value).strip() or None,
@@ -747,6 +762,7 @@ class _EmbedImagesModal(discord.ui.Modal, title="Embed — imagens"):
                     "URL inválida — precisa começar com http:// ou https://.", ephemeral=True
                 )
                 return
+        await interaction.response.defer()
         panel = await bot.ticket_panel_service.update_panel(
             self.panel.id,
             embed_image_url=image or None,
@@ -790,6 +806,7 @@ class _ButtonTextModal(discord.ui.Modal, title="Botão — texto e emoji"):
         self.add_item(self.emoji_input)
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         before = self.panel.button_label
         panel = await bot.ticket_panel_service.update_panel(
@@ -818,6 +835,7 @@ class _ButtonStyleSelect(discord.ui.Select[Any]):
         self.on_back = on_back
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         before = self.panel.button_style
         panel = await bot.ticket_panel_service.update_panel(
@@ -848,6 +866,7 @@ class _BehaviourToggleSelect(discord.ui.Select[Any]):
         self.on_back = on_back
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         attr = self.values[0]
         before = getattr(self.panel, attr)
@@ -906,6 +925,7 @@ class _LimitsModal(discord.ui.Modal, title="Limites do painel"):
                 "Delay de exclusão: digite um número inteiro de segundos.", ephemeral=True
             )
             return
+        await interaction.response.defer()
         before = self.panel.max_tickets_per_user
         panel = await bot.ticket_panel_service.update_panel(
             self.panel.id,
@@ -933,6 +953,7 @@ class _TicketCategoryPicker(discord.ui.ChannelSelect):
         self.on_back = on_back
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         before = self.panel.ticket_category_id
         panel = await bot.ticket_panel_service.update_panel(
@@ -953,6 +974,7 @@ class _ResponsibleRolesPicker(discord.ui.RoleSelect):
         self.on_back = on_back
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         before = list(self.panel.responsible_role_ids or [])
         role_ids = [role.id for role in self.values]
@@ -975,6 +997,7 @@ class _ClaimRolesPicker(discord.ui.RoleSelect):
         self.on_back = on_back
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         before = list(self.panel.claim_role_ids or [])
         role_ids = [role.id for role in self.values]
@@ -1000,6 +1023,7 @@ class _ApprovalToggleButton(discord.ui.Button[Any]):
         self.on_back = on_back
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         before = self.panel.approval_enabled
         panel = await bot.ticket_panel_service.update_panel(
@@ -1020,6 +1044,7 @@ class _ApprovalRolePicker(discord.ui.RoleSelect):
         self.on_back = on_back
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         before = self.panel.approval_granted_role_id
         panel = await bot.ticket_panel_service.update_panel(
@@ -1128,6 +1153,7 @@ class TicketPanelFormView(SafeView):
 
     @discord.ui.button(label="✅ Ativar formulário", style=discord.ButtonStyle.secondary, row=1)
     async def toggle_form(self, interaction: discord.Interaction, _b: discord.ui.Button) -> None:
+        await interaction.response.defer()
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         before = self.panel.form_enabled
         panel = await bot.ticket_panel_service.update_panel(
@@ -1160,18 +1186,19 @@ class _FormFieldSelect(discord.ui.Select[Any]):
         self.on_back = on_back
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         field_id = uuid.UUID(self.values[0])
         fields = await bot.ticket_panel_service.list_form_fields(self.panel.id)
         field = next((f for f in fields if f.id == field_id), None)
         if field is None:
-            await interaction.response.send_message("Pergunta não encontrada.", ephemeral=True)
+            await interaction.followup.send("Pergunta não encontrada.", ephemeral=True)
             return
         view = SafeView(timeout=180)
         view.add_item(_EditFormFieldButton(self.panel, field, self.on_back))
         view.add_item(_DeleteFormFieldButton(self.panel, field, self.on_back))
         view.add_item(_BackToFormButton(self.panel, self.on_back))
-        await interaction.response.edit_message(
+        await interaction.edit_original_response(
             content=f"**{field.label}** — o que deseja fazer?", embed=None, view=view
         )
 
@@ -1197,6 +1224,7 @@ class _DeleteFormFieldButton(discord.ui.Button[Any]):
         self.on_back = on_back
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         await bot.ticket_panel_service.delete_form_field(self.field.id)
         await _log_panel_change(
@@ -1212,6 +1240,7 @@ class _BackToFormButton(discord.ui.Button[Any]):
         self.on_back = on_back
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         await _render_form_editor(interaction, self.panel, self.on_back)
 
 
@@ -1267,6 +1296,7 @@ class _FormFieldModal(discord.ui.Modal):
                 "A pergunta não pode ficar vazia.", ephemeral=True
             )
             return
+        await interaction.response.defer()
         style = "long" if str(self.style_input.value).strip().lower().startswith("l") else "short"
         required = _parse_yes_no(str(self.required_input.value), default=True)
         placeholder = str(self.placeholder_input.value).strip() or None
@@ -1281,7 +1311,7 @@ class _FormFieldModal(discord.ui.Modal):
                     placeholder=placeholder,
                 )
             except TicketPanelError as exc:
-                await interaction.response.send_message(str(exc), ephemeral=True)
+                await interaction.followup.send(str(exc), ephemeral=True)
                 return
             await _log_panel_change(interaction, self.panel, "Pergunta adicionada", "—", label)
         else:

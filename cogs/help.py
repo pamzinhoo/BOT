@@ -19,6 +19,7 @@ class HelpCog(commands.Cog):
     async def help_command(
         self, interaction: discord.Interaction, comando: str | None = None
     ) -> None:
+        await interaction.response.defer(ephemeral=True)
         is_admin = await member_is_admin(interaction)
         is_staff = await member_is_staff(interaction)
 
@@ -27,14 +28,14 @@ class HelpCog(commands.Cog):
                 comando.strip().lower(), is_admin=is_admin, is_staff=is_staff
             )
             if command is None:
-                await interaction.response.send_message(
+                await interaction.followup.send(
                     "Comando não encontrado (ou você não tem permissão pra vê-lo).", ephemeral=True
                 )
                 return
-            await interaction.response.send_message(embed=help_command_embed(command), ephemeral=True)
+            await interaction.followup.send(embed=help_command_embed(command), ephemeral=True)
             return
 
-        await interaction.response.send_message(
+        await interaction.followup.send(
             embed=help_main_embed(), view=HelpMainView(), ephemeral=True
         )
 

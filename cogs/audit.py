@@ -50,6 +50,7 @@ class AuditCog(commands.Cog):
         periodo: app_commands.Choice[str] | None = None,
     ) -> None:
         assert interaction.guild_id is not None
+        await interaction.response.defer(ephemeral=True)
         delta = _PERIOD_DELTAS[periodo.value] if periodo else None
         since = datetime.now(UTC) - delta if delta else None
 
@@ -58,7 +59,7 @@ class AuditCog(commands.Cog):
             try:
                 category = AuditLogCategory(categoria)
             except ValueError:
-                await interaction.response.send_message("Categoria inválida.", ephemeral=True)
+                await interaction.followup.send("Categoria inválida.", ephemeral=True)
                 return
 
         entries = await self.bot.audit_log_service.list_entries(
@@ -72,7 +73,7 @@ class AuditCog(commands.Cog):
         )
 
         if not entries:
-            await interaction.response.send_message("Nenhum registro encontrado.", ephemeral=True)
+            await interaction.followup.send("Nenhum registro encontrado.", ephemeral=True)
             return
 
         lines = []
@@ -99,7 +100,7 @@ class AuditCog(commands.Cog):
             title="🕵️ Logs de auditoria",
             description="\n".join(lines)[:4000],
         )
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
     @audit.autocomplete("categoria")
     async def categoria_autocomplete(

@@ -99,7 +99,12 @@ async def render_payment_dm_menu(interaction: discord.Interaction) -> None:
     assert interaction.guild_id is not None
     bot: LimerenceBot = interaction.client  # type: ignore[assignment]
     settings = await bot.payment_service.get_payment_dm_settings(interaction.guild_id)
-    await interaction.response.edit_message(content=None, embed=_menu_embed(settings), view=PaymentDmMenuView())
+    embed = _menu_embed(settings)
+    view = PaymentDmMenuView()
+    if interaction.response.is_done():
+        await interaction.edit_original_response(content=None, embed=embed, view=view)
+    else:
+        await interaction.response.edit_message(content=None, embed=embed, view=view)
 
 
 class PaymentDmMenuView(SafeView):
@@ -108,10 +113,12 @@ class PaymentDmMenuView(SafeView):
 
     @discord.ui.button(label="✅ Aprovado", style=discord.ButtonStyle.success)
     async def approved_button(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await interaction.response.defer()
         await _render_state_editor(interaction, approved=True)
 
     @discord.ui.button(label="❌ Rejeitado", style=discord.ButtonStyle.danger)
     async def rejected_button(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await interaction.response.defer()
         await _render_state_editor(interaction, approved=False)
 
     @discord.ui.button(label="◀ Voltar", style=discord.ButtonStyle.secondary, row=1)
@@ -134,7 +141,11 @@ async def _render_state_editor(interaction: discord.Interaction, *, approved: bo
         color=EMBED_COLOR_SUCCESS if approved else EMBED_COLOR_DANGER,
     )
     preview = _preview_embed(settings, approved=approved, member=interaction.user)
-    await interaction.response.edit_message(content=None, embeds=[header, preview], view=_StateEditorView(approved))
+    view = _StateEditorView(approved)
+    if interaction.response.is_done():
+        await interaction.edit_original_response(content=None, embeds=[header, preview], view=view)
+    else:
+        await interaction.response.edit_message(content=None, embeds=[header, preview], view=view)
 
 
 class _StateEditorView(SafeView):
@@ -158,6 +169,7 @@ class _StateEditorView(SafeView):
 
     @discord.ui.button(label="🔛 Ativar/Desativar", style=discord.ButtonStyle.secondary)
     async def toggle_button(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await interaction.response.defer()
         assert interaction.guild_id is not None
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         settings = await bot.payment_service.get_payment_dm_settings(interaction.guild_id)
@@ -172,24 +184,26 @@ class _StateEditorView(SafeView):
         assert interaction.guild_id is not None
         if not isinstance(interaction.user, discord.Member):
             return
+        await interaction.response.defer(ephemeral=True)
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         settings = await bot.payment_service.get_payment_dm_settings(interaction.guild_id)
         embed = _preview_embed(settings, approved=self.approved, member=interaction.user)
         try:
             await interaction.user.send(embed=embed)
         except discord.Forbidden:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "Não consegui te mandar DM — verifique se suas mensagens privadas estão abertas.",
                 ephemeral=True,
             )
             return
         except discord.HTTPException:
-            await interaction.response.send_message("Falha ao enviar a DM de teste.", ephemeral=True)
+            await interaction.followup.send("Falha ao enviar a DM de teste.", ephemeral=True)
             return
-        await interaction.response.send_message("📨 Mensagem de teste enviada por DM.", ephemeral=True)
+        await interaction.followup.send("📨 Mensagem de teste enviada por DM.", ephemeral=True)
 
     @discord.ui.button(label="◀ Voltar", style=discord.ButtonStyle.secondary, row=1)
     async def back_button(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await interaction.response.defer()
         await render_payment_dm_menu(interaction)
 
 
@@ -234,6 +248,7 @@ class _TextModal(discord.ui.Modal, title="Embed — texto e cor"):
                     "Cor inválida — use um hexadecimal (ex: #57F287).", ephemeral=True
                 )
                 return
+        await interaction.response.defer()
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         prefix = "approved" if self.approved else "rejected"
         await bot.payment_service.update_payment_dm_settings(
@@ -276,6 +291,7 @@ class _ImagesModal(discord.ui.Modal, title="Embed — imagens"):
                     "URL inválida — precisa começar com http:// ou https://.", ephemeral=True
                 )
                 return
+        await interaction.response.defer()
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         prefix = "approved" if self.approved else "rejected"
         await bot.payment_service.update_payment_dm_settings(
