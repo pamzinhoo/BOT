@@ -97,32 +97,35 @@ class CouponsMenuView(SafeView):
 
     @discord.ui.button(label="📋 Gerenciar Cupons", style=discord.ButtonStyle.primary, row=0)
     async def manage_button(self, interaction: discord.Interaction, _b: discord.ui.Button) -> None:
+        await interaction.response.defer()
         assert interaction.guild_id is not None
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         coupons = await bot.coupon_service.list_coupons(interaction.guild_id)
-        await interaction.response.edit_message(
+        await interaction.edit_original_response(
             content=None, embed=coupons_list_embed(coupons), view=CouponsListView(coupons)
         )
 
     @discord.ui.button(label="📊 Estatísticas", style=discord.ButtonStyle.secondary, row=1)
     async def stats_button(self, interaction: discord.Interaction, _b: discord.ui.Button) -> None:
+        await interaction.response.defer()
         assert interaction.guild_id is not None
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         coupons = await bot.coupon_service.list_coupons(interaction.guild_id)
         if not coupons:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "Nenhum cupom cadastrado ainda.", ephemeral=True
             )
             return
         view = SafeView(timeout=300)
         view.add_item(_CouponStatsSelect(coupons))
         view.add_item(_BackToCouponsMenuButton())
-        await interaction.response.edit_message(
+        await interaction.edit_original_response(
             content="Selecione um cupom para ver as estatísticas:", embed=None, view=view
         )
 
     @discord.ui.button(label="⚙️ Configurações", style=discord.ButtonStyle.secondary, row=1)
     async def settings_button(self, interaction: discord.Interaction, _b: discord.ui.Button) -> None:
+        await interaction.response.defer()
         assert interaction.guild_id is not None
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         coupons = await bot.coupon_service.list_coupons(interaction.guild_id)
@@ -148,7 +151,7 @@ class CouponsMenuView(SafeView):
         embed.add_field(name="Cupons ativos", value=str(active))
         view = SafeView(timeout=300)
         view.add_item(_BackToCouponsMenuButton())
-        await interaction.response.edit_message(content=None, embed=embed, view=view)
+        await interaction.edit_original_response(content=None, embed=embed, view=view)
 
     @discord.ui.button(label="◀ Voltar", style=discord.ButtonStyle.secondary, row=2)
     async def back_button(self, interaction: discord.Interaction, _b: discord.ui.Button) -> None:
@@ -189,6 +192,7 @@ class _CreateCouponModal(discord.ui.Modal, title="Criar Cupom"):
     )
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         assert interaction.guild_id is not None
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         try:
@@ -199,10 +203,10 @@ class _CreateCouponModal(discord.ui.Modal, title="Criar Cupom"):
                 emoji=str(self.emoji_input.value).strip() or None,
             )
         except CouponError as exc:
-            await interaction.response.send_message(str(exc), ephemeral=True)
+            await interaction.followup.send(str(exc), ephemeral=True)
             return
         await _audit_coupon(interaction, coupon, "Cupom criado")
-        await interaction.response.edit_message(
+        await interaction.edit_original_response(
             content=(
                 "Cupom criado! Configure o **💸 Desconto** para ele começar a valer "
                 "(o valor padrão é 0)."
@@ -256,10 +260,11 @@ class _CouponSelect(discord.ui.Select[Any]):
         )
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         coupon = await _load_coupon(interaction, uuid.UUID(self.values[0]))
         if coupon is None:
             return
-        await interaction.response.edit_message(
+        await interaction.edit_original_response(
             content=None,
             embed=await _coupon_edit_embed(interaction, coupon),
             view=CouponEditView(coupon),
@@ -275,7 +280,9 @@ async def _load_coupon(
     bot: LimerenceBot = interaction.client  # type: ignore[assignment]
     coupon = await bot.coupon_service.get_coupon(coupon_id)
     if coupon is None or coupon.guild_id != interaction.guild_id:
-        if not interaction.response.is_done():
+        if interaction.response.is_done():
+            await interaction.followup.send("Cupom não encontrado.", ephemeral=True)
+        else:
             await interaction.response.send_message("Cupom não encontrado.", ephemeral=True)
         return None
     return coupon
@@ -362,11 +369,12 @@ class CouponEditView(SafeView):
 
     @discord.ui.button(label="📋 Planos válidos", style=discord.ButtonStyle.secondary, row=1)
     async def plans_button(self, interaction: discord.Interaction, _b: discord.ui.Button) -> None:
+        await interaction.response.defer()
         assert interaction.guild_id is not None
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         plans = await bot.plan_service.list_plans(interaction.guild_id)
         if not plans:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "Nenhum plano cadastrado ainda — o cupom já vale para todos.", ephemeral=True
             )
             return
@@ -374,7 +382,7 @@ class CouponEditView(SafeView):
         view = SafeView(timeout=120)
         view.add_item(_CouponPlansSelect(self.coupon, plans, selected))
         view.add_item(_BackToCouponEditButton(self.coupon))
-        await interaction.response.edit_message(
+        await interaction.edit_original_response(
             content="Selecione os planos válidos (nenhum selecionado = **todos**):",
             embed=None,
             view=view,
@@ -403,6 +411,7 @@ class CouponEditView(SafeView):
 
     @discord.ui.button(label="✅ Ativo/Inativo", style=discord.ButtonStyle.secondary, row=2)
     async def toggle_active(self, interaction: discord.Interaction, _b: discord.ui.Button) -> None:
+        await interaction.response.defer()
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         coupon = await bot.coupon_service.set_active(
             self.coupon.id, not self.coupon.active, executor=interaction.user
@@ -411,6 +420,7 @@ class CouponEditView(SafeView):
 
     @discord.ui.button(label="➕ Acúmulo", style=discord.ButtonStyle.secondary, row=2)
     async def toggle_stack(self, interaction: discord.Interaction, _b: discord.ui.Button) -> None:
+        await interaction.response.defer()
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         coupon = await bot.coupon_service.update_coupon(
             self.coupon.id, allow_stack=not self.coupon.allow_stack
@@ -422,15 +432,16 @@ class CouponEditView(SafeView):
 
     @discord.ui.button(label="📄 Duplicar", style=discord.ButtonStyle.secondary, row=2)
     async def duplicate_button(self, interaction: discord.Interaction, _b: discord.ui.Button) -> None:
+        await interaction.response.defer()
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         try:
             clone = await bot.coupon_service.duplicate_coupon(
                 self.coupon.id, executor=interaction.user
             )
         except CouponError as exc:
-            await interaction.response.send_message(str(exc), ephemeral=True)
+            await interaction.followup.send(str(exc), ephemeral=True)
             return
-        await interaction.response.edit_message(
+        await interaction.edit_original_response(
             content=f"Cupom duplicado como **{clone.code}**.",
             embed=await _coupon_edit_embed(interaction, clone),
             view=CouponEditView(clone),
@@ -453,10 +464,11 @@ class CouponEditView(SafeView):
 
     @discord.ui.button(label="◀ Voltar", style=discord.ButtonStyle.secondary, row=3)
     async def back_button(self, interaction: discord.Interaction, _b: discord.ui.Button) -> None:
+        await interaction.response.defer()
         assert interaction.guild_id is not None
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         coupons = await bot.coupon_service.list_coupons(interaction.guild_id)
-        await interaction.response.edit_message(
+        await interaction.edit_original_response(
             content=None, embed=coupons_list_embed(coupons), view=CouponsListView(coupons)
         )
 
@@ -467,6 +479,7 @@ class _BackToCouponEditButton(discord.ui.Button[Any]):
         self.coupon = coupon
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         coupon = await _load_coupon(interaction, self.coupon.id)
         if coupon is None:
             return
@@ -479,11 +492,12 @@ class _ConfirmDeleteCouponButton(discord.ui.Button[Any]):
         self.coupon = coupon
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         assert interaction.guild_id is not None
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         hard = await bot.coupon_service.delete_coupon(self.coupon.id, executor=interaction.user)
         coupons = await bot.coupon_service.list_coupons(interaction.guild_id)
-        await interaction.response.edit_message(
+        await interaction.edit_original_response(
             content=(
                 f"Cupom **{self.coupon.code}** excluído."
                 if hard
@@ -519,6 +533,7 @@ class _CouponInfoModal(discord.ui.Modal, title="Editar informações"):
         self.add_item(self.emoji_input)
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         try:
             coupon = await bot.coupon_service.update_coupon(
@@ -528,7 +543,7 @@ class _CouponInfoModal(discord.ui.Modal, title="Editar informações"):
                 emoji=str(self.emoji_input.value).strip() or None,
             )
         except CouponError as exc:
-            await interaction.response.send_message(str(exc), ephemeral=True)
+            await interaction.followup.send(str(exc), ephemeral=True)
             return
         await _audit_coupon(interaction, coupon, "Cupom editado", campo="Informações")
         await _render_coupon_edit(interaction, coupon)
@@ -581,10 +596,11 @@ class _CouponValueModal(discord.ui.Modal, title="Valor do desconto"):
                 "Valor inválido — use apenas números.", ephemeral=True
             )
             return
+        await interaction.response.defer()
         try:
             coupon = await bot.coupon_service.set_discount(self.coupon.id, self.discount_type, value)
         except CouponError as exc:
-            await interaction.response.send_message(str(exc), ephemeral=True)
+            await interaction.followup.send(str(exc), ephemeral=True)
             return
         await _audit_coupon(
             interaction, coupon, "Cupom editado", campo="Desconto", valor=format_discount(coupon)
@@ -628,6 +644,7 @@ class _CouponDatesModal(discord.ui.Modal, title="Validade do cupom"):
                 "A data de expiração não pode ser anterior à data de início.", ephemeral=True
             )
             return
+        await interaction.response.defer()
         coupon = await bot.coupon_service.update_coupon(
             self.coupon.id, starts_at=starts_at, expires_at=expires_at
         )
@@ -671,6 +688,7 @@ class _CouponLimitsModal(discord.ui.Modal, title="Limites de uso"):
         except ValueError as exc:
             await interaction.response.send_message(str(exc), ephemeral=True)
             return
+        await interaction.response.defer()
         coupon = await bot.coupon_service.update_coupon(
             self.coupon.id, max_global_uses=max_global, max_uses_per_user=max_per_user
         )
@@ -713,6 +731,7 @@ class _CouponPlansSelect(discord.ui.Select[Any]):
         self.coupon = coupon
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         plan_ids = [uuid.UUID(value) for value in self.values]
         await bot.coupon_service.set_allowed_plans(self.coupon.id, plan_ids)
@@ -741,6 +760,7 @@ class _CouponCyclesSelect(discord.ui.Select[Any]):
         self.coupon = coupon
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         coupon = await bot.coupon_service.update_coupon(
             self.coupon.id, billing_cycles=list(self.values)
@@ -757,6 +777,7 @@ class _CouponRolePicker(discord.ui.RoleSelect):
         self.coupon = coupon
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         coupon = await bot.coupon_service.update_coupon(
             self.coupon.id, required_role_id=self.values[0].id
@@ -773,6 +794,7 @@ class _ClearRequiredRoleButton(discord.ui.Button[Any]):
         self.coupon = coupon
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         coupon = await bot.coupon_service.update_coupon(self.coupon.id, required_role_id=None)
         await _audit_coupon(interaction, coupon, "Cupom editado", campo="Cargo obrigatório", valor=None)
@@ -822,16 +844,17 @@ class _CouponStatsSelect(discord.ui.Select[Any]):
         super().__init__(placeholder="Cupom...", options=options, min_values=1, max_values=1)
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         coupon = await _load_coupon(interaction, uuid.UUID(self.values[0]))
         if coupon is None:
             return
         stats = await bot.coupon_service.coupon_stats(coupon.id)
         if stats is None:
-            await interaction.response.send_message("Cupom não encontrado.", ephemeral=True)
+            await interaction.followup.send("Cupom não encontrado.", ephemeral=True)
             return
         view = SafeView(timeout=300)
         view.add_item(_BackToCouponsMenuButton())
-        await interaction.response.edit_message(
+        await interaction.edit_original_response(
             content=None, embed=coupon_stats_embed(stats), view=view
         )

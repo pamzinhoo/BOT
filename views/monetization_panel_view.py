@@ -78,15 +78,17 @@ class MonetizationMenuView(SafeView):
 
     @discord.ui.button(label="📋 Planos", style=discord.ButtonStyle.primary)
     async def plans_button(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await interaction.response.defer()
         assert interaction.guild_id is not None
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         plans = await bot.plan_service.list_plans(interaction.guild_id)
-        await interaction.response.edit_message(
+        await interaction.edit_original_response(
             content=None, embed=plans_list_embed(plans), view=PlansListView(plans)
         )
 
     @discord.ui.button(label="⚙️ Configurações da Loja", style=discord.ButtonStyle.secondary)
     async def settings_button(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await interaction.response.defer()
         assert interaction.guild_id is not None
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
 
@@ -110,12 +112,13 @@ class MonetizationMenuView(SafeView):
         from views.settings_panel import build_domain_embed
 
         settings = await get_settings(interaction.guild_id)
-        await interaction.response.edit_message(
+        await interaction.edit_original_response(
             content=None, embed=build_domain_embed(view.title, view.fields, settings), view=view
         )
 
     @discord.ui.button(label="🔌 Gateway de Pagamentos", style=discord.ButtonStyle.secondary)
     async def gateway_button(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await interaction.response.defer()
         assert interaction.guild_id is not None
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
 
@@ -132,7 +135,7 @@ class MonetizationMenuView(SafeView):
         from views.settings_panel import build_domain_embed
 
         settings = await get_settings(interaction.guild_id)
-        await interaction.response.edit_message(
+        await interaction.edit_original_response(
             content=(
                 "Credenciais do gateway (token/segredo) são configuradas só por variável de "
                 "ambiente — nunca aparecem aqui nem em nenhuma embed."
@@ -215,12 +218,13 @@ class _PlanSelect(discord.ui.Select[Any]):
         super().__init__(placeholder="Selecione um plano pra editar...", options=options, min_values=1, max_values=1)
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         plan = await bot.plan_service.get_plan(uuid.UUID(self.values[0]))
         if plan is None or plan.guild_id != interaction.guild_id:
-            await interaction.response.send_message("Plano não encontrado.", ephemeral=True)
+            await interaction.followup.send("Plano não encontrado.", ephemeral=True)
             return
-        await interaction.response.edit_message(
+        await interaction.edit_original_response(
             content=None, embed=await _plan_edit_embed(bot, plan), view=PlanEditView(plan)
         )
 
@@ -239,6 +243,7 @@ class _CreatePlanModal(discord.ui.Modal, title="Criar Plano"):
     )
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         assert interaction.guild_id is not None
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         try:
@@ -246,9 +251,9 @@ class _CreatePlanModal(discord.ui.Modal, title="Criar Plano"):
                 interaction.guild_id, str(self.name_input.value).strip(), executor=interaction.user
             )
         except ValueError as exc:
-            await interaction.response.send_message(str(exc), ephemeral=True)
+            await interaction.followup.send(str(exc), ephemeral=True)
             return
-        await interaction.response.edit_message(
+        await interaction.edit_original_response(
             content=None, embed=await _plan_edit_embed(bot, plan, benefits=[]), view=PlanEditView(plan)
         )
         await bot.painel_service.refresh_shop_panel(interaction.guild_id)
@@ -348,6 +353,7 @@ class PlanEditView(SafeView):
 
     @discord.ui.button(label="⭐ Recomendado", style=discord.ButtonStyle.secondary, row=2)
     async def toggle_recommended(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await interaction.response.defer()
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         plan = await bot.plan_service.update_plan(
             self.plan.id, is_recommended=not self.plan.is_recommended, executor=interaction.user
@@ -356,6 +362,7 @@ class PlanEditView(SafeView):
 
     @discord.ui.button(label="✅ Ativo/Inativo", style=discord.ButtonStyle.secondary, row=2)
     async def toggle_active(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await interaction.response.defer()
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         plan = await bot.plan_service.update_plan(
             self.plan.id, is_active=not self.plan.is_active, executor=interaction.user
@@ -375,10 +382,11 @@ class PlanEditView(SafeView):
 
     @discord.ui.button(label="◀ Voltar", style=discord.ButtonStyle.secondary, row=3)
     async def back_button(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await interaction.response.defer()
         assert interaction.guild_id is not None
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         plans = await bot.plan_service.list_plans(interaction.guild_id)
-        await interaction.response.edit_message(content=None, embed=plans_list_embed(plans), view=PlansListView(plans))
+        await interaction.edit_original_response(content=None, embed=plans_list_embed(plans), view=PlansListView(plans))
 
 
 async def _render_plan_edit(interaction: discord.Interaction, plan: Plan) -> None:
@@ -397,6 +405,7 @@ class _BackToPlanEditButton(discord.ui.Button[Any]):
         self.plan = plan
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         await _render_plan_edit(interaction, self.plan)
 
 
@@ -406,11 +415,12 @@ class _ConfirmDeleteButton(discord.ui.Button[Any]):
         self.plan = plan
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         assert interaction.guild_id is not None
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         await bot.plan_service.delete_plan(self.plan.id, executor=interaction.user)
         plans = await bot.plan_service.list_plans(interaction.guild_id)
-        await interaction.response.edit_message(content=None, embed=plans_list_embed(plans), view=PlansListView(plans))
+        await interaction.edit_original_response(content=None, embed=plans_list_embed(plans), view=PlansListView(plans))
         await bot.painel_service.refresh_shop_panel(interaction.guild_id)
 
 
@@ -420,6 +430,7 @@ class _RolePicker(discord.ui.RoleSelect):
         self.plan = plan
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         plan = await bot.plan_service.update_plan(
             self.plan.id, role_id=self.values[0].id, executor=interaction.user
@@ -465,6 +476,7 @@ class _PlanInfoModal(discord.ui.Modal, title="Editar informações"):
         self.add_item(self.description_input)
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         plan = await bot.plan_service.update_plan(
             self.plan.id,
@@ -518,6 +530,7 @@ class _PlanPriceModal(discord.ui.Modal, title="Editar preços"):
         except ValueError:
             await interaction.response.send_message("Preço inválido — use números (ex: 19.90).", ephemeral=True)
             return
+        await interaction.response.defer()
         plan = await bot.plan_service.update_plan(
             self.plan.id, price_monthly=monthly, price_yearly=yearly, price_one_time=one_time,
             executor=interaction.user,
@@ -540,6 +553,7 @@ class _PlanColorModal(discord.ui.Modal, title="Editar cor"):
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         raw = str(self.color_input.value).strip().lstrip("#")
         if not raw:
+            await interaction.response.defer()
             plan = await bot.plan_service.update_plan(self.plan.id, color=None, executor=interaction.user)
             await _render_plan_edit(interaction, plan)
             return
@@ -548,6 +562,7 @@ class _PlanColorModal(discord.ui.Modal, title="Editar cor"):
         except ValueError:
             await interaction.response.send_message("Cor inválida — use um hexadecimal (ex: #5865F2).", ephemeral=True)
             return
+        await interaction.response.defer()
         plan = await bot.plan_service.update_plan(self.plan.id, color=value, executor=interaction.user)
         await _render_plan_edit(interaction, plan)
 
@@ -568,6 +583,7 @@ class _PlanPositionModal(discord.ui.Modal, title="Editar ordem"):
         if not raw.lstrip("-").isdigit():
             await interaction.response.send_message("Digite um número inteiro.", ephemeral=True)
             return
+        await interaction.response.defer()
         plan = await bot.plan_service.update_plan(self.plan.id, position=int(raw), executor=interaction.user)
         await _render_plan_edit(interaction, plan)
 
@@ -586,6 +602,7 @@ class _BenefitsModal(discord.ui.Modal, title="Editar benefícios"):
         self.benefits_input.default = "\n".join(b.text for b in benefits)
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         lines = str(self.benefits_input.value).splitlines()
         await bot.plan_service.set_benefits(self.plan.id, lines, executor=interaction.user)
@@ -610,6 +627,7 @@ class _VoteWeightModal(discord.ui.Modal, title="Peso de voto do plano"):
                 "Digite um número inteiro maior que zero.", ephemeral=True
             )
             return
+        await interaction.response.defer()
         await bot.vote_weight_service.sync_plan_benefit_weight(interaction.guild_id, self.plan, int(raw))
         await _render_plan_edit(interaction, self.plan)
 
@@ -632,6 +650,7 @@ class _MessageEditModal(discord.ui.Modal):
         )
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         content = str(self.content_input.value).strip()
         if content:

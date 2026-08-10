@@ -147,6 +147,7 @@ class SubscriptionRenewalMenuView(SafeView):
 
     @discord.ui.button(label="✅ Ativar renovações", style=discord.ButtonStyle.success, row=0)
     async def toggle_enabled(self, interaction: discord.Interaction, _b: discord.ui.Button) -> None:
+        await interaction.response.defer()
         assert interaction.guild_id is not None
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         before = self.settings.enabled
@@ -158,6 +159,7 @@ class SubscriptionRenewalMenuView(SafeView):
 
     @discord.ui.button(label="⏰ Avisos", style=discord.ButtonStyle.primary, row=0)
     async def days_button(self, interaction: discord.Interaction, _b: discord.ui.Button) -> None:
+        await interaction.response.defer()
         await render_days_menu(interaction)
 
     @discord.ui.button(label="📢 Canais", style=discord.ButtonStyle.primary, row=0)
@@ -210,10 +212,12 @@ class SubscriptionRenewalMenuView(SafeView):
 
     @discord.ui.button(label="🔘 Botões", style=discord.ButtonStyle.secondary, row=2)
     async def buttons_button(self, interaction: discord.Interaction, _b: discord.ui.Button) -> None:
+        await interaction.response.defer()
         await render_buttons_menu(interaction)
 
     @discord.ui.button(label="📊 Painel administrativo", style=discord.ButtonStyle.secondary, row=2)
     async def admin_button(self, interaction: discord.Interaction, _b: discord.ui.Button) -> None:
+        await interaction.response.defer()
         await render_admin_panel(interaction, page=0)
 
     @discord.ui.button(label="◀ Voltar", style=discord.ButtonStyle.secondary, row=3)
@@ -233,6 +237,7 @@ class _BackToRenewalMenuButton(discord.ui.Button[Any]):
         super().__init__(label="◀ Voltar", style=discord.ButtonStyle.secondary, row=4)
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         await render_renewal_menu(interaction)
 
 
@@ -254,6 +259,7 @@ class _DeliveryModeSelect(discord.ui.Select[Any]):
         )
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         assert interaction.guild_id is not None
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         mode = self.values[0]
@@ -278,6 +284,7 @@ class _RenewalChannelPicker(discord.ui.ChannelSelect):
         )
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         assert interaction.guild_id is not None
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         settings = await bot.subscription_renewal_config_service.get_settings(interaction.guild_id)
@@ -303,6 +310,7 @@ class _IntervalSelect(discord.ui.Select[Any]):
         )
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         assert interaction.guild_id is not None
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         settings = await bot.subscription_renewal_config_service.get_settings(interaction.guild_id)
@@ -331,6 +339,7 @@ class _GraceSelect(discord.ui.Select[Any]):
         )
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         assert interaction.guild_id is not None
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         settings = await bot.subscription_renewal_config_service.get_settings(interaction.guild_id)
@@ -368,6 +377,7 @@ class _RemovalToggleSelect(discord.ui.Select[Any]):
         )
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         assert interaction.guild_id is not None
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         attr = self.values[0]
@@ -451,6 +461,7 @@ class _BackToDaysButton(discord.ui.Button[Any]):
         super().__init__(label="◀ Voltar", style=discord.ButtonStyle.secondary, row=4)
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         await render_days_menu(interaction)
 
 
@@ -460,6 +471,7 @@ class _ReminderDayToggleButton(discord.ui.Button[Any]):
         self.day_id = day_id
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         day = await bot.subscription_renewal_config_service.toggle_reminder_day(
             self.day_id, guild_id=interaction.guild_id
@@ -483,6 +495,7 @@ class _ReminderDayMoveButton(discord.ui.Button[Any]):
         self.delta = delta
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         await bot.subscription_renewal_config_service.move_reminder_day(
             self.day_id, guild_id=interaction.guild_id, delta=self.delta
@@ -496,6 +509,7 @@ class _ReminderDayRemoveButton(discord.ui.Button[Any]):
         self.day_id = day_id
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         await bot.subscription_renewal_config_service.remove_reminder_day(
             self.day_id, guild_id=interaction.guild_id
@@ -524,12 +538,13 @@ class _AddReminderDayModal(discord.ui.Modal, title="Novo aviso de renovação"):
         if not raw.isdigit():
             await interaction.response.send_message("Digite um número inteiro.", ephemeral=True)
             return
+        await interaction.response.defer()
         try:
             day = await bot.subscription_renewal_config_service.add_reminder_day(
                 interaction.guild_id, int(raw)
             )
         except ValueError as exc:
-            await interaction.response.send_message(str(exc), ephemeral=True)
+            await interaction.followup.send(str(exc), ephemeral=True)
             return
         await _log_change(interaction, "Aviso adicionado", "—", f"{day.days_before} dia(s) antes")
         await render_days_menu(interaction)
@@ -572,6 +587,7 @@ class _MessageEditModal(discord.ui.Modal):
         self.content_input.placeholder = f"Placeholders: {_PLACEHOLDER_HELP}"[:100]
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         assert interaction.guild_id is not None
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         content = str(self.content_input.value).strip()
@@ -657,6 +673,7 @@ class _BackToButtonsButton(discord.ui.Button[Any]):
         super().__init__(label="◀ Voltar", style=discord.ButtonStyle.secondary, row=4)
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         await render_buttons_menu(interaction)
 
 
@@ -666,6 +683,7 @@ class _ButtonToggleButton(discord.ui.Button[Any]):
         self.key = key
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         assert interaction.guild_id is not None
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         button = await bot.subscription_renewal_config_service.toggle_button(
@@ -715,6 +733,7 @@ class _ButtonEditModal(discord.ui.Modal):
         self.add_item(self.emoji_input)
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         assert interaction.guild_id is not None
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         label = str(self.label_input.value).strip() or None
@@ -810,12 +829,15 @@ class _AdminPanelView(SafeView):
 
     @discord.ui.button(label="◀ Anterior", style=discord.ButtonStyle.secondary)
     async def _previous(self, interaction: discord.Interaction, _b: discord.ui.Button) -> None:
+        await interaction.response.defer()
         await render_admin_panel(interaction, page=self.page - 1)
 
     @discord.ui.button(label="Próxima ▶", style=discord.ButtonStyle.secondary)
     async def _next(self, interaction: discord.Interaction, _b: discord.ui.Button) -> None:
+        await interaction.response.defer()
         await render_admin_panel(interaction, page=self.page + 1)
 
     @discord.ui.button(label="◀ Voltar", style=discord.ButtonStyle.secondary, row=1)
     async def _back(self, interaction: discord.Interaction, _b: discord.ui.Button) -> None:
+        await interaction.response.defer()
         await render_renewal_menu(interaction)

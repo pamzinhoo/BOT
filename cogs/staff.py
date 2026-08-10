@@ -17,13 +17,14 @@ class StaffCog(commands.Cog):
     async def staff(self, interaction: discord.Interaction, membro: discord.Member) -> None:
         if interaction.guild_id is None:
             return
+        await interaction.response.defer()
         profile = await self.bot.staff_service.get_profile(interaction.guild_id, membro.id)
         if profile is None:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "Este membro ainda não possui registro de staff.", ephemeral=True
             )
             return
-        await interaction.response.send_message(embed=staff_profile_embed(profile, membro))
+        await interaction.followup.send(embed=staff_profile_embed(profile, membro))
 
 
 async def setup(bot: LimerenceBot) -> None:

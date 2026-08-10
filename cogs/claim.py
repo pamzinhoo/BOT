@@ -22,11 +22,12 @@ class ClaimCog(commands.Cog):
         member = interaction.user
         if guild is None or not isinstance(member, discord.Member) or interaction.channel_id is None:
             return
+        await interaction.response.defer()
 
         existing = await self.bot.ticket_service.get_by_channel_id(interaction.channel_id)
         panel = await self.bot.ticket_panel_service.get_panel_for_ticket(existing) if existing else None
         if not member_matches_panel_claim_roles(member, panel):
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "Apenas os cargos responsáveis por este painel podem assumir este ticket.",
                 ephemeral=True,
             )
@@ -36,7 +37,7 @@ class ClaimCog(commands.Cog):
         try:
             await self.bot.claim_service.claim_ticket(interaction.channel_id, staff.id)
         except ClaimError as exc:
-            await interaction.response.send_message(str(exc), ephemeral=True)
+            await interaction.followup.send(str(exc), ephemeral=True)
             return
 
         ticket = await self.bot.ticket_service.get_by_channel_id(interaction.channel_id)
@@ -50,7 +51,7 @@ class ClaimCog(commands.Cog):
             message=f"{member} assumiu o ticket via /claim.",
         )
         await self.bot.painel_service.refresh_dashboard(guild.id)
-        await interaction.response.send_message(f"{member.mention} assumiu este ticket.")
+        await interaction.followup.send(f"{member.mention} assumiu este ticket.")
 
     @app_commands.command(name="unclaim", description="Libera o ticket deste canal.")
     @has_permission("unclaim")
@@ -59,12 +60,13 @@ class ClaimCog(commands.Cog):
         member = interaction.user
         if guild is None or not isinstance(member, discord.Member) or interaction.channel_id is None:
             return
+        await interaction.response.defer()
 
         staff = await self.bot.staff_service.ensure_staff(guild.id, member.id, member.display_name)
         try:
             await self.bot.claim_service.unclaim_ticket(interaction.channel_id, staff.id)
         except ClaimError as exc:
-            await interaction.response.send_message(str(exc), ephemeral=True)
+            await interaction.followup.send(str(exc), ephemeral=True)
             return
 
         ticket = await self.bot.ticket_service.get_by_channel_id(interaction.channel_id)
@@ -78,7 +80,7 @@ class ClaimCog(commands.Cog):
             message=f"{member} liberou o ticket via /unclaim.",
         )
         await self.bot.painel_service.refresh_dashboard(guild.id)
-        await interaction.response.send_message(f"{member.mention} liberou este ticket.")
+        await interaction.followup.send(f"{member.mention} liberou este ticket.")
 
 
 async def setup(bot: LimerenceBot) -> None:

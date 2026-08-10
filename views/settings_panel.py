@@ -147,19 +147,20 @@ class DomainSettingsView(SafeView):
     async def render(self, interaction: discord.Interaction) -> None:
         assert interaction.guild_id is not None
         settings = await self.get_settings(interaction.guild_id)
-        await interaction.response.edit_message(
-            content=None,
-            embed=build_domain_embed(self.title, self.fields, settings),
-            view=DomainSettingsView(
-                title=self.title,
-                fields=self.fields,
-                get_settings=self.get_settings,
-                update_settings=self.update_settings,
-                on_back=self.on_back,
-                send_action=self.send_action,
-                send_label=self.send_label,
-            ),
+        embed = build_domain_embed(self.title, self.fields, settings)
+        view = DomainSettingsView(
+            title=self.title,
+            fields=self.fields,
+            get_settings=self.get_settings,
+            update_settings=self.update_settings,
+            on_back=self.on_back,
+            send_action=self.send_action,
+            send_label=self.send_label,
         )
+        if interaction.response.is_done():
+            await interaction.edit_original_response(content=None, embed=embed, view=view)
+        else:
+            await interaction.response.edit_message(content=None, embed=embed, view=view)
 
 
 class _FieldPickSelect(discord.ui.Select[DomainSettingsView]):
@@ -176,6 +177,7 @@ class _FieldPickSelect(discord.ui.Select[DomainSettingsView]):
         parent = self.parent_view
 
         if field.kind == FieldKind.BOOL:
+            await interaction.response.defer()
             settings = await parent.get_settings(interaction.guild_id)
             before = getattr(settings, field.attr)
             new_value = not before
@@ -220,6 +222,7 @@ class _ChannelPicker(discord.ui.ChannelSelect):
         self.field = field
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         assert interaction.guild_id is not None
         settings = await self.parent_view.get_settings(interaction.guild_id)
         before = getattr(settings, self.field.attr)
@@ -236,6 +239,7 @@ class _RolePicker(discord.ui.RoleSelect):
         self.field = field
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         assert interaction.guild_id is not None
         settings = await self.parent_view.get_settings(interaction.guild_id)
         before = getattr(settings, self.field.attr)
@@ -256,6 +260,7 @@ class _RoleMultiPicker(discord.ui.RoleSelect):
         self.field = field
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         assert interaction.guild_id is not None
         settings = await self.parent_view.get_settings(interaction.guild_id)
         before = list(getattr(settings, self.field.attr) or [])
@@ -276,6 +281,7 @@ class _ChoicePicker(discord.ui.Select[Any]):
         self.field = field
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         assert interaction.guild_id is not None
         settings = await self.parent_view.get_settings(interaction.guild_id)
         before = getattr(settings, self.field.attr)
@@ -284,7 +290,7 @@ class _ChoicePicker(discord.ui.Select[Any]):
             try:
                 after = self.field.validator(settings, after)
             except ValueError as exc:
-                await interaction.response.send_message(f"❌ {exc}", ephemeral=True)
+                await interaction.followup.send(f"❌ {exc}", ephemeral=True)
                 return
         await self.parent_view.update_settings(interaction.guild_id, **{self.field.attr: after})
         await _log_change(interaction, self.parent_view, self.field, before, after)
@@ -307,6 +313,7 @@ class _TextModal(discord.ui.Modal):
         self.value_input.placeholder = "Deixe vazio para usar a mensagem padrão"
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         assert interaction.guild_id is not None
         raw = str(self.value_input.value).strip()
         settings = await self.parent_view.get_settings(interaction.guild_id)
@@ -316,7 +323,7 @@ class _TextModal(discord.ui.Modal):
             try:
                 after = self.field.validator(settings, after)
             except ValueError as exc:
-                await interaction.response.send_message(f"❌ {exc}", ephemeral=True)
+                await interaction.followup.send(f"❌ {exc}", ephemeral=True)
                 return
         await self.parent_view.update_settings(interaction.guild_id, **{self.field.attr: after})
         await _log_change(interaction, self.parent_view, self.field, before, after)
@@ -329,6 +336,7 @@ class _BackToDomainButton(discord.ui.Button[Any]):
         self.parent_view = parent
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         await self.parent_view.render(interaction)
 
 
@@ -338,10 +346,11 @@ class _SendActionButton(discord.ui.Button[Any]):
         self.parent_view = parent
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer(ephemeral=True)
         assert interaction.guild_id is not None
         assert self.parent_view.send_action is not None
         ok, message = await self.parent_view.send_action(interaction.guild_id)
-        await interaction.response.send_message(
+        await interaction.followup.send(
             f"{'✅' if ok else '❌'} {message}", ephemeral=True
         )
 
@@ -352,6 +361,7 @@ class _ResetCategoryButton(discord.ui.Button[Any]):
         self.parent_view = parent
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         assert interaction.guild_id is not None
         parent = self.parent_view
         settings = await parent.get_settings(interaction.guild_id)
@@ -371,7 +381,7 @@ class _ResetCategoryButton(discord.ui.Button[Any]):
         else:
             embed.description = "Esta categoria já está nos valores padrão — nada para restaurar."
 
-        await interaction.response.edit_message(
+        await interaction.edit_original_response(
             content=None, embed=embed, view=_ResetCategoryConfirmView(parent, defaults, enabled=bool(changed))
         )
 
@@ -396,6 +406,7 @@ class _ConfirmCategoryResetButton(discord.ui.Button[Any]):
         self.defaults = defaults
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         from core.bot import LimerenceBot  # import tardio evita ciclo
 
         assert interaction.guild_id is not None
@@ -427,6 +438,7 @@ class _CancelCategoryResetButton(discord.ui.Button[Any]):
         self.parent_view = parent
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         await self.parent_view.render(interaction)
 
 
@@ -453,13 +465,14 @@ class _NumberModal(discord.ui.Modal):
         self.value_input.placeholder = "Ex: 15" if not field.allow_clear else "Ex: 15 (vazio = sem limite)"
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         assert interaction.guild_id is not None
         raw = str(self.value_input.value).strip()
         settings = await self.parent_view.get_settings(interaction.guild_id)
         before = getattr(settings, self.field.attr)
         if not raw:
             if not self.field.allow_clear:
-                await interaction.response.send_message(
+                await interaction.followup.send(
                     "Esse campo não pode ficar vazio — digite um número.", ephemeral=True
                 )
                 return
@@ -469,7 +482,7 @@ class _NumberModal(discord.ui.Modal):
             after = int(raw)
             await self.parent_view.update_settings(interaction.guild_id, **{self.field.attr: after})
         else:
-            await interaction.response.send_message("Digite um número inteiro válido.", ephemeral=True)
+            await interaction.followup.send("Digite um número inteiro válido.", ephemeral=True)
             return
         await _log_change(interaction, self.parent_view, self.field, before, after)
         await self.parent_view.render(interaction)

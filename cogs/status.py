@@ -17,6 +17,7 @@ class StatusCog(commands.Cog):
     async def status(self, interaction: discord.Interaction) -> None:
         if interaction.guild_id is None:
             return
+        await interaction.response.defer()
         guild_id = interaction.guild_id
 
         open_tickets = await self.bot.ticket_service.list_open_by_guild(guild_id)
@@ -35,7 +36,7 @@ class StatusCog(commands.Cog):
         embed.add_field(name="🎫 Tickets Abertos", value=str(len(open_tickets)))
         embed.add_field(name="🎫 Tickets Assumidos", value=str(assumed))
         embed.add_field(name="⭐ Média Geral", value=f"{avg_rating:.1f}")
-        await interaction.response.send_message(embed=embed)
+        await interaction.followup.send(embed=embed)
 
 
 async def setup(bot: LimerenceBot) -> None:

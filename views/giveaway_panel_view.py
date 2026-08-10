@@ -44,11 +44,12 @@ class GiveawayMenuView(SafeView):
 
     @discord.ui.button(label="📋 Sorteios Ativos", style=discord.ButtonStyle.secondary)
     async def list_button(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await interaction.response.defer()
         assert interaction.guild_id is not None
         bot: "LimerenceBot" = interaction.client  # type: ignore[assignment]
         giveaways = await bot.giveaway_service.list_by_guild(interaction.guild_id)
         open_giveaways = [g for g in giveaways if g.status == GiveawayStatus.OPEN]
-        await interaction.response.edit_message(
+        await interaction.edit_original_response(
             content=None,
             embed=_active_giveaways_embed(open_giveaways),
             view=GiveawayMenuView(self.on_back),
@@ -277,6 +278,7 @@ async def _publish_giveaway(
         )
         return
 
+    await interaction.response.defer(ephemeral=True)
     try:
         giveaway = await bot.giveaway_service.create_giveaway(
             guild_id=interaction.guild_id,
@@ -292,7 +294,7 @@ async def _publish_giveaway(
             prize_text=prize_text,
         )
     except InvalidWinnersCountError as exc:
-        await interaction.response.send_message(f"❌ {exc}", ephemeral=True)
+        await interaction.followup.send(f"❌ {exc}", ephemeral=True)
         return
 
     message = await channel.send(embed=giveaway_panel_embed(giveaway, 0), view=GiveawayOpenView(giveaway.id))
@@ -312,6 +314,6 @@ async def _publish_giveaway(
         details={"giveaway_id": str(giveaway.id), "title": giveaway.title},
     )
 
-    await interaction.response.send_message(
+    await interaction.followup.send(
         f"✅ Sorteio criado e enviado em {channel.mention}!{pin_warning}", ephemeral=True
     )
