@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -46,12 +47,19 @@ class ManualProvider(PaymentProvider):
                 txid=external_id,
             )
 
+        qr_code_base64 = None
+        if payload and settings.send_qr_code:
+            # Geracao de QR (Pillow) e CPU-bound e sincrona — despachada pra
+            # uma thread pra nao travar o unico event loop (bot + API) durante
+            # uma rajada de compras PIX simultaneas.
+            qr_code_base64 = await asyncio.to_thread(generate_qr_base64, payload)
+
         return ChargeResult(
             external_id=external_id,
             status=PaymentStatus.PENDING,
             checkout_url=None,
             qr_code=payload if (payload and settings.send_copy_paste) else None,
-            qr_code_base64=generate_qr_base64(payload) if (payload and settings.send_qr_code) else None,
+            qr_code_base64=qr_code_base64,
             expires_at=datetime.now(UTC) + timedelta(minutes=settings.expiration_minutes),
             raw={"external_reference": request.external_reference},
         )

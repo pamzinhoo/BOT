@@ -96,15 +96,18 @@ def _menu_embed(settings: PaymentDmSettings) -> discord.Embed:
 
 
 async def render_payment_dm_menu(interaction: discord.Interaction) -> None:
+    # O botao de entrada em views/monetization_panel_view.py chama isto sem
+    # deferizar antes, e aquele arquivo esta fora do escopo pra editar —
+    # entao deferizamos aqui, com guard pra nao duplicar quando o chamador
+    # interno (back_button) ja deferizou.
+    if not interaction.response.is_done():
+        await interaction.response.defer()
     assert interaction.guild_id is not None
     bot: LimerenceBot = interaction.client  # type: ignore[assignment]
     settings = await bot.payment_service.get_payment_dm_settings(interaction.guild_id)
     embed = _menu_embed(settings)
     view = PaymentDmMenuView()
-    if interaction.response.is_done():
-        await interaction.edit_original_response(content=None, embed=embed, view=view)
-    else:
-        await interaction.response.edit_message(content=None, embed=embed, view=view)
+    await interaction.edit_original_response(content=None, embed=embed, view=view)
 
 
 class PaymentDmMenuView(SafeView):

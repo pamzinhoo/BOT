@@ -124,15 +124,18 @@ async def renewal_menu_embed(
 
 
 async def render_renewal_menu(interaction: discord.Interaction) -> None:
+    # Toda chamada dentro deste arquivo ja deferiza antes de chegar aqui, mas
+    # views/monetization_panel_view.py (o botao de entrada) chama direto sem
+    # deferizar e nao ha como editar aquele arquivo — entao deferizamos aqui
+    # tambem, com guard pra nao duplicar quando o chamador ja deferizou.
+    if not interaction.response.is_done():
+        await interaction.response.defer()
     assert interaction.guild_id is not None
     bot: LimerenceBot = interaction.client  # type: ignore[assignment]
     settings = await bot.subscription_renewal_config_service.get_settings(interaction.guild_id)
     embed = await renewal_menu_embed(bot, interaction.guild_id, settings)
     view = SubscriptionRenewalMenuView(settings)
-    if interaction.response.is_done():
-        await interaction.edit_original_response(content=None, embed=embed, view=view)
-    else:
-        await interaction.response.edit_message(content=None, embed=embed, view=view)
+    await interaction.edit_original_response(content=None, embed=embed, view=view)
 
 
 class SubscriptionRenewalMenuView(SafeView):

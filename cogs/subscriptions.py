@@ -51,11 +51,15 @@ class SubscriptionsCog(commands.Cog):
     @is_admin()
     async def cancelar(self, interaction: discord.Interaction, usuario: discord.Member) -> None:
         assert interaction.guild_id is not None
+        # Defere de imediato: list_cancelable_subscriptions + o laco de
+        # cancel_subscription abaixo sao varias chamadas ao banco que podem
+        # passar dos 3s de prazo do Discord antes da 1a resposta.
+        await interaction.response.defer(ephemeral=True)
         subscriptions = await self.bot.subscription_service.list_cancelable_subscriptions(
             interaction.guild_id, usuario.id
         )
         if not subscriptions:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "Este usuário não tem assinaturas ativas ou pendentes.", ephemeral=True
             )
             return
@@ -63,7 +67,7 @@ class SubscriptionsCog(commands.Cog):
             await self.bot.subscription_service.cancel_subscription(
                 subscription.id, executor=interaction.user
             )
-        await interaction.response.send_message(
+        await interaction.followup.send(
             f"Assinatura(s) de {usuario.mention} cancelada(s).", ephemeral=True
         )
 

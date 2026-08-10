@@ -159,6 +159,14 @@ class PixManualSettingsView(DomainSettingsView):
 async def render_pix_manual_menu(interaction: discord.Interaction) -> None:
     from views.monetization_panel_view import _back_to_monetization_menu
 
+    # Chamado a partir de views/monetization_panel_view.py (que nao deferiza
+    # antes de chamar) e nao ha como garantir defer no chamador dali sem
+    # editar aquele arquivo — entao deferizamos aqui, no topo, antes de
+    # qualquer consulta ao banco. Guard com is_done() pra nao dar
+    # InteractionResponded se algum chamador futuro ja tiver deferizado.
+    if not interaction.response.is_done():
+        await interaction.response.defer()
+
     assert interaction.guild_id is not None
     bot: LimerenceBot = interaction.client  # type: ignore[assignment]
 
@@ -173,7 +181,7 @@ async def render_pix_manual_menu(interaction: discord.Interaction) -> None:
         on_back=_back_to_monetization_menu,
     )
     settings = await get_settings(interaction.guild_id)
-    await interaction.response.edit_message(
+    await interaction.edit_original_response(
         content=(
             "A chave PIX não é um segredo (ela precisa ser mostrada ao comprador), mas só "
             "administradores conseguem ver/editar esta tela."

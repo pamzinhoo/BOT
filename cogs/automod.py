@@ -143,6 +143,10 @@ class AutoModCog(commands.Cog):
     ) -> None:
         if interaction.guild is None:
             return
+        # Defere de imediato: get_settings + update_settings abaixo sao
+        # chamadas ao banco que podem passar dos 3s de prazo do Discord
+        # antes da 1a resposta.
+        await interaction.response.defer(ephemeral=True)
         settings = await self.bot.automod_service.get_settings(interaction.guild.id)
         fields: dict[str, object] = {}
         if timeout_medio_minutos is not None:
@@ -165,11 +169,11 @@ class AutoModCog(commands.Cog):
             fields["ignored_role_ids"] = ignored_roles
 
         if not fields:
-            await interaction.response.send_message(embed=automod_status_embed(settings), ephemeral=True)
+            await interaction.followup.send(embed=automod_status_embed(settings), ephemeral=True)
             return
 
         settings = await self.bot.automod_service.update_settings(interaction.guild.id, **fields)
-        await interaction.response.send_message(embed=automod_status_embed(settings), ephemeral=True)
+        await interaction.followup.send(embed=automod_status_embed(settings), ephemeral=True)
 
     @automod_group.command(name="logs", description="Mostra o histórico de ações automáticas do AutoMod.")
     @app_commands.describe(quantidade="Quantidade de registros (padrão 20)")
