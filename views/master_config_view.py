@@ -533,13 +533,13 @@ async def _open_category(interaction: discord.Interaction, category: str) -> Non
 
     if category == "auditoria":
         settings = await bot.audit_log_service.get_settings(interaction.guild_id)
-        await interaction.response.edit_message(
+        await interaction.edit_original_response(
             content=None, embed=audit_log_summary_embed(settings), view=AuditLogPanelView(settings)
         )
         return
 
     if category == "monetizacao":
-        await interaction.response.edit_message(
+        await interaction.edit_original_response(
             content=None, embed=monetization_menu_embed(), view=MonetizationMenuView(on_back=_back_to_main_menu)
         )
         return
@@ -553,7 +553,7 @@ async def _open_category(interaction: discord.Interaction, category: str) -> Non
         return
 
     if category == "comunidade":
-        await interaction.response.edit_message(
+        await interaction.edit_original_response(
             content=None, embed=comunidade_menu_embed(), view=ComunidadeMenuView(on_back=_back_to_main_menu)
         )
         return
@@ -567,7 +567,7 @@ async def _open_category(interaction: discord.Interaction, category: str) -> Non
         embed.set_footer(text="Configurações específicas: use as outras categorias no menu.")
         view = SafeView(timeout=300)
         view.add_item(_BackToMainMenuButton())
-        await interaction.response.edit_message(content=None, embed=embed, view=view)
+        await interaction.edit_original_response(content=None, embed=embed, view=view)
         return
 
     title, builder = _CATEGORY_BUILDERS[category]
@@ -592,7 +592,7 @@ async def _open_category(interaction: discord.Interaction, category: str) -> Non
     settings = await get_settings(interaction.guild_id)
     from views.settings_panel import build_domain_embed
 
-    await interaction.response.edit_message(
+    await interaction.edit_original_response(
         content=None, embed=build_domain_embed(title, fields, settings), view=domain_view
     )
 
@@ -634,6 +634,7 @@ class _CategorySelect(discord.ui.Select["MainConfigMenuView"]):
         super().__init__(placeholder="Escolha uma categoria...", options=options, min_values=1, max_values=1)
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         await _open_category(interaction, self.values[0])
 
 

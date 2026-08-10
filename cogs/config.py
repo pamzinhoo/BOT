@@ -80,13 +80,14 @@ class ConfigCog(commands.Cog):
     @has_permission("config")
     async def canal_log(self, interaction: discord.Interaction, canal: discord.TextChannel) -> None:
         assert interaction.guild_id is not None
+        await interaction.response.defer(ephemeral=True)
         before = await self.bot.config_service.get_settings(interaction.guild_id)
         await self.bot.config_service.update(interaction.guild_id, log_channel_id=canal.id)
         await self._log(
             interaction, category="Tickets", name="Canal de Logs",
             before=_fmt_channel(before.log_channel_id), after=canal.mention,
         )
-        await interaction.response.send_message(f"Canal de logs definido: {canal.mention}", ephemeral=True)
+        await interaction.followup.send(f"Canal de logs definido: {canal.mention}", ephemeral=True)
 
     @config_group.command(name="canal-ranking", description="Define o canal de ranking.")
     @has_permission("config")
@@ -94,6 +95,7 @@ class ConfigCog(commands.Cog):
         self, interaction: discord.Interaction, canal: discord.TextChannel
     ) -> None:
         assert interaction.guild_id is not None
+        await interaction.response.defer(ephemeral=True)
         before = await self.bot.config_service.get_settings(interaction.guild_id)
         await self.bot.config_service.update(
             interaction.guild_id, ranking_channel_id=canal.id, ranking_message_id=None
@@ -103,7 +105,7 @@ class ConfigCog(commands.Cog):
             before=_fmt_channel(before.ranking_channel_id), after=canal.mention,
         )
         await self.bot.painel_service.refresh_dashboard(interaction.guild_id)
-        await interaction.response.send_message(
+        await interaction.followup.send(
             f"Canal de ranking definido: {canal.mention}. A mensagem de ranking foi publicada lá "
             "e vai se atualizar sozinha a cada claim/fechamento/avaliação.",
             ephemeral=True,
@@ -115,13 +117,14 @@ class ConfigCog(commands.Cog):
         self, interaction: discord.Interaction, canal: discord.TextChannel
     ) -> None:
         assert interaction.guild_id is not None
+        await interaction.response.defer(ephemeral=True)
         before = await self.bot.config_service.get_settings(interaction.guild_id)
         await self.bot.config_service.update(interaction.guild_id, evaluations_channel_id=canal.id)
         await self._log(
             interaction, category="Avaliações", name="Canal",
             before=_fmt_channel(before.evaluations_channel_id), after=canal.mention,
         )
-        await interaction.response.send_message(
+        await interaction.followup.send(
             f"Canal de avaliações definido: {canal.mention}", ephemeral=True
         )
 
@@ -134,13 +137,14 @@ class ConfigCog(commands.Cog):
         self, interaction: discord.Interaction, canal: discord.TextChannel
     ) -> None:
         assert interaction.guild_id is not None
+        await interaction.response.defer(ephemeral=True)
         before = await self.bot.config_service.get_settings(interaction.guild_id)
         await self.bot.config_service.update(interaction.guild_id, transcript_channel_id=canal.id)
         await self._log(
             interaction, category="Tickets", name="Canal de Transcrição",
             before=_fmt_channel(before.transcript_channel_id), after=canal.mention,
         )
-        await interaction.response.send_message(
+        await interaction.followup.send(
             f"Canal de transcrições definido: {canal.mention}", ephemeral=True
         )
 
@@ -153,13 +157,14 @@ class ConfigCog(commands.Cog):
         self, interaction: discord.Interaction, canal: discord.TextChannel
     ) -> None:
         assert interaction.guild_id is not None
+        await interaction.response.defer(ephemeral=True)
         before = await self.bot.config_service.get_settings(interaction.guild_id)
         await self.bot.config_service.update(interaction.guild_id, ticket_alert_channel_id=canal.id)
         await self._log(
             interaction, category="Alertas", name="Canal de Alerta de Tickets",
             before=_fmt_channel(before.ticket_alert_channel_id), after=canal.mention,
         )
-        await interaction.response.send_message(
+        await interaction.followup.send(
             f"Canal de alerta de tickets definido: {canal.mention}", ephemeral=True
         )
 
@@ -171,13 +176,14 @@ class ConfigCog(commands.Cog):
         self, interaction: discord.Interaction, categoria: discord.CategoryChannel
     ) -> None:
         assert interaction.guild_id is not None
+        await interaction.response.defer(ephemeral=True)
         before = await self.bot.config_service.get_settings(interaction.guild_id)
         await self.bot.config_service.update(interaction.guild_id, ticket_category_id=categoria.id)
         await self._log(
             interaction, category="Tickets", name="Categoria de Tickets",
             before=_fmt_channel(before.ticket_category_id), after=f"<#{categoria.id}>",
         )
-        await interaction.response.send_message(
+        await interaction.followup.send(
             f"Categoria de tickets definida: {categoria.name}", ephemeral=True
         )
 
@@ -185,37 +191,40 @@ class ConfigCog(commands.Cog):
     @has_permission("config")
     async def cargo_moderador(self, interaction: discord.Interaction, cargo: discord.Role) -> None:
         assert interaction.guild_id is not None
+        await interaction.response.defer(ephemeral=True)
         before = await self.bot.config_service.get_settings(interaction.guild_id)
         await self.bot.config_service.update(interaction.guild_id, moderator_role_id=cargo.id)
         await self._log(
             interaction, category="Cargos", name="Moderador",
             before=_fmt_role(before.moderator_role_id), after=cargo.mention,
         )
-        await interaction.response.send_message(f"Cargo de moderador definido: {cargo.mention}", ephemeral=True)
+        await interaction.followup.send(f"Cargo de moderador definido: {cargo.mention}", ephemeral=True)
 
     @config_group.command(name="cargo-dev", description="Define o cargo de desenvolvedor.")
     @has_permission("config")
     async def cargo_dev(self, interaction: discord.Interaction, cargo: discord.Role) -> None:
         assert interaction.guild_id is not None
+        await interaction.response.defer(ephemeral=True)
         before = await self.bot.config_service.get_settings(interaction.guild_id)
         await self.bot.config_service.update(interaction.guild_id, dev_role_id=cargo.id)
         await self._log(
             interaction, category="Cargos", name="Desenvolvedor",
             before=_fmt_role(before.dev_role_id), after=cargo.mention,
         )
-        await interaction.response.send_message(f"Cargo de dev definido: {cargo.mention}", ephemeral=True)
+        await interaction.followup.send(f"Cargo de dev definido: {cargo.mention}", ephemeral=True)
 
     @config_group.command(name="cargo-ceo", description="Define o cargo de CEO.")
     @has_permission("config")
     async def cargo_ceo(self, interaction: discord.Interaction, cargo: discord.Role) -> None:
         assert interaction.guild_id is not None
+        await interaction.response.defer(ephemeral=True)
         before = await self.bot.config_service.get_settings(interaction.guild_id)
         await self.bot.config_service.update(interaction.guild_id, ceo_role_id=cargo.id)
         await self._log(
             interaction, category="Cargos", name="CEO",
             before=_fmt_role(before.ceo_role_id), after=cargo.mention,
         )
-        await interaction.response.send_message(f"Cargo de CEO definido: {cargo.mention}", ephemeral=True)
+        await interaction.followup.send(f"Cargo de CEO definido: {cargo.mention}", ephemeral=True)
 
     @config_group.command(
         name="tempo-inatividade", description="Define minutos para considerar staff inativa."
@@ -223,6 +232,7 @@ class ConfigCog(commands.Cog):
     @has_permission("config")
     async def tempo_inatividade(self, interaction: discord.Interaction, minutos: int) -> None:
         assert interaction.guild_id is not None
+        await interaction.response.defer(ephemeral=True)
         before = await self.bot.config_service.get_settings(interaction.guild_id)
         await self.bot.config_service.update(interaction.guild_id, inactive_after_minutes=minutos)
         await self._log(
@@ -230,7 +240,7 @@ class ConfigCog(commands.Cog):
             before=f"{before.inactive_after_minutes} minutos" if before.inactive_after_minutes else "—",
             after=f"{minutos} minutos",
         )
-        await interaction.response.send_message(
+        await interaction.followup.send(
             f"Tempo de inatividade definido: {minutos} minutos", ephemeral=True
         )
 
@@ -242,13 +252,14 @@ class ConfigCog(commands.Cog):
         self, interaction: discord.Interaction, canal: discord.TextChannel
     ) -> None:
         assert interaction.guild_id is not None
+        await interaction.response.defer(ephemeral=True)
         before = await self.bot.audit_log_service.get_settings(interaction.guild_id)
         await self.bot.audit_log_service.update_settings(interaction.guild_id, channel_id=canal.id)
         await self._log(
             interaction, category="Auditoria", name="Canal de Auditoria",
             before=_fmt_channel(before.channel_id), after=canal.mention,
         )
-        await interaction.response.send_message(
+        await interaction.followup.send(
             f"Canal de auditoria definido: {canal.mention}", ephemeral=True
         )
 
@@ -259,8 +270,9 @@ class ConfigCog(commands.Cog):
     @has_permission("config")
     async def auditoria(self, interaction: discord.Interaction) -> None:
         assert interaction.guild_id is not None
+        await interaction.response.defer(ephemeral=True)
         settings = await self.bot.audit_log_service.get_settings(interaction.guild_id)
-        await interaction.response.send_message(
+        await interaction.followup.send(
             embed=audit_log_summary_embed(settings), view=AuditLogPanelView(settings), ephemeral=True
         )
 
@@ -268,6 +280,7 @@ class ConfigCog(commands.Cog):
     @has_permission("config")
     async def ver(self, interaction: discord.Interaction) -> None:
         assert interaction.guild_id is not None
+        await interaction.response.defer(ephemeral=True)
         settings = await self.bot.config_service.get_settings(interaction.guild_id)
         embed = discord.Embed(title="⚙️ Configuração atual")
         embed.add_field(name="Canal de Logs", value=f"<#{settings.log_channel_id}>" if settings.log_channel_id else "—")
@@ -281,7 +294,7 @@ class ConfigCog(commands.Cog):
         embed.add_field(name="Cargo Dev", value=f"<@&{settings.dev_role_id}>" if settings.dev_role_id else "—")
         embed.add_field(name="Cargo CEO", value=f"<@&{settings.ceo_role_id}>" if settings.ceo_role_id else "—")
         embed.add_field(name="Inatividade", value=f"{settings.inactive_after_minutes} min" if settings.inactive_after_minutes else "—")
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
     @config_group.command(
         name="history", description="Consulta o histórico de alterações feitas via /config."
@@ -305,6 +318,7 @@ class ConfigCog(commands.Cog):
         periodo: app_commands.Choice[str] | None = None,
     ) -> None:
         assert interaction.guild_id is not None
+        await interaction.response.defer(ephemeral=True)
         filters = ConfigHistoryFilters(
             usuario_id=usuario.id if usuario else None,
             categoria=categoria.value if categoria else None,
@@ -312,7 +326,7 @@ class ConfigCog(commands.Cog):
             periodo=periodo.value if periodo else None,
         )
         embed, total_pages = await render_config_history(self.bot, interaction.guild_id, filters)
-        await interaction.response.send_message(
+        await interaction.followup.send(
             embed=embed, view=ConfigHistoryView(filters, total_pages), ephemeral=True
         )
 

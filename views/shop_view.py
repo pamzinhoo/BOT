@@ -113,16 +113,20 @@ class ShopPanelView(SafeView):
     async def open_shop(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         assert interaction.guild_id is not None
+        # Deferir de imediato: list_plans + um list_benefits por plano fazem
+        # varias idas ao banco antes de termos algo pra mostrar, o que
+        # facilmente passa dos 3s que o Discord da pra responder a interacao.
+        await interaction.response.defer()
         plans = await bot.plan_service.list_plans(interaction.guild_id, only_active=True)
         if not plans:
-            await interaction.response.send_message("Nenhum plano disponível no momento.", ephemeral=True)
+            await interaction.followup.send("Nenhum plano disponível no momento.", ephemeral=True)
             return
         benefits_by_plan = {}
         for plan in plans:
             benefits = await bot.plan_service.list_benefits(plan.id)
             benefits_by_plan[plan.id] = [b.text for b in benefits]
         view = ShopView(plans, benefits_by_plan)
-        await interaction.response.send_message(embed=view.render_embed(), view=view, ephemeral=True)
+        await interaction.followup.send(embed=view.render_embed(), view=view, ephemeral=True)
 
 
 class ShopView(SafeView):
@@ -571,8 +575,10 @@ async def _notify_approval_channel(
 
 
 async def _deny_if_not_admin(interaction: discord.Interaction) -> bool:
+    """So chamada depois do callback ja ter deferido — member_is_admin faz uma
+    ida ao banco (settings da guild), entao a resposta precisa ser followup."""
     if not await member_is_admin(interaction):
-        await interaction.response.send_message(
+        await interaction.followup.send(
             "Apenas admins podem gerenciar pagamentos.", ephemeral=True
         )
         return True
@@ -580,15 +586,23 @@ async def _deny_if_not_admin(interaction: discord.Interaction) -> bool:
 
 
 async def _load_payment_for_guild(
-    interaction: discord.Interaction, payment_id: uuid.UUID
+    interaction: discord.Interaction, payment_id: uuid.UUID, *, deferred: bool = False
 ) -> PaymentHistory | None:
     """Confere que o pagamento pertence a guild de quem esta clicando — nenhum
     admin pode aprovar/rejeitar/cancelar pagamento de outro servidor, nem por
-    custom_id forjado (mesma defesa usada no painel de cupons)."""
+    custom_id forjado (mesma defesa usada no painel de cupons).
+
+    `deferred=True` quando o chamador ja deferiu a interacao antes de chegar
+    aqui (os botoes de pagamento deferem de imediato, antes desta consulta ao
+    banco) — nesse caso a mensagem de erro precisa ir por followup, nao por
+    response.send_message (que so funciona uma vez, antes do defer)."""
     bot: LimerenceBot = interaction.client  # type: ignore[assignment]
     payment = await bot.payment_service.get(payment_id)
     if payment is None or payment.guild_id != interaction.guild_id:
-        await interaction.response.send_message("Pagamento não encontrado.", ephemeral=True)
+        if deferred:
+            await interaction.followup.send("Pagamento não encontrado.", ephemeral=True)
+        else:
+            await interaction.response.send_message("Pagamento não encontrado.", ephemeral=True)
         return None
     return payment
 
@@ -639,12 +653,15 @@ class PaymentApproveButton(
         return cls(uuid.UUID(match["payment_id"]))
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        # Deferir de imediato: _deny_if_not_admin/_load_payment_for_guild ja
+        # fazem idas ao banco antes de qualquer resposta, e confirm_payment
+        # (cargo, log, auditoria) faz ainda mais — facilmente passa dos 3s.
+        await interaction.response.defer()
         if await _deny_if_not_admin(interaction):
             return
-        if await _load_payment_for_guild(interaction, self.payment_id) is None:
+        if await _load_payment_for_guild(interaction, self.payment_id, deferred=True) is None:
             return
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
-        await interaction.response.defer(ephemeral=True)
         subscription = await bot.subscription_service.confirm_payment(
             self.payment_id, executor=interaction.user
         )
@@ -680,12 +697,13 @@ class PaymentRejectButton(
         return cls(uuid.UUID(match["payment_id"]))
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        # Deferir de imediato: mesmo motivo do PaymentApproveButton.
+        await interaction.response.defer()
         if await _deny_if_not_admin(interaction):
             return
-        if await _load_payment_for_guild(interaction, self.payment_id) is None:
+        if await _load_payment_for_guild(interaction, self.payment_id, deferred=True) is None:
             return
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
-        await interaction.response.defer(ephemeral=True)
         changed = await bot.subscription_service.reject_payment(self.payment_id, executor=interaction.user)
         if not changed:
             await interaction.followup.send(
@@ -716,12 +734,13 @@ class PaymentPendingButton(
         return cls(uuid.UUID(match["payment_id"]))
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        # Deferir de imediato: mesmo motivo do PaymentApproveButton.
+        await interaction.response.defer()
         if await _deny_if_not_admin(interaction):
             return
-        if await _load_payment_for_guild(interaction, self.payment_id) is None:
+        if await _load_payment_for_guild(interaction, self.payment_id, deferred=True) is None:
             return
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
-        await interaction.response.defer(ephemeral=True)
         payment = await bot.subscription_service.mark_payment_pending(
             self.payment_id, executor=interaction.user
         )
@@ -754,12 +773,13 @@ class PaymentCancelButton(
         return cls(uuid.UUID(match["payment_id"]))
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        # Deferir de imediato: mesmo motivo do PaymentApproveButton.
+        await interaction.response.defer()
         if await _deny_if_not_admin(interaction):
             return
-        if await _load_payment_for_guild(interaction, self.payment_id) is None:
+        if await _load_payment_for_guild(interaction, self.payment_id, deferred=True) is None:
             return
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
-        await interaction.response.defer(ephemeral=True)
         changed = await bot.subscription_service.cancel_payment(self.payment_id, executor=interaction.user)
         if not changed:
             await interaction.followup.send(

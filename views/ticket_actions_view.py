@@ -21,12 +21,24 @@ if TYPE_CHECKING:
     from core.bot import LimerenceBot
 
 
-async def _deny_if_cant(interaction: discord.Interaction, action: str) -> bool:
+async def _deny_if_cant(
+    interaction: discord.Interaction, action: str, *, already_deferred: bool = False
+) -> bool:
+    """`already_deferred` diz se o chamador ja deu `defer()` antes — nesse caso
+    a recusa sai por `followup.send` em vez de `response.send_message`. Assumir
+    e Liberar checam a permissao ANTES de deferir (comportamento original,
+    inalterado); Fechar defere primeiro (nunca abre modal, e a checagem +
+    get_by_channel_id ja eram feitas antes de qualquer resposta)."""
     if await member_can(interaction, action):
         return False
-    await interaction.response.send_message(
-        "Você não tem permissão para usar esse botão.", ephemeral=True
-    )
+    if already_deferred:
+        await interaction.followup.send(
+            "Você não tem permissão para usar esse botão.", ephemeral=True
+        )
+    else:
+        await interaction.response.send_message(
+            "Você não tem permissão para usar esse botão.", ephemeral=True
+        )
     return True
 
 
@@ -204,7 +216,10 @@ class TicketActionsView(SafeView):
         label="Fechar", style=discord.ButtonStyle.danger, custom_id="limerence:ticket:close"
     )
     async def close(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
-        if await _deny_if_cant(interaction, "fechar"):
+        # Deferir de imediato: sem ramo de modal, e a checagem de permissao +
+        # get_by_channel_id ja rodam antes de qualquer resposta.
+        await interaction.response.defer()
+        if await _deny_if_cant(interaction, "fechar", already_deferred=True):
             return
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         guild = interaction.guild
@@ -214,17 +229,17 @@ class TicketActionsView(SafeView):
 
         existing_ticket = await bot.ticket_service.get_by_channel_id(interaction.channel_id)
         if existing_ticket is None:
-            await interaction.response.send_message("Ticket não encontrado.", ephemeral=True)
+            await interaction.followup.send("Ticket não encontrado.", ephemeral=True)
             return
         if existing_ticket.claimed_by_staff_id is None:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "Este ticket ainda não foi assumido por ninguém. Clique em **Assumir** antes de fechar.",
                 ephemeral=True,
             )
             return
 
         confirm_view = ConfirmCloseView(member.id)
-        await interaction.response.send_message(
+        await interaction.followup.send(
             "Tem certeza que deseja fechar este ticket?", view=confirm_view, ephemeral=True
         )
         await confirm_view.wait()

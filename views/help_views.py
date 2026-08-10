@@ -43,12 +43,19 @@ def _all_commands(bot: LimerenceBot, guild: discord.abc.Snowflake | None) -> lis
 
 async def _open_category(interaction: discord.Interaction, category: str) -> None:
     bot: LimerenceBot = interaction.client  # type: ignore[assignment]
+    # Deferir de imediato: member_is_admin/member_is_staff/list_visible_by_category
+    # sao tres idas ao banco antes de termos algo pra mostrar, o que facilmente
+    # passa dos 3s que o Discord da pra responder a interacao. _open_category e
+    # o unico caller de _HelpCategoryButton.callback e recebe a interaction
+    # diretamente, entao e o lugar natural pro defer (nao ha logica antes dele
+    # no callback do botao).
+    await interaction.response.defer()
     is_admin = await member_is_admin(interaction)
     is_staff = await member_is_staff(interaction)
     commands = await bot.help_service.list_visible_by_category(
         category, is_admin=is_admin, is_staff=is_staff
     )
-    await interaction.response.edit_message(
+    await interaction.edit_original_response(
         embed=help_category_embed(category, commands), view=HelpCategoryView()
     )
 

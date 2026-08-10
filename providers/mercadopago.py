@@ -14,6 +14,10 @@ from providers.base import ChargeRequest, ChargeResult, PaymentGatewayError, Pay
 logger = get_logger("mercadopago")
 
 _BASE_URL = "https://api.mercadopago.com"
+# Sem isso o aiohttp usa o default de 300s — uma resposta lenta do Mercado
+# Pago prende a task da checagem de pagamento (chamada no caminho do
+# webhook) por ate 5min em vez de falhar rapido.
+_REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=15)
 # Janela de tolerancia pro `ts` do x-signature — sem isso, uma notificacao
 # valida capturada (proxy malicioso, log vazado) pode ser reenviada pra
 # sempre com assinatura ainda valida (replay attack). O processamento a
@@ -74,7 +78,7 @@ class MercadoPagoProvider(PaymentProvider):
     ) -> dict[str, object]:
         url = f"{_BASE_URL}{path}"
         try:
-            async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession(timeout=_REQUEST_TIMEOUT) as session:
                 async with session.request(
                     method, url, json=json, headers=self._headers(idempotency_key=idempotency_key)
                 ) as response:
@@ -86,7 +90,7 @@ class MercadoPagoProvider(PaymentProvider):
                         )
                         raise PaymentGatewayError(f"Mercado Pago respondeu {response.status} em {path}.")
                     return body if isinstance(body, dict) else {}
-        except aiohttp.ClientError as exc:
+        except (aiohttp.ClientError, TimeoutError) as exc:
             logger.exception("Falha de rede ao chamar Mercado Pago (%s %s).", method, path)
             raise PaymentGatewayError("Falha de comunicacao com o Mercado Pago.") from exc
 

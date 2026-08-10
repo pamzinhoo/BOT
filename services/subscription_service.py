@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 import discord
+from sqlalchemy.exc import IntegrityError
 
 from core.logger import get_logger
 from database.database import Database
@@ -164,17 +165,28 @@ class SubscriptionService:
                     await session.flush()
                     subscription = existing_row
                 else:
-                    subscription = await sub_repo.add(
-                        Subscription(
-                            guild_id=member.guild.id,
-                            user_id=member.id,
-                            plan_id=plan.id,
-                            status=SubscriptionStatus.PENDING,
-                            billing_cycle=billing_cycle,
-                            provider=provider.name,
-                            external_reference=external_reference,
+                    # A checagem de active_or_pending acima nao tem trava —
+                    # so a constraint unica (guild+user+plan) protege de
+                    # verdade. Sob duplo clique/duplo submit concorrente, a
+                    # chamada perdedora cai aqui com IntegrityError em vez de
+                    # ter sido barrada pela checagem; convertida pro mesmo
+                    # erro amigavel que o caminho normal já usa.
+                    try:
+                        subscription = await sub_repo.add(
+                            Subscription(
+                                guild_id=member.guild.id,
+                                user_id=member.id,
+                                plan_id=plan.id,
+                                status=SubscriptionStatus.PENDING,
+                                billing_cycle=billing_cycle,
+                                provider=provider.name,
+                                external_reference=external_reference,
+                            )
                         )
-                    )
+                    except IntegrityError as exc:
+                        raise DuplicateSubscriptionError(
+                            "Você já possui uma assinatura ativa ou pendente para este plano."
+                        ) from exc
 
         request = ChargeRequest(
             guild_id=member.guild.id,

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import uuid
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
@@ -49,17 +50,34 @@ class ReconciliationService:
     def __init__(self, database: Database, bot: LimerenceBot) -> None:
         self._database = database
         self._bot = bot
+        # O ciclo periodico (LicenseReconciliationCog) e o endpoint sob
+        # demanda (/internal/reconcile) chamam o mesmo metodo — sem trava,
+        # dois disparos quase simultaneos rodariam duas reconciliacoes
+        # completas em paralelo (duplicando idas ao banco/Discord e linhas
+        # de auditoria). A trava so serializa: o segundo disparo espera o
+        # primeiro terminar em vez de correr junto.
+        self._lock = asyncio.Lock()
 
     async def reconcile_all_guilds(self) -> ReconciliationReport:
-        report = ReconciliationReport()
-        for guild in self._bot.guilds:
-            result = await self.reconcile_guild(guild)
-            report.guilds_checked += 1
-            report.roles_granted += result.roles_granted
-            report.roles_removed += result.roles_removed
-            report.errors += result.errors
-            report.per_guild.append(result)
-        return report
+        async with self._lock:
+            report = ReconciliationReport()
+            results = await asyncio.gather(
+                *(self.reconcile_guild(guild) for guild in self._bot.guilds),
+                return_exceptions=True,
+            )
+            for guild, result in zip(self._bot.guilds, results):
+                if isinstance(result, BaseException):
+                    report.errors += 1
+                    logger.exception(
+                        "Falha ao reconciliar guild %s.", guild.id, exc_info=result
+                    )
+                    continue
+                report.guilds_checked += 1
+                report.roles_granted += result.roles_granted
+                report.roles_removed += result.roles_removed
+                report.errors += result.errors
+                report.per_guild.append(result)
+            return report
 
     async def reconcile_guild(self, guild: discord.Guild) -> GuildReconciliationResult:
         result = GuildReconciliationResult(guild_id=guild.id)
