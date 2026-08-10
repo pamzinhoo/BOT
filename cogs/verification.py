@@ -61,10 +61,11 @@ class VerificationCog(commands.Cog):
     async def aprovar_verificacao(
         self, interaction: discord.Interaction, usuario: discord.Member
     ) -> None:
+        await interaction.response.defer(ephemeral=True)
         _, message = await self.bot.verification_service.approve_manually(
             usuario, moderator_id=interaction.user.id, moderator_name=str(interaction.user)
         )
-        await interaction.response.send_message(message, ephemeral=True)
+        await interaction.followup.send(message, ephemeral=True)
 
 
 async def setup(bot: LimerenceBot) -> None:
