@@ -270,8 +270,9 @@ class ConfigCog(commands.Cog):
     @has_permission("config")
     async def auditoria(self, interaction: discord.Interaction) -> None:
         assert interaction.guild_id is not None
+        await interaction.response.defer(ephemeral=True)
         settings = await self.bot.audit_log_service.get_settings(interaction.guild_id)
-        await interaction.response.send_message(
+        await interaction.followup.send(
             embed=audit_log_summary_embed(settings), view=AuditLogPanelView(settings), ephemeral=True
         )
 
@@ -279,6 +280,7 @@ class ConfigCog(commands.Cog):
     @has_permission("config")
     async def ver(self, interaction: discord.Interaction) -> None:
         assert interaction.guild_id is not None
+        await interaction.response.defer(ephemeral=True)
         settings = await self.bot.config_service.get_settings(interaction.guild_id)
         embed = discord.Embed(title="⚙️ Configuração atual")
         embed.add_field(name="Canal de Logs", value=f"<#{settings.log_channel_id}>" if settings.log_channel_id else "—")
@@ -292,7 +294,7 @@ class ConfigCog(commands.Cog):
         embed.add_field(name="Cargo Dev", value=f"<@&{settings.dev_role_id}>" if settings.dev_role_id else "—")
         embed.add_field(name="Cargo CEO", value=f"<@&{settings.ceo_role_id}>" if settings.ceo_role_id else "—")
         embed.add_field(name="Inatividade", value=f"{settings.inactive_after_minutes} min" if settings.inactive_after_minutes else "—")
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
     @config_group.command(
         name="history", description="Consulta o histórico de alterações feitas via /config."

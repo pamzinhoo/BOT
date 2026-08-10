@@ -54,6 +54,7 @@ def _make_cog() -> AntiSpamCog:
     cog.bot = bot
     cog._buffers = {}
     cog._last_reported = {}
+    cog._messages_since_sweep = 0
     return cog
 
 
