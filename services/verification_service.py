@@ -731,6 +731,8 @@ class VerificationService:
         *,
         guild_id: int,
         action: str,
+        executor_id: int | None = None,
+        executor_name: str | None = None,
         target_id: int | None = None,
         target_name: str | None = None,
         details: dict[str, object] | None = None,
@@ -739,7 +741,66 @@ class VerificationService:
             guild_id=guild_id,
             category=AuditLogCategory.VERIFICATION,
             action=action,
+            executor_id=executor_id,
+            executor_name=executor_name,
             target_id=target_id,
             target_name=target_name,
             details=details or {},
         )
+
+    # --- aprovacao manual (ex.: membro recebeu cargo sem passar pelo CAPTCHA
+    # porque o bot estava offline no join) -----------------------------------
+
+    async def approve_manually(
+        self, member: discord.Member, *, moderator_id: int, moderator_name: str
+    ) -> tuple[bool, str]:
+        """Cancela qualquer sessao PENDING do membro (pra sweep_expired parar de
+        reiniciar/logar a verificacao dele) e aplica o cargo de verificado
+        configurado, como se tivesse passado pelo CAPTCHA."""
+        settings = await self.get_settings(member.guild.id)
+        if settings.verified_role_id is None:
+            return False, "Nenhum cargo de verificado configurado (/config → Verificação)."
+
+        role = member.guild.get_role(settings.verified_role_id)
+        if role is None:
+            return False, "Cargo de verificado configurado não existe mais no servidor."
+
+        async with self._database.session() as session:
+            repo = VerificationSessionRepository(session)
+            record = await repo.get_pending_by_guild_user_locked(member.guild.id, member.id)
+            if record is not None:
+                record.status = VerificationSessionStatus.CANCELLED
+                record.completed_at = datetime.now(UTC)
+                await session.flush()
+
+        if settings.unverified_role_id is not None:
+            unverified_role = member.guild.get_role(settings.unverified_role_id)
+            if unverified_role is not None and unverified_role in member.roles:
+                try:
+                    await member.remove_roles(
+                        unverified_role, reason=f"Verificação aprovada manualmente por {moderator_name}"
+                    )
+                except discord.HTTPException:
+                    logger.warning(
+                        "Falha ao remover cargo de não verificado (aprovação manual, guild %s).",
+                        member.guild.id,
+                    )
+
+        if role not in member.roles:
+            try:
+                await member.add_roles(role, reason=f"Verificação aprovada manualmente por {moderator_name}")
+            except discord.HTTPException:
+                logger.warning(
+                    "Falha ao aplicar cargo de verificado (aprovação manual, guild %s).", member.guild.id
+                )
+                return False, "Sem permissão para atribuir o cargo configurado."
+
+        await self._record_audit(
+            guild_id=member.guild.id,
+            action="Verificação aprovada manualmente",
+            executor_id=moderator_id,
+            executor_name=moderator_name,
+            target_id=member.id,
+            target_name=str(member),
+        )
+        return True, f"{member.mention} verificado manualmente com sucesso."

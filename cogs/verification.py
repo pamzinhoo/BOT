@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import discord
+from discord import app_commands
 from discord.ext import commands, tasks
 
 from core.bot import LimerenceBot
 from core.logger import get_logger
+from utils.checks import is_staff
 from views.verification_view import send_verification_prompt
 
 logger = get_logger("verification")
@@ -49,6 +51,20 @@ class VerificationCog(commands.Cog):
     @sweep_expired_verifications.before_loop
     async def _before_loop(self) -> None:
         await self.bot.wait_until_ready()
+
+    @app_commands.command(
+        name="aprovar_verificacao",
+        description="Aprova manualmente a verificação de um membro (ex.: ganhou cargo com o bot offline).",
+    )
+    @app_commands.describe(usuario="Membro a aprovar")
+    @is_staff()
+    async def aprovar_verificacao(
+        self, interaction: discord.Interaction, usuario: discord.Member
+    ) -> None:
+        _, message = await self.bot.verification_service.approve_manually(
+            usuario, moderator_id=interaction.user.id, moderator_name=str(interaction.user)
+        )
+        await interaction.response.send_message(message, ephemeral=True)
 
 
 async def setup(bot: LimerenceBot) -> None:
