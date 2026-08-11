@@ -387,6 +387,18 @@ async def panel_edit_embed(bot: LimerenceBot, panel: TicketPanel) -> discord.Emb
             )
         ),
     )
+    embed.add_field(
+        name="Confirmação",
+        value=(
+            f"{_bool_label(panel.intro_enabled)}"
+            + (
+                f" · 2º botão: {panel.intro_button_emoji or ''} "
+                f"{panel.intro_button_label or 'Abrir Ticket'}".strip()
+                if panel.intro_enabled
+                else ""
+            )
+        ),
+    )
     return embed
 
 
@@ -500,6 +512,24 @@ class TicketPanelEditView(SafeView):
     async def form_button(self, interaction: discord.Interaction, _b: discord.ui.Button) -> None:
         await interaction.response.defer()
         await _render_form_editor(interaction, self.panel, self.on_back)
+
+    @discord.ui.button(label="💬 Confirmação", style=discord.ButtonStyle.secondary, row=1)
+    async def intro_button(self, interaction: discord.Interaction, _b: discord.ui.Button) -> None:
+        view = SafeView(timeout=180)
+        view.add_item(_IntroToggleButton(self.panel, self.on_back))
+        view.add_item(_IntroTextButton(self.panel, self.on_back))
+        view.add_item(_IntroButtonStyleSelect(self.panel, self.on_back))
+        view.add_item(_BackToPanelEditButton(self.panel, self.on_back))
+        await interaction.response.edit_message(
+            content=(
+                f"**Mensagem intermediária** — {_bool_label(self.panel.intro_enabled)}\n"
+                "Com ela ligada, clicar no botão do painel não abre o ticket direto — "
+                "mostra esta mensagem (efêmera) com um segundo botão configurável, que "
+                "só aí dispara formulário/criação do ticket."
+            ),
+            embed=None,
+            view=view,
+        )
 
     # --- linha 2: aprovação e publicação ---
     @discord.ui.button(label="🧾 Aprovação", style=discord.ButtonStyle.secondary, row=2)
@@ -851,6 +881,110 @@ class _ButtonStyleSelect(discord.ui.Select[Any]):
             self.panel.id, button_style=self.values[0]
         )
         await _log_panel_change(interaction, panel, "Cor do botão", before, self.values[0])
+        await _render_panel_edit(interaction, panel, self.on_back)
+
+
+class _IntroToggleButton(discord.ui.Button[Any]):
+    def __init__(self, panel: TicketPanel, on_back: Any) -> None:
+        super().__init__(
+            label="🚫 Desativar" if panel.intro_enabled else "✅ Ativar",
+            style=(
+                discord.ButtonStyle.danger if panel.intro_enabled else discord.ButtonStyle.success
+            ),
+        )
+        self.panel = panel
+        self.on_back = on_back
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
+        before = self.panel.intro_enabled
+        panel = await bot.ticket_panel_service.update_panel(
+            self.panel.id, intro_enabled=not before
+        )
+        await _log_panel_change(
+            interaction, panel, "Mensagem intermediária", _bool_label(before), _bool_label(not before)
+        )
+        await _render_panel_edit(interaction, panel, self.on_back)
+
+
+class _IntroTextButton(discord.ui.Button[Any]):
+    def __init__(self, panel: TicketPanel, on_back: Any) -> None:
+        super().__init__(label="✏️ Mensagem e botão", style=discord.ButtonStyle.primary)
+        self.panel = panel
+        self.on_back = on_back
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.send_modal(_IntroTextModal(self.panel, self.on_back))
+
+
+class _IntroTextModal(discord.ui.Modal, title="Mensagem intermediária"):
+    def __init__(self, panel: TicketPanel, on_back: Any) -> None:
+        super().__init__()
+        self.panel = panel
+        self.on_back = on_back
+        self.message_input: discord.ui.TextInput[Any] = discord.ui.TextInput(
+            label="Texto da mensagem",
+            style=discord.TextStyle.paragraph,
+            default=panel.intro_message or "",
+            required=False,
+            max_length=2000,
+        )
+        self.button_label_input: discord.ui.TextInput[Any] = discord.ui.TextInput(
+            label="Texto do 2º botão",
+            default=panel.intro_button_label or "",
+            required=False,
+            max_length=80,
+        )
+        self.button_emoji_input: discord.ui.TextInput[Any] = discord.ui.TextInput(
+            label="Emoji do 2º botão",
+            placeholder="Ex: 🎫 (vazio = sem emoji)",
+            default=panel.intro_button_emoji or "",
+            required=False,
+            max_length=64,
+        )
+        self.add_item(self.message_input)
+        self.add_item(self.button_label_input)
+        self.add_item(self.button_emoji_input)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
+        before = self.panel.intro_message
+        panel = await bot.ticket_panel_service.update_panel(
+            self.panel.id,
+            intro_message=str(self.message_input.value).strip() or None,
+            intro_button_label=str(self.button_label_input.value).strip() or None,
+            intro_button_emoji=str(self.button_emoji_input.value).strip() or None,
+        )
+        await _log_panel_change(interaction, panel, "Mensagem intermediária", before, panel.intro_message)
+        await _render_panel_edit(interaction, panel, self.on_back)
+
+
+class _IntroButtonStyleSelect(discord.ui.Select[Any]):
+    def __init__(self, panel: TicketPanel, on_back: Any) -> None:
+        super().__init__(
+            placeholder="Cor do 2º botão...",
+            options=[
+                discord.SelectOption(
+                    label=label, value=value, default=(panel.intro_button_style == value)
+                )
+                for value, label in BUTTON_STYLE_LABELS.items()
+            ],
+            min_values=1,
+            max_values=1,
+        )
+        self.panel = panel
+        self.on_back = on_back
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
+        before = self.panel.intro_button_style
+        panel = await bot.ticket_panel_service.update_panel(
+            self.panel.id, intro_button_style=self.values[0]
+        )
+        await _log_panel_change(interaction, panel, "Cor do 2º botão", before, self.values[0])
         await _render_panel_edit(interaction, panel, self.on_back)
 
 

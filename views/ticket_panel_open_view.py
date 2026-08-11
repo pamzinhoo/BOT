@@ -58,17 +58,73 @@ class _OpenTicketButton(discord.ui.Button[Any]):
             await interaction.response.send_message(blocked, ephemeral=True)
             return
 
-        fields = (
-            await bot.ticket_panel_service.list_form_fields(panel.id)
-            if panel.form_enabled
-            else []
-        )
-        if fields:
-            await interaction.response.send_modal(TicketPanelFormModal(panel, fields))
+        if panel.intro_enabled:
+            view = SafeView(timeout=300)
+            view.add_item(_IntroContinueButton(panel))
+            await interaction.response.send_message(
+                content=panel.intro_message or "​",
+                view=view,
+                ephemeral=True,
+            )
             return
 
-        await interaction.response.defer(ephemeral=True, thinking=True)
-        await bot.ticket_panel_service.open_ticket(interaction, panel)
+        await _proceed_open(interaction, panel)
+
+
+async def _proceed_open(interaction: discord.Interaction, panel: TicketPanel) -> None:
+    """Parte do fluxo que efetivamente abre o ticket (formulario ou criacao
+    direta) — compartilhada entre o botao de categoria (sem intro) e o botao
+    de continuar da mensagem intermediaria (com intro)."""
+    bot: LimerenceBot = interaction.client  # type: ignore[assignment]
+
+    fields = (
+        await bot.ticket_panel_service.list_form_fields(panel.id) if panel.form_enabled else []
+    )
+    if fields:
+        await interaction.response.send_modal(TicketPanelFormModal(panel, fields))
+        return
+
+    await interaction.response.defer(ephemeral=True, thinking=True)
+    await bot.ticket_panel_service.open_ticket(interaction, panel)
+
+
+class _IntroContinueButton(discord.ui.Button[Any]):
+    """Segundo botao, mostrado so depois da mensagem intermediaria — reavalia
+    `check_can_open` porque pode ter passado tempo entre os dois cliques."""
+
+    def __init__(self, panel: TicketPanel) -> None:
+        super().__init__(
+            label=(panel.intro_button_label or "Abrir Ticket")[:80],
+            emoji=panel.intro_button_emoji or None,
+            style=button_style_from_value(panel.intro_button_style),
+        )
+        self.panel_key = panel.key
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
+        if interaction.guild_id is None:
+            await interaction.response.send_message(
+                "Este painel só funciona dentro de um servidor.", ephemeral=True
+            )
+            return
+
+        panel = await bot.ticket_panel_service.get_panel_by_key(
+            interaction.guild_id, self.panel_key
+        )
+        if panel is None:
+            await interaction.response.send_message(
+                "Este painel não existe mais. Avise um administrador.", ephemeral=True
+            )
+            return
+
+        blocked = await bot.ticket_panel_service.check_can_open(
+            interaction.guild_id, interaction.user.id, panel
+        )
+        if blocked is not None:
+            await interaction.response.send_message(blocked, ephemeral=True)
+            return
+
+        await _proceed_open(interaction, panel)
 
 
 class TicketPanelFormModal(discord.ui.Modal):

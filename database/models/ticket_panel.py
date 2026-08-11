@@ -57,6 +57,15 @@ class TicketPanel(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     button_emoji: Mapped[str | None] = mapped_column(String(64))
     button_style: Mapped[str] = mapped_column(String(16), nullable=False, default="primary")
 
+    # passo intermediario: quando ligado, clicar no botao acima nao abre o
+    # ticket direto — mostra esta mensagem efemera com um segundo botao
+    # (tambem personalizavel) que so ai dispara formulario/criacao do ticket.
+    intro_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    intro_message: Mapped[str | None] = mapped_column(Text)
+    intro_button_label: Mapped[str | None] = mapped_column(String(80))
+    intro_button_emoji: Mapped[str | None] = mapped_column(String(64))
+    intro_button_style: Mapped[str] = mapped_column(String(16), nullable=False, default="primary")
+
     # comportamento — quando nulo, cai no valor global de `ticket_settings`
     max_tickets_per_user: Mapped[int | None] = mapped_column(Integer)
     allow_multiple_tickets: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)

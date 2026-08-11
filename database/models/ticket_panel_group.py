@@ -6,7 +6,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from database.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 
-MAX_GROUP_PANELS = 5
+MAX_GROUP_PANELS = 15
 
 
 def _empty_list() -> list[str]:
