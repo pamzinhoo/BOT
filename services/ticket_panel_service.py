@@ -569,7 +569,9 @@ class TicketPanelService:
             await self.save_form_responses(ticket.id, answers)
 
         await ticket_channel.send(
-            content=member.mention, embed=ticket_embed(ticket, member), view=TicketActionsView()
+            content=member.mention,
+            embed=ticket_embed(ticket, member, panel=panel),
+            view=TicketActionsView(),
         )
         if answers:
             await ticket_channel.send(embed=ticket_form_answers_embed(answers))

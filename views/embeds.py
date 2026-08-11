@@ -51,13 +51,26 @@ if TYPE_CHECKING:
     from services.punishment_review_service import PendingPunishmentItem
 
 
-def ticket_embed(ticket: Ticket, opener: discord.Member | discord.User) -> discord.Embed:
+def ticket_embed(
+    ticket: Ticket, opener: discord.Member | discord.User, panel: TicketPanel | None = None
+) -> discord.Embed:
+    # tickets abertos por painel configuravel gravam category=OUTRO no banco
+    # (o enum fixo nao tem como representar categorias criadas livremente
+    # pela staff, tipo "Denuncia"/"Bug"/"Parceria") — o nome de verdade e o
+    # do painel, entao exibe ele quando disponivel em vez do enum generico.
+    if panel is not None:
+        title = f"{panel.button_emoji or '📁'} {panel.name}"
+        footer = f"Categoria: {panel.name}"
+    else:
+        title = CATEGORY_LABELS[ticket.category]
+        footer = f"Categoria: {ticket.category.value}"
+
     embed = discord.Embed(
-        title=f"{CATEGORY_LABELS[ticket.category]}",
+        title=title,
         description=f"Ticket aberto por {opener.mention}. Aguarde, a staff ja foi notificada.",
         color=EMBED_COLOR_DEFAULT,
     )
-    embed.set_footer(text=f"Categoria: {ticket.category.value}")
+    embed.set_footer(text=footer)
     return embed
 
 
