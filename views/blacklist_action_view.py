@@ -25,7 +25,7 @@ async def _report_moderation_error(interaction: discord.Interaction, action: str
         )
     else:
         message = f"Falha ao {action}: {exc}"
-    await interaction.response.send_message(message, ephemeral=True)
+    await interaction.followup.send(message, ephemeral=True)
 
 
 async def _deny_if_not_staff(interaction: discord.Interaction) -> bool:
@@ -46,6 +46,12 @@ async def _finish(
     if embed is not None:
         embed.color = color
         embed.add_field(name="Resolução", value=verdict, inline=False)
+    if interaction.response.is_done():
+        if embed is not None:
+            await interaction.edit_original_response(embed=embed, view=view)
+        else:
+            await interaction.edit_original_response(view=view)
+    elif embed is not None:
         await interaction.response.edit_message(embed=embed, view=view)
     else:
         await interaction.response.edit_message(view=view)
@@ -65,6 +71,7 @@ class BlacklistActionView(SafeView):
     async def ban(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
         if await _deny_if_not_staff(interaction):
             return
+        await interaction.response.defer()
         guild = interaction.guild
         assert guild is not None
         try:
@@ -84,11 +91,12 @@ class BlacklistActionView(SafeView):
     async def kick(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
         if await _deny_if_not_staff(interaction):
             return
+        await interaction.response.defer()
         guild = interaction.guild
         assert guild is not None
         member = guild.get_member(self.target_user_id)
         if member is None:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "Usuário não está mais no servidor.", ephemeral=True
             )
             return
@@ -105,11 +113,12 @@ class BlacklistActionView(SafeView):
     async def blacklist(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
         if await _deny_if_not_staff(interaction):
             return
+        await interaction.response.defer()
         guild = interaction.guild
         assert guild is not None
         member = guild.get_member(self.target_user_id)
         if member is None:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "Usuário não está mais no servidor.", ephemeral=True
             )
             return

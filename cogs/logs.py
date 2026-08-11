@@ -19,11 +19,12 @@ class LogsCog(commands.Cog):
     async def logs(self, interaction: discord.Interaction) -> None:
         if interaction.guild_id is None:
             return
+        await interaction.response.defer(ephemeral=True)
         async with self.bot.database.session() as session:
             entries = await LogRepository(session).list_recent(interaction.guild_id, limit=10)
 
         if not entries:
-            await interaction.response.send_message("Nenhum log registrado ainda.", ephemeral=True)
+            await interaction.followup.send("Nenhum log registrado ainda.", ephemeral=True)
             return
 
         lines = [
@@ -33,7 +34,7 @@ class LogsCog(commands.Cog):
         embed = discord.Embed(
             title="📜 Logs recentes", description="\n".join(lines), color=EMBED_COLOR_DEFAULT
         )
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
 
 async def setup(bot: LimerenceBot) -> None:

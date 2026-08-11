@@ -34,6 +34,11 @@ class _CommentModal(discord.ui.Modal, title="Deixe um comentário (opcional)"):
 
 
 async def _submit(interaction: discord.Interaction, rating: int, comment: str | None) -> None:
+    # Deferir de imediato: submit_evaluation, log_service.record,
+    # refresh_dashboard e o envio pro canal de avaliacoes sao varias
+    # idas ao banco/rede antes de termos uma resposta pra mostrar, o que
+    # facilmente passa dos 3s que o Discord da pra responder a interacao.
+    await interaction.response.defer()
     bot: LimerenceBot = interaction.client  # type: ignore[assignment]
     guild = interaction.guild
     if guild is None or interaction.channel_id is None:
@@ -44,10 +49,7 @@ async def _submit(interaction: discord.Interaction, rating: int, comment: str | 
             interaction.channel_id, interaction.user.id, rating, comment
         )
     except EvaluationError as exc:
-        if interaction.response.is_done():
-            await interaction.followup.send(str(exc), ephemeral=True)
-        else:
-            await interaction.response.send_message(str(exc), ephemeral=True)
+        await interaction.followup.send(str(exc), ephemeral=True)
         return
     evaluation = result.evaluation
 
@@ -86,10 +88,7 @@ async def _submit(interaction: discord.Interaction, rating: int, comment: str | 
         await announce_achievements(bot, channel, evaluation.staff_id, result.unlocked_achievements)
 
     message = f"Obrigado pela avaliação: {star * rating}"
-    if interaction.response.is_done():
-        await interaction.followup.send(message, ephemeral=True)
-    else:
-        await interaction.response.send_message(message, ephemeral=True)
+    await interaction.followup.send(message, ephemeral=True)
 
     if isinstance(channel, discord.TextChannel):
         schedule_channel_deletion(channel, "avaliação recebida")

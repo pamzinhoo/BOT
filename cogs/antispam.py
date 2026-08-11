@@ -23,6 +23,18 @@ _REPORT_COOLDOWN_SECONDS = 120
 _MAX_ATTACHMENT_BYTES = 8_000_000
 _MIN_TEXT_LENGTH = 6
 
+# A cada N mensagens processadas, varre os dois dicts em memoria removendo
+# chaves paradas ha muito tempo. Sem isso, toda assinatura de conteudo
+# (`_buffers`) e toda chave de cooldown (`_last_reported`) que ja apareceu
+# uma vez fica em memoria pra sempre, mesmo muito depois de o padrao de spam
+# parar — vazamento de memoria num processo de longa duracao com atividade
+# sustentada em varios servidores. Mesmo padrao/motivacao do sweep de
+# RateLimiter (core/rate_limiter.py). O corte de 1h e bem maior que o
+# `window_seconds`/cooldown de qualquer guild, entao nunca derruba uma
+# entrada ainda "quente".
+_SWEEP_EVERY_N_MESSAGES = 500
+_STALE_AFTER = timedelta(hours=1)
+
 
 @dataclass
 class _Occurrence:
@@ -46,6 +58,7 @@ class AntiSpamCog(commands.Cog):
         self.bot = bot
         self._buffers: dict[str, _SignatureBuffer] = {}
         self._last_reported: dict[str, datetime] = {}
+        self._messages_since_sweep = 0
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message) -> None:
@@ -78,6 +91,11 @@ class AntiSpamCog(commands.Cog):
             _Occurrence(message.author.id, message.channel.id, message.jump_url, now)
         )
         self._prune(buffer, now, anti_spam.window_seconds)
+
+        self._messages_since_sweep += 1
+        if self._messages_since_sweep >= _SWEEP_EVERY_N_MESSAGES:
+            self._messages_since_sweep = 0
+            self._sweep_stale(now)
 
         distinct_channels = {occ.channel_id for occ in buffer.occurrences}
         same_channel_recent = [
@@ -126,6 +144,20 @@ class AntiSpamCog(commands.Cog):
     def _prune(buffer: _SignatureBuffer, now: datetime, window_seconds: int) -> None:
         cutoff = now - timedelta(seconds=window_seconds)
         buffer.occurrences = [occ for occ in buffer.occurrences if occ.at >= cutoff]
+
+    def _sweep_stale(self, now: datetime) -> None:
+        cutoff = now - _STALE_AFTER
+        stale_signatures = [
+            signature
+            for signature, buffer in self._buffers.items()
+            if not buffer.occurrences or buffer.occurrences[-1].at < cutoff
+        ]
+        for signature in stale_signatures:
+            del self._buffers[signature]
+
+        stale_reports = [key for key, at in self._last_reported.items() if at < cutoff]
+        for key in stale_reports:
+            del self._last_reported[key]
 
     @staticmethod
     async def _signature_for(message: discord.Message) -> tuple[str | None, str | None]:

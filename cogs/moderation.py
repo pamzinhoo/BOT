@@ -260,20 +260,21 @@ class ModerationCog(commands.Cog):
     ) -> None:
         if interaction.guild is None or not isinstance(interaction.user, discord.Member):
             return
+        await interaction.response.defer(ephemeral=True)
         guild = interaction.guild
         staff = interaction.user
         ptype = PunishmentType(tipo.value)
 
         if usuario.id == staff.id:
-            await interaction.response.send_message("Você não pode punir a si mesmo.", ephemeral=True)
+            await interaction.followup.send("Você não pode punir a si mesmo.", ephemeral=True)
             return
         if usuario.bot:
-            await interaction.response.send_message("Não é possível punir um bot.", ephemeral=True)
+            await interaction.followup.send("Não é possível punir um bot.", ephemeral=True)
             return
 
         settings = await self.bot.config_service.get_settings(guild.id)
         if not settings.moderation_enabled:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "O sistema de moderação está desativado neste servidor.", ephemeral=True
             )
             return
@@ -289,10 +290,10 @@ class ModerationCog(commands.Cog):
             try:
                 duration = parse_duration(duracao)
             except InvalidDurationError as exc:
-                await interaction.response.send_message(str(exc), ephemeral=True)
+                await interaction.followup.send(str(exc), ephemeral=True)
                 return
         if ptype in _TYPES_REQUIRING_DURATION and duration is None:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "Duração é obrigatória para esse tipo de punição (ex.: 24h, 30m).", ephemeral=True
             )
             return
@@ -303,7 +304,7 @@ class ModerationCog(commands.Cog):
 
         # Etapa 2: primeira confirmacao — so uma revisao, nada e persistido ainda.
         confirm_view = PunishmentConfirmView(staff.id)
-        await interaction.response.send_message(
+        await interaction.followup.send(
             embed=punishment_confirm_embed(
                 user=usuario,
                 ptype=ptype,
@@ -540,8 +541,9 @@ class ModerationCog(commands.Cog):
     async def historico(self, interaction: discord.Interaction, usuario: discord.Member) -> None:
         if interaction.guild is None:
             return
+        await interaction.response.defer(ephemeral=True)
         punishments = await self.bot.punishment_service.list_history(interaction.guild.id, usuario.id)
-        await interaction.response.send_message(
+        await interaction.followup.send(
             embed=punishment_history_embed(usuario, punishments), ephemeral=True
         )
 
@@ -551,11 +553,12 @@ class ModerationCog(commands.Cog):
     async def punicao_ver(self, interaction: discord.Interaction, punicao: str) -> None:
         if interaction.guild is None:
             return
+        await interaction.response.defer(ephemeral=True)
         punishment = await self.bot.punishment_service.get_by_code(
             interaction.guild.id, punicao.strip().upper()
         )
         if punishment is None:
-            await interaction.response.send_message("Punição não encontrada.", ephemeral=True)
+            await interaction.followup.send("Punição não encontrada.", ephemeral=True)
             return
 
         time_remaining = None
@@ -563,7 +566,7 @@ class ModerationCog(commands.Cog):
             remaining_seconds = (punishment.review_deadline_at - datetime.now(UTC)).total_seconds()
             time_remaining = humanize_duration(max(int(remaining_seconds), 0)) if remaining_seconds > 0 else "Expirado (aguardando processamento)"
 
-        await interaction.response.send_message(
+        await interaction.followup.send(
             embed=punishment_status_embed(punishment, time_remaining=time_remaining), ephemeral=True
         )
 
@@ -572,8 +575,9 @@ class ModerationCog(commands.Cog):
         punicao="ID da punição (ex.: BAN-82931)", motivo="Explique por que a punição deveria ser removida"
     )
     async def recorrer(self, interaction: discord.Interaction, punicao: str, motivo: str) -> None:
+        await interaction.response.defer(ephemeral=True)
         if interaction.guild is None:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "Use este comando dentro do servidor.", ephemeral=True
             )
             return
@@ -581,7 +585,7 @@ class ModerationCog(commands.Cog):
 
         punishment = await self.bot.punishment_service.get_by_code(guild.id, punicao.strip().upper())
         if punishment is None:
-            await interaction.response.send_message("Punição não encontrada.", ephemeral=True)
+            await interaction.followup.send("Punição não encontrada.", ephemeral=True)
             return
 
         try:
@@ -592,10 +596,10 @@ class ModerationCog(commands.Cog):
                 additional_info=None,
             )
         except AppealError as exc:
-            await interaction.response.send_message(str(exc), ephemeral=True)
+            await interaction.followup.send(str(exc), ephemeral=True)
             return
 
-        await interaction.response.send_message(
+        await interaction.followup.send(
             "Recurso enviado! A staff vai analisar e você será notificado por DM.", ephemeral=True
         )
         await send_appeal_to_review_channel(self.bot, appeal, executor_name=str(interaction.user))
@@ -612,15 +616,16 @@ class ModerationCog(commands.Cog):
                 "Apenas o Owner pode revogar punições.", ephemeral=True
             )
             return
+        await interaction.response.defer(ephemeral=True)
         guild = interaction.guild
 
         punishment = await self.bot.punishment_service.get_by_code(guild.id, punicao.strip().upper())
         if punishment is None:
-            await interaction.response.send_message("Punição não encontrada.", ephemeral=True)
+            await interaction.followup.send("Punição não encontrada.", ephemeral=True)
             return
 
         confirm_view = ConfirmView(interaction.user.id)
-        await interaction.response.send_message(
+        await interaction.followup.send(
             f"Revogar punição **{punishment.punishment_code}**?", view=confirm_view, ephemeral=True
         )
         await confirm_view.wait()
@@ -677,12 +682,13 @@ class ModerationCog(commands.Cog):
                 "❌ Você não possui permissão para visualizar punições em análise.", ephemeral=True
             )
             return
+        await interaction.response.defer(ephemeral=True)
 
         filtro_value = filtro.value if filtro else "todos"
         embed, view = await build_panel(
             self.bot, guild_id=interaction.guild.id, filtro=filtro_value, staff_id=staff.id if staff else 0, page=1
         )
-        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+        await interaction.followup.send(embed=embed, view=view, ephemeral=True)
 
         await self.bot.audit_log_service.record(
             guild_id=interaction.guild.id,

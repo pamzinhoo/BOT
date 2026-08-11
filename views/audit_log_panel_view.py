@@ -58,13 +58,14 @@ class _CategoryToggleSelect(discord.ui.Select["AuditLogPanelView"]):
         self.page = page
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         assert interaction.guild_id is not None
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         selected = set(self.values)
         fields = {attr: attr in selected for attr, _ in self.page}
         await bot.audit_log_service.update_settings(interaction.guild_id, **fields)
         settings = await bot.audit_log_service.get_settings(interaction.guild_id)
-        await interaction.response.edit_message(
+        await interaction.edit_original_response(
             embed=audit_log_summary_embed(settings), view=AuditLogPanelView(settings)
         )
 
@@ -104,7 +105,7 @@ class _ResetAuditButton(discord.ui.Button[Any]):
         super().__init__(label="🔄 Restaurar padrão", style=discord.ButtonStyle.danger, row=row)
 
     async def callback(self, interaction: discord.Interaction) -> None:
-
+        await interaction.response.defer()
         assert interaction.guild_id is not None
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         settings = await bot.audit_log_service.get_settings(interaction.guild_id)
@@ -125,7 +126,7 @@ class _ResetAuditButton(discord.ui.Button[Any]):
         else:
             embed.description = "A categoria Auditoria já está nos valores padrão — nada para restaurar."
 
-        await interaction.response.edit_message(
+        await interaction.edit_original_response(
             content=None, embed=embed, view=_AuditResetConfirmView(settings, enabled=bool(diffs))
         )
 
@@ -144,7 +145,7 @@ class _ConfirmAuditResetButton(discord.ui.Button[Any]):
         super().__init__(label="Confirmar restauração", style=discord.ButtonStyle.danger)
 
     async def callback(self, interaction: discord.Interaction) -> None:
-
+        await interaction.response.defer()
         assert interaction.guild_id is not None
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         diffs = await bot.audit_log_service.reset_settings(interaction.guild_id)
@@ -160,7 +161,7 @@ class _ConfirmAuditResetButton(discord.ui.Button[Any]):
             new_value="Restaurado para o padrão",
         )
         settings = await bot.audit_log_service.get_settings(interaction.guild_id)
-        await interaction.response.edit_message(
+        await interaction.edit_original_response(
             content=None, embed=audit_log_summary_embed(settings), view=AuditLogPanelView(settings)
         )
 
@@ -170,10 +171,11 @@ class _CancelAuditResetButton(discord.ui.Button[Any]):
         super().__init__(label="Cancelar", style=discord.ButtonStyle.secondary)
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         assert interaction.guild_id is not None
 
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         settings = await bot.audit_log_service.get_settings(interaction.guild_id)
-        await interaction.response.edit_message(
+        await interaction.edit_original_response(
             content=None, embed=audit_log_summary_embed(settings), view=AuditLogPanelView(settings)
         )

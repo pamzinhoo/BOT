@@ -77,12 +77,13 @@ class PaymentEmbedView(SafeView):
 
     @discord.ui.button(label="📋 Copiar código PIX", style=discord.ButtonStyle.secondary)
     async def copy_button(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await interaction.response.defer(ephemeral=True)
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         payment = await bot.payment_service.get(self.payment_id)
         if payment is None or not payment.pix_qr_code:
-            await interaction.response.send_message("Código PIX indisponível.", ephemeral=True)
+            await interaction.followup.send("Código PIX indisponível.", ephemeral=True)
             return
-        await interaction.response.send_message(f"```{payment.pix_qr_code}```", ephemeral=True)
+        await interaction.followup.send(f"```{payment.pix_qr_code}```", ephemeral=True)
 
     @discord.ui.button(label="🔄 Atualizar status", style=discord.ButtonStyle.primary)
     async def refresh_button(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:

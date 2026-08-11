@@ -53,14 +53,19 @@ class PollVoteButton(
         if not isinstance(member, discord.Member):
             return
 
+        # Defere de imediato: get_poll/can_vote/cast_vote sao chamadas ao
+        # banco que podem passar dos 3s de prazo do Discord antes da 1a
+        # resposta, num botao publico de voto.
+        await interaction.response.defer()
+
         poll = await bot.poll_service.get_poll(self.poll_id)
         if poll is None or poll.guild_id != interaction.guild_id:
-            await interaction.response.send_message("Enquete não encontrada.", ephemeral=True)
+            await interaction.followup.send("Enquete não encontrada.", ephemeral=True)
             return
 
         can_vote, reason = await bot.poll_service.can_vote(poll, member)
         if not can_vote:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 reason or "Você não pode votar nessa enquete.", ephemeral=True
             )
             return
@@ -68,10 +73,10 @@ class PollVoteButton(
         try:
             vote = await bot.poll_service.cast_vote(poll, self.option_id, member)
         except AlreadyVotedError as exc:
-            await interaction.response.send_message(str(exc), ephemeral=True)
+            await interaction.followup.send(str(exc), ephemeral=True)
             return
 
-        await interaction.response.send_message(
+        await interaction.followup.send(
             f"✅ Voto registrado com peso **{vote.weight}**.", ephemeral=True
         )
 
@@ -112,10 +117,15 @@ class _EnqueteCreateModal(discord.ui.Modal, title="Criar Enquete"):
         assert interaction.guild_id is not None
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
 
+        # Defere de imediato: create_poll + canal.send + set_message_id +
+        # audit_log_service.record abaixo sao varias chamadas que podem
+        # passar dos 3s de prazo do Discord antes da 1a resposta.
+        await interaction.response.defer(ephemeral=True)
+
         try:
             duration = parse_duration(str(self.duracao.value))
         except InvalidDurationError as exc:
-            await interaction.response.send_message(str(exc), ephemeral=True)
+            await interaction.followup.send(str(exc), ephemeral=True)
             return
 
         options = str(self.opcoes.value).splitlines()
@@ -130,7 +140,7 @@ class _EnqueteCreateModal(discord.ui.Modal, title="Criar Enquete"):
                 duration=duration,
             )
         except (EnqueteDisabledError, InvalidOptionsError) as exc:
-            await interaction.response.send_message(str(exc), ephemeral=True)
+            await interaction.followup.send(str(exc), ephemeral=True)
             return
 
         view = PollVoteView(poll.id, created_options)
@@ -146,7 +156,7 @@ class _EnqueteCreateModal(discord.ui.Modal, title="Criar Enquete"):
             details={"poll_id": str(poll.id), "title": poll.title, "options": [o.name for o in created_options]},
         )
 
-        await interaction.response.send_message(f"Enquete criada em {self.canal.mention}!", ephemeral=True)
+        await interaction.followup.send(f"Enquete criada em {self.canal.mention}!", ephemeral=True)
 
 
 class PollsCog(commands.Cog):

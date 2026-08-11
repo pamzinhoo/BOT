@@ -24,6 +24,16 @@ class GiveawayRepository(BaseRepository[Giveaway]):
         )
         return list(result.scalars().all())
 
+    async def get_by_id_locked(self, giveaway_id: uuid.UUID) -> Giveaway | None:
+        """Mesmo que get_by_id, mas com SELECT ... FOR UPDATE — trava a linha
+        ate o fim da transacao, pra evitar um encerramento manual e a varredura
+        automatica (ou dois cliques de "sortear novamente") lerem o mesmo
+        status e sortearem/entregarem o premio duas vezes."""
+        result = await self.session.execute(
+            select(Giveaway).where(Giveaway.id == giveaway_id).with_for_update()
+        )
+        return result.scalar_one_or_none()
+
 
 class GiveawayEntryRepository(BaseRepository[GiveawayEntry]):
     model = GiveawayEntry

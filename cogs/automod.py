@@ -61,9 +61,10 @@ class AutoModCog(commands.Cog):
     async def ativar(self, interaction: discord.Interaction, estado: app_commands.Choice[str]) -> None:
         if interaction.guild is None:
             return
+        await interaction.response.defer(ephemeral=True)
         enabled = estado.value == "on"
         settings = await self.bot.automod_service.set_enabled(interaction.guild.id, enabled)
-        await interaction.response.send_message(
+        await interaction.followup.send(
             f"AutoMod {'ativado' if settings.enabled else 'desativado'} neste servidor.", ephemeral=True
         )
 
@@ -84,6 +85,7 @@ class AutoModCog(commands.Cog):
     ) -> None:
         if interaction.guild is None:
             return
+        await interaction.response.defer(ephemeral=True)
         try:
             word = await self.bot.automod_service.add_word(
                 interaction.guild.id,
@@ -93,9 +95,9 @@ class AutoModCog(commands.Cog):
                 added_by_id=interaction.user.id,
             )
         except AutoModError as exc:
-            await interaction.response.send_message(f"❌ {exc}", ephemeral=True)
+            await interaction.followup.send(f"❌ {exc}", ephemeral=True)
             return
-        await interaction.response.send_message(
+        await interaction.followup.send(
             f"✅ Palavra **{word.palavra}** adicionada (categoria: {word.categoria.value}, "
             f"nível: {word.nivel.value}).",
             ephemeral=True,
@@ -107,19 +109,21 @@ class AutoModCog(commands.Cog):
     async def remover(self, interaction: discord.Interaction, palavra: str) -> None:
         if interaction.guild is None:
             return
+        await interaction.response.defer(ephemeral=True)
         removed = await self.bot.automod_service.remove_word(interaction.guild.id, palavra)
         if removed:
-            await interaction.response.send_message(f"✅ Palavra **{palavra}** removida.", ephemeral=True)
+            await interaction.followup.send(f"✅ Palavra **{palavra}** removida.", ephemeral=True)
         else:
-            await interaction.response.send_message("❌ Palavra não encontrada.", ephemeral=True)
+            await interaction.followup.send("❌ Palavra não encontrada.", ephemeral=True)
 
     @automod_group.command(name="lista", description="Mostra as palavras atualmente bloqueadas.")
     @is_admin()
     async def lista(self, interaction: discord.Interaction) -> None:
         if interaction.guild is None:
             return
+        await interaction.response.defer(ephemeral=True)
         words = await self.bot.automod_service.list_effective_words(interaction.guild.id)
-        await interaction.response.send_message(embed=automod_word_list_embed(words), ephemeral=True)
+        await interaction.followup.send(embed=automod_word_list_embed(words), ephemeral=True)
 
     @automod_group.command(name="configurar", description="Configura as punições e exceções do AutoMod.")
     @app_commands.describe(
@@ -143,6 +147,10 @@ class AutoModCog(commands.Cog):
     ) -> None:
         if interaction.guild is None:
             return
+        # Defere de imediato: get_settings + update_settings abaixo sao
+        # chamadas ao banco que podem passar dos 3s de prazo do Discord
+        # antes da 1a resposta.
+        await interaction.response.defer(ephemeral=True)
         settings = await self.bot.automod_service.get_settings(interaction.guild.id)
         fields: dict[str, object] = {}
         if timeout_medio_minutos is not None:
@@ -165,11 +173,11 @@ class AutoModCog(commands.Cog):
             fields["ignored_role_ids"] = ignored_roles
 
         if not fields:
-            await interaction.response.send_message(embed=automod_status_embed(settings), ephemeral=True)
+            await interaction.followup.send(embed=automod_status_embed(settings), ephemeral=True)
             return
 
         settings = await self.bot.automod_service.update_settings(interaction.guild.id, **fields)
-        await interaction.response.send_message(embed=automod_status_embed(settings), ephemeral=True)
+        await interaction.followup.send(embed=automod_status_embed(settings), ephemeral=True)
 
     @automod_group.command(name="logs", description="Mostra o histórico de ações automáticas do AutoMod.")
     @app_commands.describe(quantidade="Quantidade de registros (padrão 20)")
@@ -177,8 +185,9 @@ class AutoModCog(commands.Cog):
     async def logs(self, interaction: discord.Interaction, quantidade: int = 20) -> None:
         if interaction.guild is None:
             return
+        await interaction.response.defer(ephemeral=True)
         entries = await self.bot.automod_service.list_logs(interaction.guild.id, min(quantidade, 50))
-        await interaction.response.send_message(embed=automod_log_list_embed(entries), ephemeral=True)
+        await interaction.followup.send(embed=automod_log_list_embed(entries), ephemeral=True)
 
 
 async def setup(bot: LimerenceBot) -> None:

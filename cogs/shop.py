@@ -23,15 +23,15 @@ class ShopCog(commands.Cog):
     )
     async def loja(self, interaction: discord.Interaction, publicar: bool = False) -> None:
         assert interaction.guild_id is not None
+        await interaction.response.defer(ephemeral=True)
 
         if publicar:
             if not await member_is_admin(interaction) or not isinstance(interaction.channel, discord.TextChannel):
-                await interaction.response.send_message(
+                await interaction.followup.send(
                     "Apenas admins podem publicar o painel da loja, e só em canal de texto.",
                     ephemeral=True,
                 )
                 return
-            await interaction.response.defer(ephemeral=True)
             await self.bot.painel_service.publish_shop_panel(interaction.guild_id, interaction.channel.id)
             await interaction.followup.send(
                 f"✅ Painel da loja publicado em {interaction.channel.mention}. "
@@ -42,7 +42,7 @@ class ShopCog(commands.Cog):
 
         plans = await self.bot.plan_service.list_plans(interaction.guild_id, only_active=True)
         if not plans:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "Nenhum plano disponível no momento.", ephemeral=True
             )
             return
@@ -53,7 +53,7 @@ class ShopCog(commands.Cog):
             benefits_by_plan[plan.id] = [b.text for b in benefits]
 
         view = ShopView(plans, benefits_by_plan)
-        await interaction.response.send_message(embed=view.render_embed(), view=view, ephemeral=True)
+        await interaction.followup.send(embed=view.render_embed(), view=view, ephemeral=True)
 
     @app_commands.command(
         name="monetizacao", description="Abre o painel de configuração de Planos (Monetização)."

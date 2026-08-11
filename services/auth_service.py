@@ -34,6 +34,9 @@ from database.repositories.player_repository import PlayerRepository
 logger = get_logger("auth_service")
 
 _DISCORD_API_BASE = "https://discord.com/api/v10"
+# Sem isso o aiohttp usa o default de 300s — uma resposta lenta do Discord
+# prende o callback de OAuth por ate 5min em vez de falhar rapido.
+_OAUTH_REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=15)
 _DEVICE_CODE_TTL_SECONDS = 600
 _POLL_MIN_INTERVAL_SECONDS = 5
 _JWT_KEY_ID = "v1"
@@ -311,7 +314,7 @@ class AuthService:
         aqui, nunca chega no Launcher) e busca a identidade do usuario. O
         token do Discord e usado uma unica vez nesta funcao e descartado —
         nunca e persistido (regra obrigatoria do prompt)."""
-        async with aiohttp.ClientSession() as http:
+        async with aiohttp.ClientSession(timeout=_OAUTH_REQUEST_TIMEOUT) as http:
             token_resp = await http.post(
                 f"{_DISCORD_API_BASE}/oauth2/token",
                 data={

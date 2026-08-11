@@ -38,16 +38,18 @@ async def _submit_dm(
     interaction: discord.Interaction, ticket_id: uuid.UUID, rating: int, comment: str | None
 ) -> None:
     bot: LimerenceBot = interaction.client  # type: ignore[assignment]
+    # Deferir de imediato: submit_evaluation_by_ticket_id, ticket_service.get_by_id,
+    # log_service.record, refresh_dashboard e o envio pro canal de avaliacoes sao
+    # varias idas ao banco/rede antes de termos uma resposta pra mostrar, o que
+    # facilmente passa dos 3s que o Discord da pra responder a interacao.
+    await interaction.response.defer()
 
     try:
         result = await bot.evaluation_service.submit_evaluation_by_ticket_id(
             ticket_id, interaction.user.id, rating, comment
         )
     except EvaluationError as exc:
-        if interaction.response.is_done():
-            await interaction.followup.send(str(exc), ephemeral=True)
-        else:
-            await interaction.response.send_message(str(exc), ephemeral=True)
+        await interaction.followup.send(str(exc), ephemeral=True)
         return
     evaluation = result.evaluation
 
@@ -92,10 +94,7 @@ async def _submit_dm(
             )
 
     message = f"Obrigado pela avaliação: {star * rating}"
-    if interaction.response.is_done():
-        await interaction.followup.send(message, ephemeral=True)
-    else:
-        await interaction.response.send_message(message, ephemeral=True)
+    await interaction.followup.send(message, ephemeral=True)
 
 
 class DMEvaluationView(SafeView):

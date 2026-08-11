@@ -83,6 +83,17 @@ class RenewSubscriptionButton(
     async def callback(self, interaction: discord.Interaction) -> None:
         from views.shop_view import start_purchase_flow
 
+        # NAO deferir aqui, de proposito: start_purchase_flow() precisa da
+        # interacao "fresca" (nao respondida ainda) pra poder abrir, ela
+        # mesma, o prompt de cupom (send_message) ou o modal de "quem vai
+        # pagar" (send_modal) como PRIMEIRA resposta — se ja tivermos dado
+        # defer aqui, start_purchase_flow ve interaction.response.is_done()
+        # e pula os dois passos silenciosamente, indo direto pra compra sem
+        # cupom/sem payer_information. Os `await` abaixo (get_subscription,
+        # get_plan, _resolve_member) ficam sem guarda de timeout como
+        # contrapartida — e o mesmo trade-off que todo outro caller de
+        # start_purchase_flow em shop_view.py aceita (nenhum deles deferre
+        # antes de chamar).
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         subscription = await bot.subscription_service.get_subscription(self.subscription_id)
         if (
@@ -140,12 +151,15 @@ class ViewPlanButton(
         from views.shop_view import plan_card_embed
 
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
+        # Deferir de imediato: get_plan + list_benefits sao duas idas ao banco
+        # antes de termos algo pra mostrar.
+        await interaction.response.defer()
         plan = await bot.plan_service.get_plan(self.plan_id)
         if plan is None:
-            await interaction.response.send_message("Plano não encontrado.", ephemeral=True)
+            await interaction.followup.send("Plano não encontrado.", ephemeral=True)
             return
         benefits = [b.text for b in await bot.plan_service.list_benefits(plan.id)]
-        await interaction.response.send_message(
+        await interaction.followup.send(
             embed=plan_card_embed(plan, benefits, position=0, total=1),
             ephemeral=interaction.guild is not None,
         )
@@ -179,11 +193,14 @@ class OpenStoreButton(
         from views.shop_view import ShopView
 
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
+        # Deferir de imediato: list_plans + um list_benefits por plano + a
+        # resolucao do member (pode cair em fetch_member, uma chamada HTTP)
+        # facilmente somam mais que os 3s que o Discord da pra responder a
+        # interacao antes de termos a ShopView pronta pra mostrar.
+        await interaction.response.defer()
         plans = await bot.plan_service.list_plans(self.guild_id, only_active=True)
         if not plans:
-            await interaction.response.send_message(
-                "Nenhum plano disponível no momento.", ephemeral=True
-            )
+            await interaction.followup.send("Nenhum plano disponível no momento.", ephemeral=True)
             return
         benefits_by_plan = {
             plan.id: [b.text for b in await bot.plan_service.list_benefits(plan.id)]
@@ -191,7 +208,7 @@ class OpenStoreButton(
         }
         member = await _resolve_member(bot, self.guild_id, interaction.user.id)
         view = ShopView(plans, benefits_by_plan, member=member)
-        await interaction.response.send_message(
+        await interaction.followup.send(
             embed=view.render_embed(), view=view, ephemeral=interaction.guild is not None
         )
 
@@ -218,16 +235,18 @@ class CloseRenewalMessageButton(
         return cls(label=label, emoji=emoji)
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        # Deferir de imediato: message.delete() e uma chamada HTTP e nao
+        # precisamos de resposta visivel nenhuma no caminho feliz (a mensagem
+        # some); so caimos pra editar quando o delete falha.
+        await interaction.response.defer()
         message = interaction.message
         if message is not None:
             try:
                 await message.delete()
-                if not interaction.response.is_done():
-                    await interaction.response.defer()
                 return
             except discord.HTTPException:
                 pass
-        await interaction.response.edit_message(view=None)
+        await interaction.edit_original_response(view=None)
 
 
 def build_renewal_message_view(

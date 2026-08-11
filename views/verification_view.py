@@ -72,16 +72,23 @@ class VerificationPanelStartButton(discord.ui.Button):
             )
             return
 
+        # Deferir de imediato: get_settings/start_verification fazem varias
+        # idas ao banco e um possivel add_roles antes de termos algo pra
+        # mostrar, o que facilmente passa dos 3s que o Discord da pra
+        # responder a interacao (e o cliente mostra "nao respondeu a tempo"
+        # mesmo com a sessao ja tendo sido criada com sucesso).
+        await interaction.response.defer()
+
         settings = await bot.verification_service.get_settings(interaction.guild.id)
         if settings.verified_role_id is not None:
             role = interaction.guild.get_role(settings.verified_role_id)
             if role is not None and role in member.roles:
-                await interaction.response.send_message("Você já está verificado. ✅", ephemeral=True)
+                await interaction.followup.send("Você já está verificado. ✅", ephemeral=True)
                 return
 
         prompt = await bot.verification_service.start_verification(member)
         if prompt is None:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "Sistema de verificação está desativado no momento.", ephemeral=True
             )
             return
@@ -90,7 +97,7 @@ class VerificationPanelStartButton(discord.ui.Button):
         text = render_placeholders(welcome, user=member.mention, server_name=interaction.guild.name)
         embed = verification_prompt_embed(text, code=prompt.code)
         view = _build_prompt_view(prompt.session)
-        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+        await interaction.followup.send(embed=embed, view=view, ephemeral=True)
         await bot.verification_service.set_delivery(
             prompt.session.id, via_dm=False, channel_id=interaction.channel_id, message_id=None
         )
@@ -239,6 +246,10 @@ class TypeCaptchaModal(discord.ui.Modal, title="Verificação"):
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
+        # Deferir de imediato: em caso de sucesso/expiracao/limite excedido,
+        # submit_type_attempt aplica cargos, log e auditoria (varias chamadas
+        # de rede) e pode passar dos 3s que o Discord da pra responder.
+        await interaction.response.defer()
         outcome = await bot.verification_service.submit_type_attempt(
             session_id=self.session_id,
             guild_id=interaction.guild_id,
@@ -251,11 +262,11 @@ class TypeCaptchaModal(discord.ui.Modal, title="Verificação"):
             refresh = await _build_refresh(bot, outcome, mention=interaction.user.mention)
             if refresh is not None:
                 embed, view = refresh
-                await interaction.response.edit_message(content=outcome.message, embed=embed, view=view)
+                await interaction.edit_original_response(content=outcome.message, embed=embed, view=view)
             else:
-                await interaction.response.edit_message(content=outcome.message)
+                await interaction.edit_original_response(content=outcome.message)
             return
-        await interaction.response.send_message(outcome.message, ephemeral=True)
+        await interaction.followup.send(outcome.message, ephemeral=True)
         await _apply_outcome_to_persistent_message(bot, outcome, mention=interaction.user.mention)
 
 
@@ -318,6 +329,9 @@ class PickCaptchaButton(
 
     async def callback(self, interaction: discord.Interaction) -> None:
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
+        # Deferir de imediato pelo mesmo motivo do TypeCaptchaModal: sucesso
+        # dispara cargos/log/auditoria e pode passar dos 3s de prazo.
+        await interaction.response.defer()
         outcome = await bot.verification_service.submit_button_attempt(
             session_id=self.session_id,
             guild_id=interaction.guild_id,
@@ -329,12 +343,12 @@ class PickCaptchaButton(
             refresh = await _build_refresh(bot, outcome, mention=interaction.user.mention)
             if refresh is not None:
                 embed, view = refresh
-                await interaction.response.edit_message(content=outcome.message, embed=embed, view=view)
+                await interaction.edit_original_response(content=outcome.message, embed=embed, view=view)
             else:
-                await interaction.response.edit_message(content=outcome.message)
+                await interaction.edit_original_response(content=outcome.message)
             return
 
-        await interaction.response.send_message(outcome.message, ephemeral=True)
+        await interaction.followup.send(outcome.message, ephemeral=True)
 
         refresh = await _build_refresh(bot, outcome, mention=interaction.user.mention)
         if refresh is not None and isinstance(interaction.message, discord.Message):

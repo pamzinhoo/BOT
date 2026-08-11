@@ -161,7 +161,7 @@ class GiveawayService:
     async def close_and_draw(self, giveaway_id: uuid.UUID) -> tuple[Giveaway, list[int]] | None:
         async with self._database.session() as session:
             repo = GiveawayRepository(session)
-            giveaway = await repo.get_by_id(giveaway_id)
+            giveaway = await repo.get_by_id_locked(giveaway_id)
             if giveaway is None or giveaway.status != GiveawayStatus.OPEN:
                 return None
             entries = await GiveawayEntryRepository(session).list_by_giveaway(giveaway_id)
@@ -185,7 +185,7 @@ class GiveawayService:
     async def reroll(self, giveaway_id: uuid.UUID) -> tuple[Giveaway, list[int]] | None:
         async with self._database.session() as session:
             repo = GiveawayRepository(session)
-            giveaway = await repo.get_by_id(giveaway_id)
+            giveaway = await repo.get_by_id_locked(giveaway_id)
             if giveaway is None or giveaway.status != GiveawayStatus.CLOSED:
                 return None
             entries = await GiveawayEntryRepository(session).list_by_giveaway(giveaway_id)
