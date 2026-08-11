@@ -8,8 +8,6 @@ from discord import app_commands
 from database.models.guild_settings import GuildSettings
 from database.models.permission_settings import PermissionSettings
 from database.models.punishment import PunishmentType
-from database.repositories.guild_settings_repository import GuildSettingsRepository
-from database.repositories.permission_settings_repository import PermissionSettingsRepository
 
 if TYPE_CHECKING:
     from core.bot import LimerenceBot
@@ -30,11 +28,13 @@ class NotAdminError(app_commands.CheckFailure):
 
 
 async def _get_guild_settings(interaction: discord.Interaction) -> GuildSettings | None:
+    """Passa pelo cache do ConfigService — chamado em praticamente todo comando
+    (is_staff/is_admin/has_permission), uma query direta aqui bateria no banco
+    a cada invocacao."""
     if interaction.guild_id is None:
         return None
     bot: LimerenceBot = interaction.client  # type: ignore[assignment]
-    async with bot.database.session() as session:
-        return await GuildSettingsRepository(session).get_by_guild_id(interaction.guild_id)
+    return await bot.config_service.get_settings(interaction.guild_id)
 
 
 def _member_role_ids(interaction: discord.Interaction) -> set[int]:
@@ -126,8 +126,7 @@ async def _get_permission_settings(interaction: discord.Interaction) -> Permissi
     if interaction.guild_id is None:
         return None
     bot: LimerenceBot = interaction.client  # type: ignore[assignment]
-    async with bot.database.session() as session:
-        return await PermissionSettingsRepository(session).get_by_guild_id(interaction.guild_id)
+    return await bot.config_service.get_permission_settings(interaction.guild_id)
 
 
 async def member_can(interaction: discord.Interaction, action: str) -> bool:

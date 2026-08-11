@@ -56,6 +56,11 @@ class TicketPanel(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     button_label: Mapped[str | None] = mapped_column(String(80))
     button_emoji: Mapped[str | None] = mapped_column(String(64))
     button_style: Mapped[str] = mapped_column(String(16), nullable=False, default="primary")
+    # desligado = painel nao ganha botao clicavel nem sozinho nem dentro de
+    # combo — usado quando o painel serve so pra fornecer a embed principal
+    # (titulo/banner) de um combo ("Painel Central"), sem ser ele mesmo uma
+    # categoria de ticket abrivel.
+    show_button: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     # passo intermediario: quando ligado, clicar no botao acima nao abre o
     # ticket direto — mostra esta mensagem efemera com um segundo botao

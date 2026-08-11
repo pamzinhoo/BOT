@@ -354,9 +354,13 @@ async def panel_edit_embed(bot: LimerenceBot, panel: TicketPanel) -> discord.Emb
     embed.add_field(
         name="Botão",
         value=(
-            f"{panel.button_emoji or ''} {panel.button_label or f'Abrir {panel.name}'} "
-            f"({BUTTON_STYLE_LABELS.get(panel.button_style, panel.button_style)})"
-        ).strip(),
+            (
+                f"{panel.button_emoji or ''} {panel.button_label or f'Abrir {panel.name}'} "
+                f"({BUTTON_STYLE_LABELS.get(panel.button_style, panel.button_style)})"
+            ).strip()
+            if panel.show_button
+            else "🚫 Escondido (só embed)"
+        ),
     )
     limit = panel.max_tickets_per_user
     embed.add_field(name="Limite por usuário", value=str(limit) if limit else "— (usa o global)")
@@ -445,11 +449,19 @@ class TicketPanelEditView(SafeView):
     @discord.ui.button(label="🔘 Botão", style=discord.ButtonStyle.primary, row=0)
     async def button_button(self, interaction: discord.Interaction, _b: discord.ui.Button) -> None:
         view = SafeView(timeout=180)
+        view.add_item(_ShowButtonToggleButton(self.panel, self.on_back))
         view.add_item(_ButtonStyleSelect(self.panel, self.on_back))
         view.add_item(_ButtonTextButton(self.panel, self.on_back))
         view.add_item(_BackToPanelEditButton(self.panel, self.on_back))
         await interaction.response.edit_message(
-            content="**Botão de abrir ticket** — texto/emoji e cor.", embed=None, view=view
+            content=(
+                "**Botão de abrir ticket** — texto/emoji e cor.\n"
+                f"Botão visível: {_bool_label(self.panel.show_button)} — desligue se este "
+                "painel só serve pra dar a embed principal de um combo (ex.: \"Painel "
+                "Central\"), sem ser ele mesmo uma categoria clicável."
+            ),
+            embed=None,
+            view=view,
         )
 
     @discord.ui.button(label="⚙️ Comportamento", style=discord.ButtonStyle.primary, row=0)
@@ -809,6 +821,30 @@ class _EmbedImagesModal(discord.ui.Modal, title="Embed — imagens"):
         )
         await _log_panel_change(
             interaction, panel, "Embed (imagens)", self.panel.embed_image_url, image or "—"
+        )
+        await _render_panel_edit(interaction, panel, self.on_back)
+
+
+class _ShowButtonToggleButton(discord.ui.Button[Any]):
+    def __init__(self, panel: TicketPanel, on_back: Any) -> None:
+        super().__init__(
+            label="🚫 Esconder botão" if panel.show_button else "✅ Mostrar botão",
+            style=(
+                discord.ButtonStyle.danger if panel.show_button else discord.ButtonStyle.success
+            ),
+        )
+        self.panel = panel
+        self.on_back = on_back
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
+        before = self.panel.show_button
+        panel = await bot.ticket_panel_service.update_panel(
+            self.panel.id, show_button=not before
+        )
+        await _log_panel_change(
+            interaction, panel, "Botão visível", _bool_label(before), _bool_label(not before)
         )
         await _render_panel_edit(interaction, panel, self.on_back)
 

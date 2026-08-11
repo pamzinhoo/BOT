@@ -18,15 +18,35 @@ from database.repositories.permission_settings_repository import PermissionSetti
 from database.repositories.ranking_settings_repository import RankingSettingsRepository
 from database.repositories.ticket_settings_repository import TicketSettingsRepository
 from utils.model_defaults import column_default, reset_row
+from utils.ttl_cache import TTLCache
+
+# guild_settings e permission_settings sao lidos em quase toda interacao e
+# mensagem (checks de staff/admin, anti-spam) mas mudam raramente — cache
+# curto com invalidacao manual em toda escrita evita bater no Postgres a
+# cada mensagem/comando sem arriscar dado desatualizado por muito tempo.
+_SETTINGS_TTL_SECONDS = 300.0
 
 
 class ConfigService:
     def __init__(self, database: Database) -> None:
         self._database = database
+        self._settings_cache: TTLCache[int, GuildSettings] = TTLCache(_SETTINGS_TTL_SECONDS)
+        self._ticket_settings_cache: TTLCache[int, TicketSettings] = TTLCache(_SETTINGS_TTL_SECONDS)
+        self._permission_settings_cache: TTLCache[int, PermissionSettings] = TTLCache(
+            _SETTINGS_TTL_SECONDS
+        )
+        self._anti_spam_settings_cache: TTLCache[int, AntiSpamSettings] = TTLCache(
+            _SETTINGS_TTL_SECONDS
+        )
 
     async def get_settings(self, guild_id: int) -> GuildSettings:
+        cached = self._settings_cache.get(guild_id)
+        if cached is not None:
+            return cached
         async with self._database.session() as session:
-            return await GuildSettingsRepository(session).get_or_create(guild_id)
+            settings = await GuildSettingsRepository(session).get_or_create(guild_id)
+        self._settings_cache.set(guild_id, settings)
+        return settings
 
     async def update(self, guild_id: int, **fields: object) -> GuildSettings:
         async with self._database.session() as session:
@@ -34,13 +54,19 @@ class ConfigService:
             settings = await repo.get_or_create(guild_id)
             for key, value in fields.items():
                 setattr(settings, key, value)
-            return settings
+        self._settings_cache.invalidate(guild_id)
+        return settings
 
     # --- Tickets -----------------------------------------------------------
 
     async def get_ticket_settings(self, guild_id: int) -> TicketSettings:
+        cached = self._ticket_settings_cache.get(guild_id)
+        if cached is not None:
+            return cached
         async with self._database.session() as session:
-            return await TicketSettingsRepository(session).get_or_create(guild_id)
+            settings = await TicketSettingsRepository(session).get_or_create(guild_id)
+        self._ticket_settings_cache.set(guild_id, settings)
+        return settings
 
     async def update_ticket_settings(self, guild_id: int, **fields: object) -> TicketSettings:
         async with self._database.session() as session:
@@ -48,7 +74,8 @@ class ConfigService:
             settings = await repo.get_or_create(guild_id)
             for key, value in fields.items():
                 setattr(settings, key, value)
-            return settings
+        self._ticket_settings_cache.invalidate(guild_id)
+        return settings
 
     # --- Avaliações ----------------------------------------------------------
 
@@ -117,8 +144,13 @@ class ConfigService:
     # --- Anti-Spam ----------------------------------------------------------
 
     async def get_anti_spam_settings(self, guild_id: int) -> AntiSpamSettings:
+        cached = self._anti_spam_settings_cache.get(guild_id)
+        if cached is not None:
+            return cached
         async with self._database.session() as session:
-            return await AntiSpamSettingsRepository(session).get_or_create(guild_id)
+            settings = await AntiSpamSettingsRepository(session).get_or_create(guild_id)
+        self._anti_spam_settings_cache.set(guild_id, settings)
+        return settings
 
     async def update_anti_spam_settings(self, guild_id: int, **fields: object) -> AntiSpamSettings:
         async with self._database.session() as session:
@@ -126,13 +158,19 @@ class ConfigService:
             settings = await repo.get_or_create(guild_id)
             for key, value in fields.items():
                 setattr(settings, key, value)
-            return settings
+        self._anti_spam_settings_cache.invalidate(guild_id)
+        return settings
 
     # --- Permissões ---------------------------------------------------------
 
     async def get_permission_settings(self, guild_id: int) -> PermissionSettings:
+        cached = self._permission_settings_cache.get(guild_id)
+        if cached is not None:
+            return cached
         async with self._database.session() as session:
-            return await PermissionSettingsRepository(session).get_or_create(guild_id)
+            settings = await PermissionSettingsRepository(session).get_or_create(guild_id)
+        self._permission_settings_cache.set(guild_id, settings)
+        return settings
 
     async def update_permission_settings(self, guild_id: int, **fields: object) -> PermissionSettings:
         async with self._database.session() as session:
@@ -140,7 +178,8 @@ class ConfigService:
             settings = await repo.get_or_create(guild_id)
             for key, value in fields.items():
                 setattr(settings, key, value)
-            return settings
+        self._permission_settings_cache.invalidate(guild_id)
+        return settings
 
     # --- Reset (Etapa 3) -----------------------------------------------------
 
@@ -158,12 +197,15 @@ class ConfigService:
                 if before != default:
                     diffs[attr] = (before, default)
                 setattr(settings, attr, default)
-            return diffs
+        self._settings_cache.invalidate(guild_id)
+        return diffs
 
     async def reset_ticket_settings(self, guild_id: int) -> dict[str, tuple[object, object]]:
         async with self._database.session() as session:
             settings = await TicketSettingsRepository(session).get_or_create(guild_id)
-            return reset_row(settings)
+            diffs = reset_row(settings)
+        self._ticket_settings_cache.invalidate(guild_id)
+        return diffs
 
     async def reset_dashboard_settings(self, guild_id: int) -> dict[str, tuple[object, object]]:
         async with self._database.session() as session:
@@ -188,9 +230,13 @@ class ConfigService:
     async def reset_anti_spam_settings(self, guild_id: int) -> dict[str, tuple[object, object]]:
         async with self._database.session() as session:
             settings = await AntiSpamSettingsRepository(session).get_or_create(guild_id)
-            return reset_row(settings)
+            diffs = reset_row(settings)
+        self._anti_spam_settings_cache.invalidate(guild_id)
+        return diffs
 
     async def reset_permission_settings(self, guild_id: int) -> dict[str, tuple[object, object]]:
         async with self._database.session() as session:
             settings = await PermissionSettingsRepository(session).get_or_create(guild_id)
-            return reset_row(settings)
+            diffs = reset_row(settings)
+        self._permission_settings_cache.invalidate(guild_id)
+        return diffs

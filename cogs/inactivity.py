@@ -94,11 +94,17 @@ class InactivityCog(commands.Cog):
             else:
                 await self._auto_cancel_unclaimed(guild, channel, ticket)
 
+    # sem limite, isto paginava o canal inteiro via API do Discord a cada 5min
+    # por ticket aberto (rodando pra achar a ultima msg de um autor especifico
+    # que pode ja ter parado de falar ha muito tempo) — 200 msgs mais recentes
+    # ja cobrem qualquer janela de inatividade relevante (_OWNER_SILENCE_HOURS).
+    _HISTORY_SCAN_LIMIT = 200
+
     @staticmethod
     async def _last_message_at(
         channel: discord.TextChannel, fallback: datetime, author_id: int | None = None
     ) -> datetime:
-        async for message in channel.history(limit=None):
+        async for message in channel.history(limit=InactivityCog._HISTORY_SCAN_LIMIT):
             if author_id is None or message.author.id == author_id:
                 return message.created_at
         return fallback

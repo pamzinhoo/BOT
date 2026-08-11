@@ -5,6 +5,7 @@ import io
 
 import discord
 
+from core.logger import get_logger
 from database.database import Database
 from database.repositories.dashboard_settings_repository import DashboardSettingsRepository
 from database.repositories.guild_settings_repository import GuildSettingsRepository
@@ -15,6 +16,16 @@ from services.ranking_service import RankingEntry, RankingPeriod, RankingService
 from utils.constants import EMBED_COLOR_DEFAULT
 from utils.dashboard_chart import render_ranking_chart
 from utils.formatter import rank_marker
+
+logger = get_logger("painel")
+
+
+def _log_refresh_dashboard_error(task: asyncio.Task[None]) -> None:
+    if task.cancelled():
+        return
+    exc = task.exception()
+    if exc is not None:
+        logger.exception("Falha ao atualizar dashboard em background.", exc_info=exc)
 
 
 def _sort_by_criteria(entries: list[RankingEntry], criteria: str) -> list[RankingEntry]:
@@ -34,8 +45,23 @@ class PainelService:
         self._database = database
         self._bot = bot
         self._ranking_service = RankingService(database)
+        # asyncio so garante execucao de uma task enquanto algo segura uma
+        # referencia forte pra ela — sem isso o GC pode colher a task no meio
+        # da execucao (armadilha conhecida do asyncio.create_task).
+        self._background_tasks: set[asyncio.Task[None]] = set()
 
     async def refresh_dashboard(self, guild_id: int) -> None:
+        """Dispara em background e retorna na hora — chamado em ~15 pontos do
+        bot (claim/unclaim/fechar/reabrir/avaliar/...) sempre ANTES da
+        resposta final ao usuario. Esperar as 4 queries + edicao de mensagem
+        no Discord aqui atrasava toda confirmacao de acao de ticket sem
+        nenhum ganho pro usuario (ele nao ve o dashboard, so a confirmacao)."""
+        task = asyncio.create_task(self._refresh_dashboard_impl(guild_id))
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
+        task.add_done_callback(_log_refresh_dashboard_error)
+
+    async def _refresh_dashboard_impl(self, guild_id: int) -> None:
         async with self._database.session() as session:
             settings = await GuildSettingsRepository(session).get_by_guild_id(guild_id)
             if settings is None:

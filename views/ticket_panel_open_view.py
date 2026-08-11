@@ -51,46 +51,54 @@ class _OpenTicketButton(discord.ui.Button[Any]):
             )
             return
 
-        blocked = await bot.ticket_panel_service.check_can_open(
-            interaction.guild_id, interaction.user.id, panel
-        )
-        if blocked is not None:
-            await interaction.response.send_message(blocked, ephemeral=True)
-            return
-
-        if panel.intro_enabled:
-            view = SafeView(timeout=300)
-            view.add_item(_IntroContinueButton(panel))
-            await interaction.response.send_message(
-                content=panel.intro_message or "​",
-                view=view,
-                ephemeral=True,
-            )
-            return
-
-        await _proceed_open(interaction, panel)
+        await _handle_open_click(interaction, panel)
 
 
-async def _proceed_open(interaction: discord.Interaction, panel: TicketPanel) -> None:
-    """Parte do fluxo que efetivamente abre o ticket (formulario ou criacao
-    direta) — compartilhada entre o botao de categoria (sem intro) e o botao
-    de continuar da mensagem intermediaria (com intro)."""
+async def _handle_open_click(interaction: discord.Interaction, panel: TicketPanel) -> None:
+    """Compartilhado entre o botao de categoria e o botao de continuar da
+    mensagem intermediaria. Decide ANTES de gastar qualquer round-trip extra
+    no banco se vai precisar mostrar modal — modal so pode ser a primeira
+    resposta da interaction (regra do Discord), entao nesse caso não da pra
+    `defer()` antes. Fora esse caso, defere na hora pra nunca estourar os 3s
+    do Discord esperando o Supabase responder (raiz do erro "nao respondeu a
+    tempo" — antes disso o codigo fazia 2+ queries seriais antes de responder
+    de qualquer jeito)."""
     bot: LimerenceBot = interaction.client  # type: ignore[assignment]
 
     fields = (
         await bot.ticket_panel_service.list_form_fields(panel.id) if panel.form_enabled else []
     )
     if fields:
+        # check_can_open eh refeito dentro de open_ticket() no on_submit do
+        # modal — nao precisa (nem da, sem deferir primeiro) checar aqui.
         await interaction.response.send_modal(TicketPanelFormModal(panel, fields))
         return
 
     await interaction.response.defer(ephemeral=True, thinking=True)
+
+    blocked = await bot.ticket_panel_service.check_can_open(
+        interaction.guild_id, interaction.user.id, panel
+    )
+    if blocked is not None:
+        await interaction.followup.send(blocked, ephemeral=True)
+        return
+
+    if panel.intro_enabled:
+        view = SafeView(timeout=300)
+        view.add_item(_IntroContinueButton(panel))
+        await interaction.followup.send(
+            content=panel.intro_message or "​",
+            view=view,
+            ephemeral=True,
+        )
+        return
+
     await bot.ticket_panel_service.open_ticket(interaction, panel)
 
 
 class _IntroContinueButton(discord.ui.Button[Any]):
     """Segundo botao, mostrado so depois da mensagem intermediaria — reavalia
-    `check_can_open` porque pode ter passado tempo entre os dois cliques."""
+    tudo de novo porque pode ter passado tempo entre os dois cliques."""
 
     def __init__(self, panel: TicketPanel) -> None:
         super().__init__(
@@ -117,14 +125,7 @@ class _IntroContinueButton(discord.ui.Button[Any]):
             )
             return
 
-        blocked = await bot.ticket_panel_service.check_can_open(
-            interaction.guild_id, interaction.user.id, panel
-        )
-        if blocked is not None:
-            await interaction.response.send_message(blocked, ephemeral=True)
-            return
-
-        await _proceed_open(interaction, panel)
+        await _handle_open_click(interaction, panel)
 
 
 class TicketPanelFormModal(discord.ui.Modal):
@@ -164,7 +165,8 @@ class TicketPanelOpenView(SafeView):
 
     def __init__(self, panel: TicketPanel) -> None:
         super().__init__(timeout=None)
-        self.add_item(_OpenTicketButton(panel))
+        if panel.show_button:
+            self.add_item(_OpenTicketButton(panel))
 
 
 class TicketPanelGroupOpenView(SafeView):
@@ -172,9 +174,12 @@ class TicketPanelGroupOpenView(SafeView):
     mesma embed unica (do painel principal), varios botoes lado a lado (ex.:
     "Suporte" + "Denuncia"). Cada botao continua sendo o mesmo
     `_OpenTicketButton` do painel individual: custom_id, permissao, formulario
-    e aprovacao seguem 100% da config daquele painel, sem duplicar logica."""
+    e aprovacao seguem 100% da config daquele painel, sem duplicar logica.
+    Paineis com `show_button=False` (ex.: o principal, so pra dar embed pro
+    combo) nao ganham botao aqui."""
 
     def __init__(self, panels: list[TicketPanel]) -> None:
         super().__init__(timeout=None)
         for panel in panels:
-            self.add_item(_OpenTicketButton(panel))
+            if panel.show_button:
+                self.add_item(_OpenTicketButton(panel))
