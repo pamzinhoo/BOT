@@ -7,6 +7,7 @@ from sqlalchemy import select
 from database.models.ticket_form_response import TicketFormResponse
 from database.models.ticket_panel import TicketPanel
 from database.models.ticket_panel_form_field import TicketPanelFormField
+from database.models.ticket_panel_group import TicketPanelGroup
 from database.repositories.base_repository import BaseRepository
 
 
@@ -38,6 +39,32 @@ class TicketPanelRepository(BaseRepository[TicketPanel]):
         result = await self.session.execute(
             select(TicketPanel).where(
                 TicketPanel.channel_id.is_not(None), TicketPanel.message_id.is_not(None)
+            )
+        )
+        return list(result.scalars().all())
+
+
+class TicketPanelGroupRepository(BaseRepository[TicketPanelGroup]):
+    model = TicketPanelGroup
+
+    async def get_by_id(self, id_: uuid.UUID) -> TicketPanelGroup | None:
+        return await self.session.get(TicketPanelGroup, id_)
+
+    async def list_by_guild(self, guild_id: int) -> list[TicketPanelGroup]:
+        result = await self.session.execute(
+            select(TicketPanelGroup)
+            .where(TicketPanelGroup.guild_id == guild_id)
+            .order_by(TicketPanelGroup.created_at.asc())
+        )
+        return list(result.scalars().all())
+
+    async def list_published(self) -> list[TicketPanelGroup]:
+        """Todos os combos ja publicados (de todas as guilds) — usado so no
+        boot pra re-registrar as views persistentes dos botoes."""
+        result = await self.session.execute(
+            select(TicketPanelGroup).where(
+                TicketPanelGroup.channel_id.is_not(None),
+                TicketPanelGroup.message_id.is_not(None),
             )
         )
         return list(result.scalars().all())

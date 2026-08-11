@@ -117,6 +117,14 @@ class TicketsMenuView(SafeView):
     ) -> None:
         await _render_panels_list(interaction, self.on_back)
 
+    @discord.ui.button(label="📦 Combos", style=discord.ButtonStyle.primary, row=0)
+    async def groups_button(
+        self, interaction: discord.Interaction, _button: discord.ui.Button
+    ) -> None:
+        from views.ticket_panel_group_view import render_groups_list
+
+        await render_groups_list(interaction, self.on_back)
+
     @discord.ui.button(label="🚫 Desativar sistema", style=discord.ButtonStyle.danger, row=0)
     async def toggle_system(
         self, interaction: discord.Interaction, _button: discord.ui.Button

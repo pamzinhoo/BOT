@@ -13,9 +13,11 @@ from database.models.ticket import Ticket, TicketApprovalStatus, TicketCategory
 from database.models.ticket_form_response import TicketFormResponse
 from database.models.ticket_panel import TicketPanel
 from database.models.ticket_panel_form_field import MAX_FORM_FIELDS, TicketPanelFormField
+from database.models.ticket_panel_group import MAX_GROUP_PANELS, TicketPanelGroup
 from database.repositories.ticket_panel_repository import (
     TicketFormResponseRepository,
     TicketPanelFormFieldRepository,
+    TicketPanelGroupRepository,
     TicketPanelRepository,
 )
 from database.repositories.ticket_repository import TicketRepository
@@ -233,6 +235,154 @@ class TicketPanelService:
         for panel in panels:
             self._bot.add_view(self.build_view(panel), message_id=panel.message_id)
         return len(panels)
+
+    # --- combos (varios paineis, uma mensagem so) ---------------------------
+
+    async def list_groups(self, guild_id: int) -> list[TicketPanelGroup]:
+        async with self._database.session() as session:
+            return await TicketPanelGroupRepository(session).list_by_guild(guild_id)
+
+    async def get_group(self, group_id: uuid.UUID) -> TicketPanelGroup | None:
+        async with self._database.session() as session:
+            return await TicketPanelGroupRepository(session).get_by_id(group_id)
+
+    async def get_group_panels(self, group: TicketPanelGroup) -> list[TicketPanel]:
+        """Paineis do combo, na ordem salva (panel_ids[0] = principal). Paineis
+        excluidos depois de entrarem no combo sao silenciosamente pulados —
+        o botao deles so some, o resto do combo continua funcionando."""
+        panels: list[TicketPanel] = []
+        for raw_id in group.panel_ids:
+            panel = await self.get_panel(uuid.UUID(raw_id))
+            if panel is not None and panel.guild_id == group.guild_id:
+                panels.append(panel)
+        return panels
+
+    async def create_group(
+        self, guild_id: int, name: str, panel_ids: list[uuid.UUID]
+    ) -> TicketPanelGroup:
+        name = name.strip()
+        if not name:
+            raise TicketPanelError("Dê um nome pro combo.")
+        if len(panel_ids) < 2:
+            raise TicketPanelError("Escolha pelo menos 2 painéis pro combo.")
+        if len(panel_ids) > MAX_GROUP_PANELS:
+            raise TicketPanelError(f"Um combo aceita no máximo {MAX_GROUP_PANELS} painéis.")
+        async with self._database.session() as session:
+            panel_repo = TicketPanelRepository(session)
+            for panel_id in panel_ids:
+                panel = await panel_repo.get_by_id(panel_id)
+                if panel is None or panel.guild_id != guild_id:
+                    raise TicketPanelError("Um dos painéis escolhidos não foi encontrado.")
+            return await TicketPanelGroupRepository(session).add(
+                TicketPanelGroup(
+                    guild_id=guild_id,
+                    name=name,
+                    panel_ids=[str(panel_id) for panel_id in panel_ids],
+                )
+            )
+
+    async def update_group(self, group_id: uuid.UUID, **fields: object) -> TicketPanelGroup:
+        async with self._database.session() as session:
+            repo = TicketPanelGroupRepository(session)
+            group = await repo.get_by_id(group_id)
+            if group is None:
+                raise TicketPanelError("Combo não encontrado.")
+            for key, value in fields.items():
+                setattr(group, key, value)
+            await session.flush()
+            await session.refresh(group)
+            return group
+
+    async def delete_group(self, group_id: uuid.UUID) -> None:
+        group = await self.get_group(group_id)
+        if group is None:
+            return
+        await self._delete_published_group_message(group)
+        async with self._database.session() as session:
+            repo = TicketPanelGroupRepository(session)
+            row = await repo.get_by_id(group_id)
+            if row is not None:
+                await repo.delete(row)
+
+    def build_group_view(self, panels: list[TicketPanel]) -> discord.ui.View:
+        from views.ticket_panel_open_view import TicketPanelGroupOpenView
+
+        return TicketPanelGroupOpenView(panels)
+
+    async def publish_group(
+        self, group_id: uuid.UUID, channel: discord.TextChannel
+    ) -> TicketPanelGroup:
+        group = await self.get_group(group_id)
+        if group is None:
+            raise TicketPanelError("Combo não encontrado.")
+        panels = await self.get_group_panels(group)
+        if len(panels) < 2:
+            raise TicketPanelError(
+                "Este combo ficou com menos de 2 painéis válidos — edite os painéis antes de publicar."
+            )
+        await self._delete_published_group_message(group)
+        try:
+            message = await channel.send(
+                embed=self.build_embed(panels[0]), view=self.build_group_view(panels)
+            )
+        except discord.HTTPException as exc:
+            raise TicketPanelError(
+                "Não foi possível publicar o combo nesse canal — confira as permissões do bot."
+            ) from exc
+        self._bot.add_view(self.build_group_view(panels), message_id=message.id)
+        return await self.update_group(group_id, channel_id=channel.id, message_id=message.id)
+
+    async def refresh_group(self, group_id: uuid.UUID) -> TicketPanelGroup | None:
+        group = await self.get_group(group_id)
+        if group is None or group.channel_id is None or group.message_id is None:
+            return group
+        channel = self._bot.get_channel(group.channel_id)
+        if not isinstance(channel, discord.TextChannel):
+            return await self.update_group(group_id, channel_id=None, message_id=None)
+        panels = await self.get_group_panels(group)
+        if len(panels) < 2:
+            return group
+        try:
+            message = await channel.fetch_message(group.message_id)
+            await message.edit(embed=self.build_embed(panels[0]), view=self.build_group_view(panels))
+        except discord.NotFound:
+            return await self.update_group(group_id, channel_id=None, message_id=None)
+        except discord.HTTPException:
+            return group
+        return group
+
+    async def unpublish_group(self, group_id: uuid.UUID) -> TicketPanelGroup:
+        group = await self.get_group(group_id)
+        if group is None:
+            raise TicketPanelError("Combo não encontrado.")
+        await self._delete_published_group_message(group)
+        return await self.update_group(group_id, channel_id=None, message_id=None)
+
+    async def _delete_published_group_message(self, group: TicketPanelGroup) -> None:
+        if group.channel_id is None or group.message_id is None:
+            return
+        channel = self._bot.get_channel(group.channel_id)
+        if not isinstance(channel, discord.TextChannel):
+            return
+        try:
+            message = await channel.fetch_message(group.message_id)
+            await message.delete()
+        except discord.HTTPException:
+            pass
+
+    async def register_published_groups(self) -> int:
+        """Re-registra no boot uma view persistente por combo publicado, senão
+        os botões param de responder depois de um restart."""
+        async with self._database.session() as session:
+            groups = await TicketPanelGroupRepository(session).list_published()
+        count = 0
+        for group in groups:
+            panels = await self.get_group_panels(group)
+            if len(panels) < 2:
+                continue
+            self._bot.add_view(self.build_group_view(panels), message_id=group.message_id)
+            count += 1
+        return count
 
     # --- formulario ---------------------------------------------------------
 

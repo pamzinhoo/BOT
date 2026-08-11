@@ -109,3 +109,16 @@ class TicketPanelOpenView(SafeView):
     def __init__(self, panel: TicketPanel) -> None:
         super().__init__(timeout=None)
         self.add_item(_OpenTicketButton(panel))
+
+
+class TicketPanelGroupOpenView(SafeView):
+    """View persistente com UM botao de abrir ticket por painel do combo —
+    mesma embed unica (do painel principal), varios botoes lado a lado (ex.:
+    "Suporte" + "Denuncia"). Cada botao continua sendo o mesmo
+    `_OpenTicketButton` do painel individual: custom_id, permissao, formulario
+    e aprovacao seguem 100% da config daquele painel, sem duplicar logica."""
+
+    def __init__(self, panels: list[TicketPanel]) -> None:
+        super().__init__(timeout=None)
+        for panel in panels:
+            self.add_item(_OpenTicketButton(panel))

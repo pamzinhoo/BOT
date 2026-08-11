@@ -262,6 +262,14 @@ class LimerenceBot(commands.Bot):
         except Exception:
             logger.exception("Falha ao registrar as views dos paineis de ticket publicados.")
 
+        # mesma logica pros combos (varios paineis numa mensagem so) — sem
+        # isso os botoes de um combo ja publicado param de responder apos restart
+        try:
+            registered_groups = await self.ticket_panel_service.register_published_groups()
+            logger.info("Views persistentes de combos de painel registradas: %d", registered_groups)
+        except Exception:
+            logger.exception("Falha ao registrar as views dos combos de painel publicados.")
+
     async def _load_cogs(self) -> None:
         loaded = 0
         for module_info in pkgutil.iter_modules(cogs.__path__):
