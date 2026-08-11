@@ -124,6 +124,7 @@ class TicketsMenuView(SafeView):
     ) -> None:
         from views.ticket_panel_group_view import render_groups_list
 
+        await interaction.response.defer()
         await render_groups_list(interaction, self.on_back)
 
     @discord.ui.button(label="🚫 Desativar sistema", style=discord.ButtonStyle.danger, row=0)

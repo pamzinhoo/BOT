@@ -103,10 +103,11 @@ class _GroupSelect(discord.ui.Select[Any]):
         self.on_back = on_back
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         group = await bot.ticket_panel_service.get_group(uuid.UUID(self.values[0]))
         if group is None or group.guild_id != interaction.guild_id:
-            await interaction.response.send_message("Combo não encontrado.", ephemeral=True)
+            await interaction.followup.send("Combo não encontrado.", ephemeral=True)
             return
         await _render_group_edit(interaction, group, self.on_back)
 
@@ -146,6 +147,7 @@ class _BackToTicketsMenuButton(discord.ui.Button[Any]):
     async def callback(self, interaction: discord.Interaction) -> None:
         from views.ticket_panels_view import render_tickets_menu
 
+        await interaction.response.defer()
         await render_tickets_menu(interaction, self.on_back)
 
 
@@ -155,6 +157,7 @@ class _BackToGroupsListButton(discord.ui.Button[Any]):
         self.on_back = on_back
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         await render_groups_list(interaction, self.on_back)
 
 
@@ -225,6 +228,7 @@ class _GroupNameModal(discord.ui.Modal, title="Nome do combo"):
     async def on_submit(self, interaction: discord.Interaction) -> None:
         assert interaction.guild_id is not None
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
+        await interaction.response.defer()
         try:
             group = await bot.ticket_panel_service.create_group(
                 interaction.guild_id,
@@ -232,7 +236,7 @@ class _GroupNameModal(discord.ui.Modal, title="Nome do combo"):
                 [p.id for p in self.ordered_panels],
             )
         except TicketPanelError as exc:
-            await interaction.response.send_message(str(exc), ephemeral=True)
+            await interaction.followup.send(str(exc), ephemeral=True)
             return
         await bot.audit_log_service.record_config_change(
             guild_id=interaction.guild_id,
@@ -314,6 +318,7 @@ class TicketPanelGroupEditView(SafeView):
                 "Este combo ainda não foi publicado em nenhum canal.", ephemeral=True
             )
             return
+        await interaction.response.defer()
         group = await bot.ticket_panel_service.refresh_group(self.group.id)
         await _render_group_edit(interaction, group or self.group, self.on_back)
 
@@ -325,6 +330,7 @@ class TicketPanelGroupEditView(SafeView):
         if self.group.channel_id is None:
             await interaction.response.send_message("Este combo não está publicado.", ephemeral=True)
             return
+        await interaction.response.defer()
         group = await bot.ticket_panel_service.unpublish_group(self.group.id)
         await _log_group_change(interaction, group, "Publicação", "publicado", "despublicado")
         await _render_group_edit(interaction, group, self.on_back)
@@ -345,6 +351,7 @@ class TicketPanelGroupEditView(SafeView):
 
     @discord.ui.button(label="◀ Voltar", style=discord.ButtonStyle.secondary, row=1)
     async def back_button(self, interaction: discord.Interaction, _b: discord.ui.Button) -> None:
+        await interaction.response.defer()
         await render_groups_list(interaction, self.on_back)
 
 
@@ -355,6 +362,7 @@ class _BackToGroupEditButton(discord.ui.Button[Any]):
         self.on_back = on_back
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         group = await bot.ticket_panel_service.get_group(self.group.id) or self.group
         await _render_group_edit(interaction, group, self.on_back)
@@ -375,6 +383,7 @@ class _GroupRenameModal(discord.ui.Modal, title="Nome do combo"):
         if not new_name:
             await interaction.response.send_message("O nome não pode ficar vazio.", ephemeral=True)
             return
+        await interaction.response.defer()
         before = self.group.name
         group = await bot.ticket_panel_service.update_group(self.group.id, name=new_name)
         await _log_group_change(interaction, group, "Nome", before, new_name)
@@ -419,6 +428,7 @@ class _ConfirmDeleteGroupButton(discord.ui.Button[Any]):
     async def callback(self, interaction: discord.Interaction) -> None:
         assert interaction.guild_id is not None
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
+        await interaction.response.defer()
         name = self.group.name
         await bot.ticket_panel_service.delete_group(self.group.id)
         await bot.audit_log_service.record_config_change(
