@@ -73,11 +73,18 @@ TABLE_SCHEMAS: dict[str, list[tuple[str, RefKind]]] = {
         ("allow_multiple_tickets", RefKind.PLAIN),
         ("auto_close_enabled", RefKind.PLAIN),
         ("delete_delay_seconds", RefKind.PLAIN),
+        ("category_selection_mode", RefKind.PLAIN),
     ],
     "evaluation_settings": [
         ("enabled", RefKind.PLAIN),
         ("min_comment_rating", RefKind.PLAIN),
         ("star_emoji", RefKind.PLAIN),
+        ("evaluation_method", RefKind.PLAIN),
+        ("dm_embed_title", RefKind.PLAIN),
+        ("dm_embed_description", RefKind.PLAIN),
+        ("dm_prompt_text", RefKind.PLAIN),
+        ("dm_button_label", RefKind.PLAIN),
+        ("dm_thanks_message", RefKind.PLAIN),
     ],
     "dashboard_settings": [
         ("auto_update_enabled", RefKind.PLAIN),
@@ -360,6 +367,24 @@ async def build_import_plan(
                         old_value=old_value,
                         new_value=old_value,
                         included=False,
+                    )
+                )
+                continue
+
+            if attr not in table_input:
+                # campo novo, ausente num arquivo exportado por uma versao
+                # anterior do bot — mantem o valor atual em vez de zerar pra
+                # None (que quebraria coluna NOT NULL tipo category_selection_mode).
+                table_plan[attr] = old_value
+                changes.append(
+                    ImportFieldChange(
+                        table=table,
+                        attr=attr,
+                        label=_label(attr),
+                        kind=kind,
+                        status="value",
+                        old_value=old_value,
+                        new_value=old_value,
                     )
                 )
                 continue

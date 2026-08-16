@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.database import Database
 from database.models.evaluation import Evaluation
+from database.models.evaluation_settings import DEFAULT_EVALUATION_METHOD, EVALUATION_METHODS
 from database.models.ticket import Ticket
 from database.repositories.achievement_repository import AchievementRepository
 from database.repositories.evaluation_repository import EvaluationRepository
@@ -17,6 +18,12 @@ from utils.formatter import running_average
 
 _BAD_RATING_THRESHOLD = 2
 _CLEAN_STREAK_DAYS = 30
+
+
+def normalize_evaluation_method(value: str | None) -> str:
+    """Qualquer valor desconhecido (guild antiga sem a coluna, dado corrompido)
+    cai no comportamento historico — avaliar so no ticket."""
+    return value if value in EVALUATION_METHODS else DEFAULT_EVALUATION_METHOD
 
 
 class EvaluationError(ValueError):

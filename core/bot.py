@@ -97,7 +97,12 @@ class LimerenceBot(commands.Bot):
         self.license_service = LicenseService(database, self.event_bus)
         self.role_sync_service = RoleSyncService(database, self)
         self.role_sync_service.register(self.event_bus)
-        self.reconciliation_service = ReconciliationService(database, self)
+        self.reconciliation_service = ReconciliationService(
+            database,
+            self,
+            max_concurrency=settings.reconcile_max_concurrency,
+            guild_timeout_seconds=settings.reconcile_guild_timeout_seconds,
+        )
         self.subscription_service = SubscriptionService(database, self, self.payment_service)
         self.subscription_renewal_config_service = SubscriptionRenewalConfigService(database)
         self.subscription_reminder_service = SubscriptionReminderService(
@@ -160,6 +165,7 @@ class LimerenceBot(commands.Bot):
         from cogs.giveaways import GiveawayCloseButton, GiveawayEnterButton, GiveawayRerollButton
         from cogs.polls import PollVoteButton
         from views.appeal_view import AppealAcceptButton, AppealButton, AppealDenyButton
+        from views.dm_evaluation_view import DMRatingButton
         from views.evaluation_view import EvaluationView
         from views.help_views import HelpCategoryView, HelpMainView
         from views.painel_view import PainelView
@@ -191,6 +197,10 @@ class LimerenceBot(commands.Bot):
         )
         self.add_dynamic_items(PollVoteButton)
         self.add_dynamic_items(GiveawayEnterButton, GiveawayCloseButton, GiveawayRerollButton)
+        # avaliacao de ticket por DM (metodo "dm"/"both" em EvaluationSettings,
+        # ou fallback quando o canal do ticket ja foi excluido) — custom_id
+        # carrega ticket_id+nota, tem que sobreviver a qualquer restart.
+        self.add_dynamic_items(DMRatingButton)
 
         # botoes das mensagens de renovacao de assinatura (vao por DM/canal e
         # precisam responder mesmo depois de um restart)

@@ -18,6 +18,7 @@ from database.repositories.ticket_message_repository import TicketMessageReposit
 from database.repositories.ticket_repository import TicketRepository
 from utils.constants import TICKET_IMMEDIATE_CLOSE_SECONDS
 from utils.formatter import running_average
+from utils.timing import timed_step
 
 _MILESTONE_ACHIEVEMENTS = {1: "first_ticket", 100: "tickets_100", 1000: "tickets_1000"}
 
@@ -39,6 +40,17 @@ class CloseResult:
 class TicketService:
     def __init__(self, database: Database) -> None:
         self._database = database
+        # canal -> "confirmado que NAO e ticket". Um channel_id so vira ticket
+        # na criacao (create_ticket sempre usa um canal RECEM-criado pelo
+        # Discord — snowflakes nunca se repetem), entao um resultado negativo
+        # nunca fica desatualizado: nao precisa de TTL nem de invalidar em
+        # escrita. So o resultado negativo e cacheado — quando o canal E um
+        # ticket, sempre busca fresco no banco (status/claim muda o tempo
+        # todo). Sem isso, cogs/tickets.py `on_message` pagava 1 SELECT por
+        # MENSAGEM em qualquer canal do servidor so pra descobrir que nao e
+        # ticket. `forget_channel` mantem isso limitado ao numero de canais
+        # vivos na guild (chamado em on_guild_channel_delete).
+        self._confirmed_non_ticket_channels: set[int] = set()
 
     async def create_ticket(
         self,
@@ -133,7 +145,53 @@ class TicketService:
             if kind == TicketMessageKind.STAFF_FIRST and ticket.first_response_at is None:
                 ticket.first_response_at = message.created_at
 
+    async def record_first_message_for_channel(self, message: discord.Message) -> None:
+        """Versao usada pelo listener `on_message` (cogs/tickets.py): resolve
+        "e ticket?" e grava a primeira mensagem numa UNICA sessao/transacao,
+        em vez das duas consultas separadas que existiam antes (uma pra
+        decidir se chama `record_first_message`, outra dentro dele mesmo).
+        Usa o cache negativo de canal pra sair sem sessao nenhuma quando o
+        canal ja foi confirmado como "nao e ticket" — que e o caso da imensa
+        maioria das mensagens do servidor."""
+        channel_id = message.channel.id
+        if channel_id in self._confirmed_non_ticket_channels:
+            return
+        async with self._database.session() as session:
+            ticket_repo = TicketRepository(session)
+            ticket = await ticket_repo.get_by_channel_id(channel_id)
+            if ticket is None:
+                self._confirmed_non_ticket_channels.add(channel_id)
+                return
+            if ticket.status == TicketStatus.CLOSED:
+                return
+            is_staff = message.author.id != ticket.opened_by_discord_id
+            kind = TicketMessageKind.STAFF_FIRST if is_staff else TicketMessageKind.USER_FIRST
+            message_repo = TicketMessageRepository(session)
+            if await message_repo.exists(ticket.id, kind):
+                return
+            await message_repo.add(
+                TicketMessage(
+                    ticket_id=ticket.id,
+                    kind=kind,
+                    discord_message_id=message.id,
+                    author_discord_id=message.author.id,
+                    sent_at=message.created_at,
+                )
+            )
+            if kind == TicketMessageKind.STAFF_FIRST and ticket.first_response_at is None:
+                ticket.first_response_at = message.created_at
+
+    def forget_channel(self, channel_id: int) -> None:
+        """Remove `channel_id` do cache negativo de canais. Chamado no delete
+        de QUALQUER canal (nao so ticket) pra manter o cache do tamanho dos
+        canais vivos na guild, em vez de crescer sem limite pra sempre."""
+        self._confirmed_non_ticket_channels.discard(channel_id)
+
     async def close_ticket(self, channel_id: int, closed_by_discord_id: int) -> CloseResult:
+        async with timed_step("close_ticket", "db"):
+            return await self._close_ticket_impl(channel_id, closed_by_discord_id)
+
+    async def _close_ticket_impl(self, channel_id: int, closed_by_discord_id: int) -> CloseResult:
         now = datetime.now(UTC)
         async with self._database.session() as session:
             ticket_repo = TicketRepository(session)
@@ -271,8 +329,13 @@ class TicketService:
             return await TicketRepository(session).get_by_id(ticket_id)
 
     async def get_by_channel_id(self, channel_id: int) -> Ticket | None:
+        if channel_id in self._confirmed_non_ticket_channels:
+            return None
         async with self._database.session() as session:
-            return await TicketRepository(session).get_by_channel_id(channel_id)
+            ticket = await TicketRepository(session).get_by_channel_id(channel_id)
+        if ticket is None:
+            self._confirmed_non_ticket_channels.add(channel_id)
+        return ticket
 
     async def list_open_by_guild(self, guild_id: int) -> list[Ticket]:
         async with self._database.session() as session:

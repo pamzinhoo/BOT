@@ -38,6 +38,22 @@ class ConfigService:
         self._anti_spam_settings_cache: TTLCache[int, AntiSpamSettings] = TTLCache(
             _SETTINGS_TTL_SECONDS
         )
+        # mesmo padrao das 4 caches acima — estas 4 nao tinham cache ainda
+        # (achado M da auditoria anterior). get_evaluation_settings em
+        # particular e lido no caminho de fechamento de ticket
+        # (views/ticket_actions_view.py), as outras 3 no refresh de dashboard
+        # (chamado em ~15 pontos, hoje ja em background, mas ainda bate no
+        # banco toda vez sem necessidade).
+        self._evaluation_settings_cache: TTLCache[int, EvaluationSettings] = TTLCache(
+            _SETTINGS_TTL_SECONDS
+        )
+        self._dashboard_settings_cache: TTLCache[int, DashboardSettings] = TTLCache(
+            _SETTINGS_TTL_SECONDS
+        )
+        self._bot_status_settings_cache: TTLCache[int, BotStatusSettings] = TTLCache(
+            _SETTINGS_TTL_SECONDS
+        )
+        self._ranking_settings_cache: TTLCache[int, RankingSettings] = TTLCache(_SETTINGS_TTL_SECONDS)
 
     async def get_settings(self, guild_id: int) -> GuildSettings:
         cached = self._settings_cache.get(guild_id)
@@ -80,8 +96,13 @@ class ConfigService:
     # --- Avaliações ----------------------------------------------------------
 
     async def get_evaluation_settings(self, guild_id: int) -> EvaluationSettings:
+        cached = self._evaluation_settings_cache.get(guild_id)
+        if cached is not None:
+            return cached
         async with self._database.session() as session:
-            return await EvaluationSettingsRepository(session).get_or_create(guild_id)
+            settings = await EvaluationSettingsRepository(session).get_or_create(guild_id)
+        self._evaluation_settings_cache.set(guild_id, settings)
+        return settings
 
     async def update_evaluation_settings(self, guild_id: int, **fields: object) -> EvaluationSettings:
         async with self._database.session() as session:
@@ -89,13 +110,19 @@ class ConfigService:
             settings = await repo.get_or_create(guild_id)
             for key, value in fields.items():
                 setattr(settings, key, value)
-            return settings
+        self._evaluation_settings_cache.invalidate(guild_id)
+        return settings
 
     # --- Dashboard ----------------------------------------------------------
 
     async def get_dashboard_settings(self, guild_id: int) -> DashboardSettings:
+        cached = self._dashboard_settings_cache.get(guild_id)
+        if cached is not None:
+            return cached
         async with self._database.session() as session:
-            return await DashboardSettingsRepository(session).get_or_create(guild_id)
+            settings = await DashboardSettingsRepository(session).get_or_create(guild_id)
+        self._dashboard_settings_cache.set(guild_id, settings)
+        return settings
 
     async def update_dashboard_settings(self, guild_id: int, **fields: object) -> DashboardSettings:
         async with self._database.session() as session:
@@ -103,7 +130,8 @@ class ConfigService:
             settings = await repo.get_or_create(guild_id)
             for key, value in fields.items():
                 setattr(settings, key, value)
-            return settings
+        self._dashboard_settings_cache.invalidate(guild_id)
+        return settings
 
     async def list_dashboards_with_auto_update(self) -> list[DashboardSettings]:
         async with self._database.session() as session:
@@ -112,8 +140,13 @@ class ConfigService:
     # --- Status do Bot -------------------------------------------------------
 
     async def get_bot_status_settings(self, guild_id: int) -> BotStatusSettings:
+        cached = self._bot_status_settings_cache.get(guild_id)
+        if cached is not None:
+            return cached
         async with self._database.session() as session:
-            return await BotStatusSettingsRepository(session).get_or_create(guild_id)
+            settings = await BotStatusSettingsRepository(session).get_or_create(guild_id)
+        self._bot_status_settings_cache.set(guild_id, settings)
+        return settings
 
     async def update_bot_status_settings(self, guild_id: int, **fields: object) -> BotStatusSettings:
         async with self._database.session() as session:
@@ -121,7 +154,8 @@ class ConfigService:
             settings = await repo.get_or_create(guild_id)
             for key, value in fields.items():
                 setattr(settings, key, value)
-            return settings
+        self._bot_status_settings_cache.invalidate(guild_id)
+        return settings
 
     async def list_bot_status_with_channel(self) -> list[BotStatusSettings]:
         async with self._database.session() as session:
@@ -130,8 +164,13 @@ class ConfigService:
     # --- Ranking ------------------------------------------------------------
 
     async def get_ranking_settings(self, guild_id: int) -> RankingSettings:
+        cached = self._ranking_settings_cache.get(guild_id)
+        if cached is not None:
+            return cached
         async with self._database.session() as session:
-            return await RankingSettingsRepository(session).get_or_create(guild_id)
+            settings = await RankingSettingsRepository(session).get_or_create(guild_id)
+        self._ranking_settings_cache.set(guild_id, settings)
+        return settings
 
     async def update_ranking_settings(self, guild_id: int, **fields: object) -> RankingSettings:
         async with self._database.session() as session:
@@ -139,7 +178,8 @@ class ConfigService:
             settings = await repo.get_or_create(guild_id)
             for key, value in fields.items():
                 setattr(settings, key, value)
-            return settings
+        self._ranking_settings_cache.invalidate(guild_id)
+        return settings
 
     # --- Anti-Spam ----------------------------------------------------------
 
@@ -210,22 +250,30 @@ class ConfigService:
     async def reset_dashboard_settings(self, guild_id: int) -> dict[str, tuple[object, object]]:
         async with self._database.session() as session:
             settings = await DashboardSettingsRepository(session).get_or_create(guild_id)
-            return reset_row(settings)
+            diffs = reset_row(settings)
+        self._dashboard_settings_cache.invalidate(guild_id)
+        return diffs
 
     async def reset_bot_status_settings(self, guild_id: int) -> dict[str, tuple[object, object]]:
         async with self._database.session() as session:
             settings = await BotStatusSettingsRepository(session).get_or_create(guild_id)
-            return reset_row(settings)
+            diffs = reset_row(settings)
+        self._bot_status_settings_cache.invalidate(guild_id)
+        return diffs
 
     async def reset_ranking_settings(self, guild_id: int) -> dict[str, tuple[object, object]]:
         async with self._database.session() as session:
             settings = await RankingSettingsRepository(session).get_or_create(guild_id)
-            return reset_row(settings)
+            diffs = reset_row(settings)
+        self._ranking_settings_cache.invalidate(guild_id)
+        return diffs
 
     async def reset_evaluation_settings(self, guild_id: int) -> dict[str, tuple[object, object]]:
         async with self._database.session() as session:
             settings = await EvaluationSettingsRepository(session).get_or_create(guild_id)
-            return reset_row(settings)
+            diffs = reset_row(settings)
+        self._evaluation_settings_cache.invalidate(guild_id)
+        return diffs
 
     async def reset_anti_spam_settings(self, guild_id: int) -> dict[str, tuple[object, object]]:
         async with self._database.session() as session:

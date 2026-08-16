@@ -33,6 +33,11 @@ class Database:
             pool_pre_ping=True,
             pool_size=pool_size,
             max_overflow=max_overflow,
+            # reciclagem proativa das conexoes do pool a cada 30min — defensivo
+            # contra o pooler do Supabase (pgbouncer) derrubar conexoes ociosas
+            # silenciosamente; pool_pre_ping ja cobre o caso reativo (testa a
+            # conexao no checkout), isto so evita depender so do reativo.
+            pool_recycle=1800,
             connect_args={"statement_cache_size": 0},
         )
         self._session_factory = async_sessionmaker(

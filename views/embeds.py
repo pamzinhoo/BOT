@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 import discord
@@ -7,6 +8,7 @@ import discord
 from database.models.audit_log import AuditLogCategory
 from database.models.automod import AutoModLog, AutoModSettings
 from database.models.command_help import CommandHelp
+from database.models.evaluation_settings import EvaluationSettings
 from database.models.giveaway import Giveaway, GiveawayPrizeType
 from database.models.log import LogAction
 from database.models.partnership import Partnership
@@ -51,27 +53,213 @@ if TYPE_CHECKING:
     from services.punishment_review_service import PendingPunishmentItem
 
 
+TICKET_STATUS_LABELS: dict[str, str] = {
+    "open": "🟢 Aberto",
+    "claimed": "🟡 Em atendimento",
+    "closed": "🔴 Fechado",
+}
+
+
+def ticket_panel_status_label(ticket: Ticket) -> str:
+    return TICKET_STATUS_LABELS.get(ticket.status.value, TICKET_STATUS_LABELS["open"])
+
+
 def ticket_embed(
-    ticket: Ticket, opener: discord.Member | discord.User, panel: TicketPanel | None = None
+    ticket: Ticket,
+    opener: discord.Member | discord.User,
+    panel: TicketPanel | None = None,
+    *,
+    claimed_staff_name: str | None = None,
 ) -> discord.Embed:
+    """Painel enviado dentro do canal do ticket — o mesmo pra qualquer
+    categoria (Suporte, Painel Parceria, ...): titulo/descricao/cor/footer
+    vem 100% da config do painel quando existe (`panel.embed_*`), nada aqui e
+    fixo por categoria. Status/Assumido por/Aberto sao sempre recalculados a
+    partir do `ticket` — reflete o estado real toda vez que a embed e
+    reconstruida (claim/unclaim/incluir/remover chamam isto de novo)."""
     # tickets abertos por painel configuravel gravam category=OUTRO no banco
     # (o enum fixo nao tem como representar categorias criadas livremente
     # pela staff, tipo "Denuncia"/"Bug"/"Parceria") — o nome de verdade e o
     # do painel, entao exibe ele quando disponivel em vez do enum generico.
     if panel is not None:
-        title = f"{panel.button_emoji or '📁'} {panel.name}"
-        footer = f"Categoria: {panel.name}"
+        panel_emoji = panel.button_emoji or "📁"
+        title = f"{panel_emoji} {panel.name} — {opener.display_name}"
+        description = panel.embed_description or (
+            "Obrigado por abrir um ticket!\n\n"
+            "Descreva seu problema e um membro da equipe irá ajudá-lo em breve."
+        )
+        color = (
+            discord.Color(panel.embed_color) if panel.embed_color is not None else EMBED_COLOR_DEFAULT
+        )
     else:
-        title = CATEGORY_LABELS[ticket.category]
-        footer = f"Categoria: {ticket.category.value}"
+        title = f"{CATEGORY_LABELS[ticket.category]} — {opener.display_name}"
+        description = (
+            "Obrigado por abrir um ticket!\n\n"
+            "Descreva seu problema e um membro da equipe irá ajudá-lo em breve."
+        )
+        color = EMBED_COLOR_DEFAULT
 
-    embed = discord.Embed(
-        title=title,
-        description=f"Ticket aberto por {opener.mention}. Aguarde, a staff ja foi notificada.",
-        color=EMBED_COLOR_DEFAULT,
+    embed = discord.Embed(title=title, description=description, color=color)
+    embed.add_field(name="Status", value=ticket_panel_status_label(ticket), inline=True)
+    embed.add_field(name="Criado por", value=opener.mention, inline=True)
+    embed.add_field(
+        name="Assumido por", value=claimed_staff_name or "Não assumido", inline=True
     )
-    embed.set_footer(text=footer)
+    embed.add_field(
+        name="Aberto",
+        value=discord.utils.format_dt(ticket.created_at, style="R"),
+        inline=True,
+    )
+    footer = panel.embed_footer if panel is not None and panel.embed_footer else None
+    embed.set_footer(text=footer or f"Tickets • Limerence © {datetime.now(UTC).year}")
+    if panel is not None and panel.embed_thumbnail_url:
+        embed.set_thumbnail(url=panel.embed_thumbnail_url)
     return embed
+
+
+# valores usados quando o admin nao personalizou a DM de avaliacao — os
+# mesmos textos mostrados como EXEMPLO na especificacao, aqui como default de
+# verdade (nunca hardcoded no fluxo de envio, sempre passam por aqui).
+DEFAULT_EVALUATION_DM_TITLE = "📁 O teu ticket foi fechado"
+DEFAULT_EVALUATION_DM_DESCRIPTION = "Obrigado por entrar em contato com nossa equipe."
+DEFAULT_EVALUATION_DM_PROMPT = (
+    "⭐ Como foi sua experiência?\n\nSua avaliação nos ajuda a melhorar nosso atendimento."
+)
+DEFAULT_EVALUATION_DM_BUTTON_LABEL = "⭐ Avaliar atendimento"
+DEFAULT_EVALUATION_THANKS_MESSAGE = (
+    "✅ Obrigado pela sua avaliação!\n\nSeu feedback foi registrado com sucesso."
+)
+
+
+def ticket_type_label(ticket: Ticket, panel: TicketPanel | None) -> str:
+    """Nome da categoria pra exibir num resumo — mesma regra de `ticket_embed`
+    (nome do painel quando existe, senao o rotulo fixo do enum legado)."""
+    return panel.name if panel is not None else CATEGORY_LABELS[ticket.category]
+
+
+def _evaluation_placeholder_kwargs(
+    *,
+    guild: discord.Guild,
+    ticket: Ticket,
+    panel: TicketPanel | None,
+    opener: discord.Member | discord.User,
+    claimed_by_name: str,
+    closed_by_name: str,
+) -> dict[str, object]:
+    """Contexto compartilhado pelos placeholders de avaliacao — usado tanto no
+    embed da DM quanto (futuramente) em qualquer outro texto configuravel do
+    mesmo fluxo, sem duplicar a montagem dos valores."""
+    return {
+        "member": opener,
+        "guild": guild,
+        "ticket_type": ticket_type_label(ticket, panel),
+        "claimed_by": claimed_by_name,
+        "closed_by": closed_by_name,
+        "opened_at": discord.utils.format_dt(ticket.created_at, style="F"),
+        "closed_at": (
+            discord.utils.format_dt(ticket.closed_at, style="F") if ticket.closed_at else "—"
+        ),
+        "ticket_id": str(ticket.id)[:8],
+        # sem sistema de captura de motivo de fechamento no ticket hoje —
+        # placeholder suportado, mas sem dado real pra preencher alem de "—".
+        "reason": None,
+    }
+
+
+def ticket_closed_summary_embed(
+    *,
+    guild: discord.Guild,
+    ticket: Ticket,
+    panel: TicketPanel | None,
+    closed_by_mention: str,
+    closed_by_name: str,
+    claimed_by_name: str,
+) -> discord.Embed:
+    """Resumo do atendimento na mensagem de fechamento (canal) — mesmos dados
+    usados no `evaluation_dm_embed`, sem repetir consulta nenhuma (o chamador
+    ja tem tudo em maos). Titulo/cor continuam os historicos: so os campos de
+    resumo sao novos, nao ha personalizacao aqui (a personalizavel e a DM,
+    ver EvaluationSettings.dm_*)."""
+    embed = discord.Embed(
+        title="✅ Ticket fechado",
+        description=f"Fechado por {closed_by_mention}.",
+        color=EMBED_COLOR_DANGER,
+    )
+    embed.add_field(name="Servidor", value=guild.name, inline=True)
+    embed.add_field(name="Tipo", value=ticket_type_label(ticket, panel), inline=True)
+    embed.add_field(name="Assumido por", value=claimed_by_name, inline=True)
+    embed.add_field(name="Fechado por", value=closed_by_name, inline=True)
+    embed.add_field(
+        name="Aberto em", value=discord.utils.format_dt(ticket.created_at, style="F"), inline=True
+    )
+    embed.add_field(
+        name="Fechado em",
+        value=discord.utils.format_dt(ticket.closed_at, style="F") if ticket.closed_at else "—",
+        inline=True,
+    )
+    embed.add_field(name="ID do ticket", value=f"`{str(ticket.id)[:8]}`", inline=True)
+    embed.add_field(name="Motivo", value="—", inline=False)
+    return embed
+
+
+def evaluation_dm_embed(
+    eval_settings: EvaluationSettings,
+    *,
+    guild: discord.Guild,
+    ticket: Ticket,
+    panel: TicketPanel | None,
+    opener: discord.Member | discord.User,
+    claimed_by_name: str,
+    closed_by_name: str,
+) -> discord.Embed:
+    """Embed de avaliação enviado por DM depois do fechamento — usa a mesma
+    infra de placeholders/embed do resto do bot (`render_placeholders`), nunca
+    valores fixos. Título/descrição/texto do prompt vêm de
+    `EvaluationSettings` quando o admin personalizou; senão caem nos defaults
+    acima (mesmos textos do exemplo da especificação, nunca hardcoded no
+    fluxo de envio)."""
+    kwargs = _evaluation_placeholder_kwargs(
+        guild=guild,
+        ticket=ticket,
+        panel=panel,
+        opener=opener,
+        claimed_by_name=claimed_by_name,
+        closed_by_name=closed_by_name,
+    )
+    title = render_placeholders(eval_settings.dm_embed_title or DEFAULT_EVALUATION_DM_TITLE, **kwargs)
+    description = render_placeholders(
+        eval_settings.dm_embed_description or DEFAULT_EVALUATION_DM_DESCRIPTION, **kwargs
+    )
+    prompt = render_placeholders(eval_settings.dm_prompt_text or DEFAULT_EVALUATION_DM_PROMPT, **kwargs)
+
+    embed = discord.Embed(title=title[:256], color=EMBED_COLOR_DEFAULT)
+    embed.description = "\n\n".join(
+        [
+            description,
+            f"**Servidor:** {kwargs['guild'].name}",  # type: ignore[union-attr]
+            f"**Tipo:** {kwargs['ticket_type']}",
+            f"**Assumido por:** {kwargs['claimed_by']}",
+            f"**Fechado por:** {kwargs['closed_by']}",
+            f"**Aberto em:** {kwargs['opened_at']}",
+            f"**Fechado em:** {kwargs['closed_at']}",
+            f"**ID do ticket:** `{kwargs['ticket_id']}`",
+            f"**Motivo:**\n{'—'}",
+            "─" * 20,
+            prompt,
+            f"**{evaluation_button_label(eval_settings)}**",
+        ]
+    )[:4096]
+    embed.set_footer(text=f"Tickets • Limerence © {datetime.now(UTC).year}")
+    return embed
+
+
+def evaluation_button_label(eval_settings: EvaluationSettings) -> str:
+    return (eval_settings.dm_button_label or DEFAULT_EVALUATION_DM_BUTTON_LABEL)[:80]
+
+
+def evaluation_thanks_message(eval_settings: EvaluationSettings, **placeholder_kwargs: object) -> str:
+    template = eval_settings.dm_thanks_message or DEFAULT_EVALUATION_THANKS_MESSAGE
+    return render_placeholders(template, **placeholder_kwargs) if placeholder_kwargs else template
 
 
 def staff_profile_embed(profile: StaffProfile, member: discord.Member | discord.User) -> discord.Embed:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, Index, UniqueConstraint
+from sqlalchemy import BigInteger, DateTime, Index, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from database.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
@@ -19,6 +19,11 @@ class Partnership(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     __table_args__ = (
         UniqueConstraint("guild_id", "owner_id", name="uq_partnerships_guild_owner"),
         Index("ix_partnerships_guild_id", "guild_id"),
+        Index(
+            "ix_partnerships_guild_announce",
+            "guild_id", "last_announced_at",
+            postgresql_where=text("archived_at IS NULL"),
+        ),
     )
 
     guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)

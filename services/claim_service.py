@@ -11,6 +11,7 @@ from database.repositories.claim_repository import ClaimRepository
 from database.repositories.staff_activity_repository import StaffActivityRepository
 from database.repositories.staff_stats_repository import StaffStatsRepository
 from database.repositories.ticket_repository import TicketRepository
+from utils.timing import timed_step
 
 
 class ClaimError(ValueError):
@@ -23,7 +24,7 @@ class ClaimService:
 
     async def claim_ticket(self, channel_id: int, staff_id: uuid.UUID) -> Claim:
         now = datetime.now(UTC)
-        async with self._database.session() as session:
+        async with timed_step("claim_ticket", "db"), self._database.session() as session:
             ticket_repo = TicketRepository(session)
             ticket = await ticket_repo.get_by_channel_id_locked(channel_id)
             if ticket is None:
@@ -56,7 +57,7 @@ class ClaimService:
 
     async def unclaim_ticket(self, channel_id: int, staff_id: uuid.UUID) -> None:
         now = datetime.now(UTC)
-        async with self._database.session() as session:
+        async with timed_step("unclaim_ticket", "db"), self._database.session() as session:
             ticket_repo = TicketRepository(session)
             ticket = await ticket_repo.get_by_channel_id(channel_id)
             if ticket is None or ticket.claimed_by_staff_id != staff_id:

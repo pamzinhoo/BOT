@@ -109,6 +109,15 @@ class Settings:
     # de inventar um segundo mecanismo.
     internal_api_secret: str | None = field(default=None)
 
+    # Reconciliacao de licencas (Fase 4 da auditoria de performance) — sem
+    # limite, `asyncio.gather` sobre todas as guilds ao mesmo tempo faria N
+    # sessoes de DB + N rajadas de chamadas Discord simultaneas, competindo
+    # com o event loop que tambem serve comandos/eventos do bot. Semaforo
+    # limita quantas guilds reconciliam em paralelo; timeout evita que uma
+    # guild travada (Discord lento, DB lento) prenda o ciclo inteiro.
+    reconcile_max_concurrency: int = field(default=5)
+    reconcile_guild_timeout_seconds: int = field(default=30)
+
     # CORS explicito — a API e consumida por Bearer token (Tauri/Launcher),
     # nao por cookie, entao nao ha CSRF classico via navegador; ainda assim
     # o padrao e negar TODA origem (lista vazia) em vez de deixar implicito.
@@ -259,6 +268,8 @@ class Settings:
             storage_download_ttl_seconds=_optional_int("STORAGE_DOWNLOAD_TTL_SECONDS") or 600,
             internal_api_secret=internal_api_secret,
             cors_allowed_origins=cors_allowed_origins,
+            reconcile_max_concurrency=_optional_int("RECONCILE_MAX_CONCURRENCY") or 5,
+            reconcile_guild_timeout_seconds=_optional_int("RECONCILE_GUILD_TIMEOUT_SECONDS") or 30,
         )
 
 

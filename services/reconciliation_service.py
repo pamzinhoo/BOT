@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 import uuid
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
@@ -20,6 +21,14 @@ if TYPE_CHECKING:
 
 logger = get_logger("reconciliation_service")
 
+# Retry curto e limitado so pra erro transiente da API Discord (5xx/rede) na
+# escrita do cargo — Forbidden/NotFound sao permanentes, nao adianta tentar
+# de novo (ver _fix_divergence). discord.py ja lida com 429 internamente
+# (fila de rate limit do proprio HTTP client), entao isto NAO e retry de
+# rate limit, e so de falha transiente pontual.
+_ROLE_EDIT_MAX_ATTEMPTS = 2
+_ROLE_EDIT_RETRY_BACKOFF_SECONDS = 1.0
+
 
 @dataclass
 class GuildReconciliationResult:
@@ -27,6 +36,7 @@ class GuildReconciliationResult:
     roles_granted: int = 0
     roles_removed: int = 0
     errors: int = 0
+    timed_out: bool = False
 
 
 @dataclass
@@ -35,6 +45,9 @@ class ReconciliationReport:
     roles_granted: int = 0
     roles_removed: int = 0
     errors: int = 0
+    timeouts: int = 0
+    duration_seconds: float = 0.0
+    max_concurrency: int = 0
     per_guild: list[GuildReconciliationResult] = field(default_factory=list)
 
 
@@ -47,9 +60,18 @@ class ReconciliationService:
     pontual, edicao manual de cargo por um staff. Corrige nas duas direcoes e
     audita cada correcao (nunca corrige em silencio)."""
 
-    def __init__(self, database: Database, bot: LimerenceBot) -> None:
+    def __init__(
+        self,
+        database: Database,
+        bot: LimerenceBot,
+        *,
+        max_concurrency: int = 5,
+        guild_timeout_seconds: float = 30,
+    ) -> None:
         self._database = database
         self._bot = bot
+        self._max_concurrency = max_concurrency
+        self._guild_timeout_seconds = guild_timeout_seconds
         # O ciclo periodico (LicenseReconciliationCog) e o endpoint sob
         # demanda (/internal/reconcile) chamam o mesmo metodo — sem trava,
         # dois disparos quase simultaneos rodariam duas reconciliacoes
@@ -60,12 +82,21 @@ class ReconciliationService:
 
     async def reconcile_all_guilds(self) -> ReconciliationReport:
         async with self._lock:
-            report = ReconciliationReport()
+            start = time.monotonic()
+            report = ReconciliationReport(max_concurrency=self._max_concurrency)
+            guilds = list(self._bot.guilds)
+            # Semaforo limita quantas guilds reconciliam ao mesmo tempo —
+            # sem isso, `gather` dispara todas de uma vez (N sessoes de DB +
+            # N rajadas de chamadas Discord concorrentes), competindo com o
+            # event loop que tambem serve comandos/eventos do bot em tempo
+            # real. `return_exceptions=True` continua garantindo que uma
+            # guild travada/com erro nao cancela as demais.
+            semaphore = asyncio.Semaphore(self._max_concurrency)
             results = await asyncio.gather(
-                *(self.reconcile_guild(guild) for guild in self._bot.guilds),
+                *(self._reconcile_guild_limited(guild, semaphore) for guild in guilds),
                 return_exceptions=True,
             )
-            for guild, result in zip(self._bot.guilds, results):
+            for guild, result in zip(guilds, results, strict=True):
                 if isinstance(result, BaseException):
                     report.errors += 1
                     logger.exception(
@@ -76,8 +107,44 @@ class ReconciliationService:
                 report.roles_granted += result.roles_granted
                 report.roles_removed += result.roles_removed
                 report.errors += result.errors
+                if result.timed_out:
+                    report.timeouts += 1
                 report.per_guild.append(result)
+
+            report.duration_seconds = time.monotonic() - start
+            logger.info(
+                "Reconciliation completed: guilds=%s success=%s failed=%s timeout=%s "
+                "duration=%.1fs max_concurrency=%s",
+                len(guilds),
+                report.guilds_checked - report.timeouts,
+                report.errors,
+                report.timeouts,
+                report.duration_seconds,
+                report.max_concurrency,
+            )
             return report
+
+    async def _reconcile_guild_limited(
+        self, guild: discord.Guild, semaphore: asyncio.Semaphore
+    ) -> GuildReconciliationResult:
+        async with semaphore:
+            guild_start = time.monotonic()
+            try:
+                result = await asyncio.wait_for(
+                    self.reconcile_guild(guild), timeout=self._guild_timeout_seconds
+                )
+            except TimeoutError:
+                logger.warning(
+                    "Timeout ao reconciliar guild %s apos %.1fs (limite=%ss).",
+                    guild.id,
+                    time.monotonic() - guild_start,
+                    self._guild_timeout_seconds,
+                )
+                return GuildReconciliationResult(guild_id=guild.id, errors=1, timed_out=True)
+            logger.debug(
+                "Guild %s reconciliada em %.2fs.", guild.id, time.monotonic() - guild_start
+            )
+            return result
 
     async def reconcile_guild(self, guild: discord.Guild) -> GuildReconciliationResult:
         result = GuildReconciliationResult(guild_id=guild.id)
@@ -156,17 +223,33 @@ class ReconciliationService:
     async def _fix_divergence(
         self, member: discord.Member, role: discord.Role, plan: Plan, *, grant: bool, reason: str
     ) -> None:
-        try:
-            if grant:
-                await member.add_roles(role, reason=reason)
-            else:
-                await member.remove_roles(role, reason=reason)
-        except discord.Forbidden:
-            logger.warning("Sem permissao para corrigir cargo do plano %s na guild %s.", plan.id, plan.guild_id)
-            return
-        except discord.HTTPException:
-            logger.exception("Falha ao corrigir cargo do plano %s na guild %s.", plan.id, plan.guild_id)
-            return
+        for attempt in range(1, _ROLE_EDIT_MAX_ATTEMPTS + 1):
+            try:
+                if grant:
+                    await member.add_roles(role, reason=reason)
+                else:
+                    await member.remove_roles(role, reason=reason)
+                break
+            except (discord.Forbidden, discord.NotFound) as exc:
+                # Permanente (sem permissao / cargo ou membro sumiu) — retry
+                # nao resolve, so tenta de novo no proximo ciclo.
+                logger.warning(
+                    "Falha permanente ao corrigir cargo do plano %s na guild %s: %s.",
+                    plan.id,
+                    plan.guild_id,
+                    type(exc).__name__,
+                )
+                return
+            except discord.HTTPException:
+                if attempt >= _ROLE_EDIT_MAX_ATTEMPTS:
+                    logger.exception(
+                        "Falha ao corrigir cargo do plano %s na guild %s apos %s tentativa(s).",
+                        plan.id,
+                        plan.guild_id,
+                        attempt,
+                    )
+                    return
+                await asyncio.sleep(_ROLE_EDIT_RETRY_BACKOFF_SECONDS * attempt)
 
         await self._bot.audit_log_service.record(
             guild_id=plan.guild_id,

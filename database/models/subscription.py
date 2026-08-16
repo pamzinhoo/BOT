@@ -4,7 +4,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, Enum, ForeignKey, String, UniqueConstraint
+from sqlalchemy import BigInteger, DateTime, Enum, ForeignKey, Index, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from database.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
@@ -31,6 +31,7 @@ class Subscription(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     __tablename__ = "subscriptions"
     __table_args__ = (
         UniqueConstraint("guild_id", "user_id", "plan_id", name="uq_subscription_guild_user_plan"),
+        Index("ix_subscriptions_guild_status", "guild_id", "status"),
     )
 
     guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)

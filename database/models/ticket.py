@@ -4,7 +4,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Enum, ForeignKey, Integer
+from sqlalchemy import BigInteger, Boolean, DateTime, Enum, ForeignKey, Index, Integer, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from database.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
@@ -40,6 +40,17 @@ class Ticket(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     """1 linha por ticket. channel_id e unico: 1 canal = 1 ticket."""
 
     __tablename__ = "tickets"
+    __table_args__ = (
+        Index(
+            "ix_tickets_open_by_guild_member",
+            "guild_id", "opened_by_discord_id",
+            postgresql_where=text("status IN ('OPEN', 'CLAIMED')"),
+        ),
+        Index(
+            "ix_tickets_staff_created",
+            "claimed_by_staff_id", text("created_at DESC"),
+        ),
+    )
 
     guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
     channel_id: Mapped[int] = mapped_column(BigInteger, nullable=False, unique=True)

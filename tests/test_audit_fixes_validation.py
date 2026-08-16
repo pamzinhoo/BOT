@@ -18,16 +18,19 @@ from unittest.mock import AsyncMock
 
 import pytest
 from sqlalchemy import delete
+from sqlalchemy.exc import IntegrityError
 
 from config.settings import get_settings
 from database.database import Database
 from database.models.discount_coupon import DiscountCoupon, DiscountType
+from database.models.discount_coupon_plan import DiscountCouponPlan
 from database.models.discount_coupon_redemption import DiscountCouponRedemption
 from database.models.payment import PaymentHistory, PaymentStatus
 from database.models.plan import Plan
 from database.models.punishment import Punishment, PunishmentStatus, PunishmentType
 from database.models.punishment_appeal import AppealStatus, PunishmentAppeal
 from database.models.ticket_panel import TicketPanel
+from database.repositories.discount_coupon_repository import DiscountCouponPlanRepository
 from services.coupon_service import CouponGlobalLimitReachedError, CouponService
 from services.payment_service import PaymentService
 from services.plan_service import PlanService
@@ -585,5 +588,106 @@ async def test_cancel_pending_blocks_punishment_from_another_guild(db: Database)
             fresh = await session.get(Punishment, punishment_id)
             assert fresh is not None
             assert fresh.status == PunishmentStatus.PENDING
+    finally:
+        await _cleanup(db)
+
+
+@pytest.mark.asyncio
+async def test_replace_for_coupon_does_not_duplicate_plan_rows(db: Database) -> None:
+    """C1 (auditoria de performance): replace_for_coupon tinha um loop de
+    insert+flush duplicado que tentava gravar cada (coupon_id, plan_id) duas
+    vezes, violando uq_discount_coupon_plan. Uma chamada normal com N planos
+    tem que resultar em exatamente N linhas, sem IntegrityError."""
+    async with db.session() as session:
+        coupon = DiscountCoupon(
+            guild_id=GUILD_A, code=f"DUPTEST-{uuid.uuid4().hex[:8]}",
+            discount_type=DiscountType.PERCENTAGE, discount_value=10, billing_cycles=[],
+        )
+        plan_a = Plan(guild_id=GUILD_A, name=f"Plano A {uuid.uuid4().hex[:8]}")
+        plan_b = Plan(guild_id=GUILD_A, name=f"Plano B {uuid.uuid4().hex[:8]}")
+        session.add_all([coupon, plan_a, plan_b])
+        await session.flush()
+        coupon_id, plan_ids = coupon.id, [plan_a.id, plan_b.id]
+
+    try:
+        async with db.session() as session:
+            repo = DiscountCouponPlanRepository(session)
+            await repo.replace_for_coupon(coupon_id, plan_ids)
+
+        async with db.session() as session:
+            repo = DiscountCouponPlanRepository(session)
+            rows = await repo.list_by_coupon(coupon_id)
+            assert sorted(r.plan_id for r in rows) == sorted(plan_ids)
+    finally:
+        await _cleanup(db)
+
+
+@pytest.mark.asyncio
+async def test_replace_for_coupon_concurrent_calls_stay_consistent(db: Database) -> None:
+    """Duas chamadas concorrentes de replace_for_coupon para o mesmo cupom
+    (ex.: dois admins salvando o mesmo formulario ao mesmo tempo) tem que ser
+    serializadas pelo FOR UPDATE na linha do cupom — nenhuma das duas pode
+    lançar IntegrityError por esbarrar no unique constraint da outra, e o
+    estado final tem que ser consistente (exatamente len(plan_ids) linhas,
+    sem duplicata)."""
+    async with db.session() as session:
+        coupon = DiscountCoupon(
+            guild_id=GUILD_A, code=f"RACETEST-{uuid.uuid4().hex[:8]}",
+            discount_type=DiscountType.PERCENTAGE, discount_value=10, billing_cycles=[],
+        )
+        plan_a = Plan(guild_id=GUILD_A, name=f"Plano C {uuid.uuid4().hex[:8]}")
+        plan_b = Plan(guild_id=GUILD_A, name=f"Plano D {uuid.uuid4().hex[:8]}")
+        session.add_all([coupon, plan_a, plan_b])
+        await session.flush()
+        coupon_id, plan_ids = coupon.id, [plan_a.id, plan_b.id]
+
+    try:
+        async def _replace() -> None:
+            async with db.session() as session:
+                await DiscountCouponPlanRepository(session).replace_for_coupon(coupon_id, plan_ids)
+
+        results = await asyncio.gather(_replace(), _replace(), return_exceptions=True)
+        for result in results:
+            if isinstance(result, Exception):
+                raise result
+
+        async with db.session() as session:
+            rows = await DiscountCouponPlanRepository(session).list_by_coupon(coupon_id)
+            assert sorted(r.plan_id for r in rows) == sorted(plan_ids)
+    finally:
+        await _cleanup(db)
+
+
+@pytest.mark.asyncio
+async def test_replace_for_coupon_rolls_back_delete_on_failure(db: Database) -> None:
+    """Se o insert falhar (ex.: plan_id que nao existe mais, violando a FK),
+    a transacao inteira precisa reverter — inclusive o DELETE das linhas
+    antigas feito no inicio do metodo. Sem isso o cupom ficaria sem nenhum
+    plano vinculado (vira "vale pra todos") por causa de um erro parcial."""
+    async with db.session() as session:
+        coupon = DiscountCoupon(
+            guild_id=GUILD_A, code=f"ROLLBACKTEST-{uuid.uuid4().hex[:8]}",
+            discount_type=DiscountType.PERCENTAGE, discount_value=10, billing_cycles=[],
+        )
+        plan_a = Plan(guild_id=GUILD_A, name=f"Plano E {uuid.uuid4().hex[:8]}")
+        session.add_all([coupon, plan_a])
+        await session.flush()
+        coupon_id, plan_a_id = coupon.id, plan_a.id
+        session.add(DiscountCouponPlan(coupon_id=coupon_id, plan_id=plan_a_id))
+        await session.flush()
+
+    try:
+        nonexistent_plan_id = uuid.uuid4()
+        with pytest.raises(IntegrityError):  # FK inexistente
+            async with db.session() as session:
+                await DiscountCouponPlanRepository(session).replace_for_coupon(
+                    coupon_id, [nonexistent_plan_id]
+                )
+
+        # rollback tem que ter preservado a linha original (plan_a), nao deixado o
+        # cupom sem nenhum plano vinculado
+        async with db.session() as session:
+            rows = await DiscountCouponPlanRepository(session).list_by_coupon(coupon_id)
+            assert [r.plan_id for r in rows] == [plan_a_id]
     finally:
         await _cleanup(db)

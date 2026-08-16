@@ -14,6 +14,10 @@ from database.models.ticket_form_response import TicketFormResponse
 from database.models.ticket_panel import TicketPanel
 from database.models.ticket_panel_form_field import MAX_FORM_FIELDS, TicketPanelFormField
 from database.models.ticket_panel_group import MAX_GROUP_PANELS, TicketPanelGroup
+from database.models.ticket_settings import (
+    CATEGORY_SELECTION_MODES,
+    DEFAULT_CATEGORY_SELECTION_MODE,
+)
 from database.repositories.ticket_panel_repository import (
     TicketFormResponseRepository,
     TicketPanelFormFieldRepository,
@@ -44,9 +48,50 @@ SYSTEM_DISABLED_MESSAGE = (
 )
 PANEL_DISABLED_MESSAGE = "🚫 Este painel de tickets está desativado no momento."
 
+# limites de componentes do Discord numa mesma mensagem
+MAX_SELECT_OPTIONS = 25  # opcoes por String Select
+MAX_SELECT_MENUS = 5  # um select ocupa uma ActionRow inteira, e sao 5 rows
+MAX_BUTTONS_PER_VIEW = 25  # 5 botoes por row x 5 rows
+
 
 def button_style_from_value(value: str | None) -> discord.ButtonStyle:
     return _BUTTON_STYLES.get(value or "primary", discord.ButtonStyle.primary)
+
+
+def normalize_selection_mode(value: str | None) -> str:
+    """Qualquer valor desconhecido cai no modo historico (botoes) — nunca deixa
+    um combo publicado sem componente nenhum por causa de config invalida."""
+    return value if value in CATEGORY_SELECTION_MODES else DEFAULT_CATEGORY_SELECTION_MODE
+
+
+def selectable_panels(panels: list[TicketPanel]) -> list[TicketPanel]:
+    """Paineis que viram categoria clicavel (botao ou opcao do select). Painel
+    com `show_button=False` existe so pra emprestar a embed principal do combo."""
+    return [panel for panel in panels if panel.show_button]
+
+
+def selection_capacity(mode: str | None) -> int:
+    """Quantas categorias cabem numa unica mensagem no modo pedido."""
+    if normalize_selection_mode(mode) == "select":
+        return MAX_SELECT_OPTIONS * MAX_SELECT_MENUS
+    return MAX_BUTTONS_PER_VIEW
+
+
+def chunk_panels_for_selects(panels: list[TicketPanel]) -> list[list[TicketPanel]]:
+    """Reparte as categorias em varios selects de ate 25 opcoes (limite do
+    Discord). Nunca devolve mais que MAX_SELECT_MENUS blocos — o que passar
+    disso e tratado por `panels_over_capacity`, nunca descartado em silencio."""
+    chunks = [
+        panels[index : index + MAX_SELECT_OPTIONS]
+        for index in range(0, len(panels), MAX_SELECT_OPTIONS)
+    ]
+    return chunks[:MAX_SELECT_MENUS]
+
+
+def panels_over_capacity(panels: list[TicketPanel], mode: str | None) -> list[TicketPanel]:
+    """Categorias que NAO cabem na mensagem no modo atual. Lista vazia = tudo
+    cabe. Quem publica usa isso pra avisar o admin em vez de sumir com painel."""
+    return selectable_panels(panels)[selection_capacity(mode) :]
 
 
 def member_matches_panel_claim_roles(
@@ -304,10 +349,17 @@ class TicketPanelService:
             if row is not None:
                 await repo.delete(row)
 
-    def build_group_view(self, panels: list[TicketPanel]) -> discord.ui.View:
+    async def get_selection_mode(self, guild_id: int) -> str:
+        """Modo de exibicao das categorias configurado pela guild ("buttons" ou
+        "select"). Le do mesmo `ticket_settings` (com cache do ConfigService)
+        que ja guarda o resto do comportamento global — sem config paralela."""
+        settings = await self._bot.config_service.get_ticket_settings(guild_id)
+        return normalize_selection_mode(getattr(settings, "category_selection_mode", None))
+
+    def build_group_view(self, panels: list[TicketPanel], mode: str | None = None) -> discord.ui.View:
         from views.ticket_panel_open_view import TicketPanelGroupOpenView
 
-        return TicketPanelGroupOpenView(panels)
+        return TicketPanelGroupOpenView(panels, mode)
 
     async def publish_group(
         self, group_id: uuid.UUID, channel: discord.TextChannel
@@ -320,16 +372,25 @@ class TicketPanelService:
             raise TicketPanelError(
                 "Este combo ficou com menos de 2 painéis válidos — edite os painéis antes de publicar."
             )
+        mode = await self.get_selection_mode(group.guild_id)
+        excess = panels_over_capacity(panels, mode)
+        if excess:
+            names = ", ".join(panel.name for panel in excess)
+            raise TicketPanelError(
+                f"Este combo tem categorias demais pra uma mensagem só no modo atual "
+                f"({CATEGORY_SELECTION_MODES[mode]}) — não caberiam: {names}. "
+                "Divida em dois combos ou troque o método de seleção."
+            )
         await self._delete_published_group_message(group)
         try:
             message = await channel.send(
-                embed=self.build_embed(panels[0]), view=self.build_group_view(panels)
+                embed=self.build_embed(panels[0]), view=self.build_group_view(panels, mode)
             )
         except discord.HTTPException as exc:
             raise TicketPanelError(
                 "Não foi possível publicar o combo nesse canal — confira as permissões do bot."
             ) from exc
-        self._bot.add_view(self.build_group_view(panels), message_id=message.id)
+        self._bot.add_view(self.build_group_view(panels, mode), message_id=message.id)
         return await self.update_group(group_id, channel_id=channel.id, message_id=message.id)
 
     async def refresh_group(self, group_id: uuid.UUID) -> TicketPanelGroup | None:
@@ -342,14 +403,29 @@ class TicketPanelService:
         panels = await self.get_group_panels(group)
         if len(panels) < 2:
             return group
+        mode = await self.get_selection_mode(group.guild_id)
         try:
             message = await channel.fetch_message(group.message_id)
-            await message.edit(embed=self.build_embed(panels[0]), view=self.build_group_view(panels))
+            await message.edit(
+                embed=self.build_embed(panels[0]), view=self.build_group_view(panels, mode)
+            )
         except discord.NotFound:
             return await self.update_group(group_id, channel_id=None, message_id=None)
         except discord.HTTPException:
             return group
         return group
+
+    async def refresh_published_groups(self, guild_id: int) -> int:
+        """Reedita todo combo ja publicado da guild. Usado quando muda uma
+        config global que afeta a mensagem publicada (ex.: o metodo de selecao
+        das categorias) — sem isso o admin teria que republicar na mão."""
+        count = 0
+        for group in await self.list_groups(guild_id):
+            if group.channel_id is None or group.message_id is None:
+                continue
+            await self.refresh_group(group.id)
+            count += 1
+        return count
 
     async def unpublish_group(self, group_id: uuid.UUID) -> TicketPanelGroup:
         group = await self.get_group(group_id)
@@ -376,11 +452,16 @@ class TicketPanelService:
         async with self._database.session() as session:
             groups = await TicketPanelGroupRepository(session).list_published()
         count = 0
+        modes: dict[int, str] = {}
         for group in groups:
             panels = await self.get_group_panels(group)
             if len(panels) < 2:
                 continue
-            self._bot.add_view(self.build_group_view(panels), message_id=group.message_id)
+            if group.guild_id not in modes:
+                modes[group.guild_id] = await self.get_selection_mode(group.guild_id)
+            self._bot.add_view(
+                self.build_group_view(panels, modes[group.guild_id]), message_id=group.message_id
+            )
             count += 1
         return count
 
@@ -571,7 +652,7 @@ class TicketPanelService:
         await ticket_channel.send(
             content=member.mention,
             embed=ticket_embed(ticket, member, panel=panel),
-            view=TicketActionsView(),
+            view=TicketActionsView(ticket),
         )
         if answers:
             await ticket_channel.send(embed=ticket_form_answers_embed(answers))

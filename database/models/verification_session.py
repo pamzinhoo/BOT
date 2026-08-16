@@ -3,7 +3,7 @@ from __future__ import annotations
 import enum
 from datetime import UTC, datetime
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Enum, Index, Integer, String
+from sqlalchemy import BigInteger, Boolean, DateTime, Enum, Index, Integer, String, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -35,6 +35,11 @@ class VerificationSession(Base, UUIDPrimaryKeyMixin):
     __tablename__ = "verification_sessions"
     __table_args__ = (
         Index("ix_verification_sessions_guild_user", "guild_id", "user_id"),
+        Index(
+            "ix_verification_sessions_pending_expires",
+            "expires_at",
+            postgresql_where=text("status = 'PENDING'"),
+        ),
     )
 
     guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)

@@ -10,7 +10,7 @@ from database.models.anti_spam_settings import AntiSpamSettings
 from database.models.booster_settings import BoosterSettings
 from database.models.bot_status_settings import BotStatusSettings
 from database.models.dashboard_settings import DashboardSettings
-from database.models.evaluation_settings import EvaluationSettings
+from database.models.evaluation_settings import EVALUATION_METHODS, EvaluationSettings
 from database.models.guild_settings import GuildSettings
 from database.models.partnership_settings import PartnershipSettings
 from database.models.permission_settings import PermissionSettings
@@ -234,6 +234,20 @@ def _avaliacoes_category(bot: LimerenceBot) -> tuple[list[SettingsField], GetSet
         SettingsField("star_emoji", "Emoji das Estrelas", FieldKind.CHOICE, EvaluationSettings, choices=[
             ("⭐", "⭐"), ("🌟", "🌟"), ("✨", "✨"), ("💫", "💫"),
         ]),
+        SettingsField(
+            "evaluation_method",
+            "⭐ Método de Avaliação",
+            FieldKind.CHOICE,
+            EvaluationSettings,
+            choices=list(EVALUATION_METHODS.items()),
+        ),
+        SettingsField("dm_embed_title", "DM — Título", FieldKind.TEXT, EvaluationSettings),
+        SettingsField("dm_embed_description", "DM — Descrição", FieldKind.TEXT, EvaluationSettings),
+        SettingsField("dm_prompt_text", "DM — Texto da avaliação", FieldKind.TEXT, EvaluationSettings),
+        SettingsField("dm_button_label", "DM — Texto do botão", FieldKind.TEXT, EvaluationSettings),
+        SettingsField(
+            "dm_thanks_message", "DM — Mensagem após avaliar", FieldKind.TEXT, EvaluationSettings
+        ),
     ]
 
     async def get_settings(guild_id: int) -> _Merged:

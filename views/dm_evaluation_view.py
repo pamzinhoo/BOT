@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import uuid
 from typing import TYPE_CHECKING
 
@@ -10,6 +11,7 @@ from services.evaluation_service import EvaluationError
 from utils.achievements import announce_achievements
 from utils.constants import EMBED_COLOR_DEFAULT
 from views.base_view import SafeView
+from views.embeds import evaluation_thanks_message
 
 if TYPE_CHECKING:
     from core.bot import LimerenceBot
@@ -56,10 +58,18 @@ async def _submit_dm(
     ticket = await bot.ticket_service.get_by_id(ticket_id)
     guild_id = ticket.guild_id if ticket is not None else None
     star = "⭐"
+    thanks_message = f"Obrigado pela avaliação: {star * rating}"
 
     if guild_id is not None:
         eval_settings = await bot.config_service.get_evaluation_settings(guild_id)
         star = eval_settings.star_emoji
+        guild = bot.get_guild(guild_id)
+        thanks_message = evaluation_thanks_message(
+            eval_settings,
+            member=interaction.user,
+            guild=guild,
+            ticket_id=str(ticket_id)[:8],
+        )
         await bot.log_service.record(
             guild_id=guild_id,
             action=LogAction.AVALIACAO,
@@ -93,29 +103,51 @@ async def _submit_dm(
                 bot, interaction.channel, evaluation.staff_id, result.unlocked_achievements
             )
 
-    message = f"Obrigado pela avaliação: {star * rating}"
-    await interaction.followup.send(message, ephemeral=True)
+    await interaction.followup.send(thanks_message, ephemeral=True)
 
 
 class DMEvaluationView(SafeView):
-    """Fallback de avaliacao mandado por DM quando a staff exclui o ticket
-    antes do usuario avaliar — o canal ja nao existe mais, entao o ticket_id
-    fica embutido no custom_id de cada botao (nao da pra resolver por
-    channel_id como a avaliacao normal no canal). Timeout de 7 dias: tempo
-    de sobra pra reagir, sem ficar pendurado pra sempre."""
+    """Avaliacao mandada por DM — usada tanto quando `evaluation_method` da
+    guild inclui DM (fluxo principal, ver `views/ticket_actions_view.py`)
+    quanto no fallback historico (staff exclui o ticket antes do usuario
+    avaliar pelo canal). O ticket_id nao vem de `channel_id` (o canal do
+    ticket pode nao existir mais quando o usuario finalmente clica), entao
+    cada botao carrega o `ticket_id` no proprio custom_id.
+
+    Persistent (timeout=None) — os botoes sao `DMRatingButton`, um
+    `discord.ui.DynamicItem` com custom_id ESTAVEL
+    (`limerence:eval_dm:<ticket_id>:<rating>`), registrado uma unica vez no
+    boot (`core.bot.LimerenceBot._register_persistent_views`) via
+    `add_dynamic_items` — continua funcionando depois de qualquer restart,
+    nao importa quando o usuario finalmente decidir avaliar."""
 
     def __init__(self, ticket_id: uuid.UUID) -> None:
-        super().__init__(timeout=60 * 60 * 24 * 7)
+        super().__init__(timeout=None)
         self.ticket_id = ticket_id
         for rating in range(1, 6):
-            self.add_item(_DMRatingButton(ticket_id, rating))
+            self.add_item(DMRatingButton(ticket_id, rating))
 
 
-class _DMRatingButton(discord.ui.Button[DMEvaluationView]):
+class DMRatingButton(
+    discord.ui.DynamicItem[discord.ui.Button],
+    template=r"limerence:eval_dm:(?P<ticket_id>[0-9a-fA-F-]{36}):(?P<rating>[1-5])",
+):
     def __init__(self, ticket_id: uuid.UUID, rating: int) -> None:
-        super().__init__(label="⭐" * rating, style=discord.ButtonStyle.secondary)
+        super().__init__(
+            discord.ui.Button(
+                label="⭐" * rating,
+                style=discord.ButtonStyle.secondary,
+                custom_id=f"limerence:eval_dm:{ticket_id}:{rating}",
+            )
+        )
         self.ticket_id = ticket_id
         self.rating = rating
+
+    @classmethod
+    async def from_custom_id(
+        cls, interaction: discord.Interaction, item: discord.ui.Item, match: re.Match[str]
+    ) -> DMRatingButton:
+        return cls(uuid.UUID(match["ticket_id"]), int(match["rating"]))
 
     async def callback(self, interaction: discord.Interaction) -> None:
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]

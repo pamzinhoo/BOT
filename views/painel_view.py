@@ -79,7 +79,7 @@ async def _create_ticket(interaction: discord.Interaction, category: TicketCateg
         return
 
     await ticket_channel.send(
-        content=member.mention, embed=ticket_embed(ticket, member), view=TicketActionsView()
+        content=member.mention, embed=ticket_embed(ticket, member), view=TicketActionsView(ticket)
     )
     await interaction.followup.send(f"Seu ticket foi criado: {ticket_channel.mention}", ephemeral=True)
 

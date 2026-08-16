@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import uuid
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
@@ -10,7 +11,7 @@ import pytest
 from database.models.license import License, LicenseStatus
 from database.models.plan import Plan
 from database.models.player import Player
-from services.reconciliation_service import ReconciliationService
+from services.reconciliation_service import GuildReconciliationResult, ReconciliationService
 from tests._fakes_role_sync import (
     FakeAuditLogService,
     FakeDatabase,
@@ -224,3 +225,213 @@ async def test_plan_error_is_isolated_and_counted(
     result = await service.reconcile_guild(guild)
 
     assert result.errors == 1
+
+
+# ---------------------------------------------------------------------------
+# Fase 4 — concorrencia controlada, isolamento por guild, timeout, retry
+# ---------------------------------------------------------------------------
+
+
+def _fake_guilds(ids: list[int]) -> list[MagicMock]:
+    guilds = []
+    for gid in ids:
+        guild = MagicMock(spec=discord.Guild)
+        guild.id = gid
+        guilds.append(guild)
+    return guilds
+
+
+async def test_reconcile_all_guilds_processes_multiple_guilds(
+    service: ReconciliationService, bot: MagicMock
+) -> None:
+    bot.guilds = _fake_guilds([1, 2, 3])
+    service.reconcile_guild = AsyncMock(
+        side_effect=lambda guild: GuildReconciliationResult(guild_id=guild.id)
+    )
+
+    report = await service.reconcile_all_guilds()
+
+    assert report.guilds_checked == 3
+    assert {r.guild_id for r in report.per_guild} == {1, 2, 3}
+
+
+async def test_reconcile_all_guilds_respects_max_concurrency(
+    store: RoleSyncFakeStore, bot: MagicMock, monkeypatch
+) -> None:
+    install_reconciliation_fakes(monkeypatch, store)
+    service = ReconciliationService(FakeDatabase(store), bot, max_concurrency=5)
+    bot.guilds = _fake_guilds(list(range(20)))
+
+    current = 0
+    peak = 0
+
+    async def fake_reconcile_guild(guild: discord.Guild) -> GuildReconciliationResult:
+        nonlocal current, peak
+        current += 1
+        peak = max(peak, current)
+        await asyncio.sleep(0.01)
+        current -= 1
+        return GuildReconciliationResult(guild_id=guild.id)
+
+    service.reconcile_guild = fake_reconcile_guild
+
+    report = await service.reconcile_all_guilds()
+
+    assert peak <= 5
+    assert report.guilds_checked == 20
+
+
+async def test_reconcile_all_guilds_does_not_allow_six_with_limit_five(
+    store: RoleSyncFakeStore, bot: MagicMock, monkeypatch
+) -> None:
+    install_reconciliation_fakes(monkeypatch, store)
+    service = ReconciliationService(FakeDatabase(store), bot, max_concurrency=5)
+    bot.guilds = _fake_guilds(list(range(6)))
+
+    started = asyncio.Event()
+    release = asyncio.Event()
+    concurrent_count = 0
+    max_seen = 0
+    started_count = 0
+
+    async def fake_reconcile_guild(guild: discord.Guild) -> GuildReconciliationResult:
+        nonlocal concurrent_count, max_seen, started_count
+        concurrent_count += 1
+        started_count += 1
+        max_seen = max(max_seen, concurrent_count)
+        if started_count == 5:
+            started.set()
+        await release.wait()
+        concurrent_count -= 1
+        return GuildReconciliationResult(guild_id=guild.id)
+
+    service.reconcile_guild = fake_reconcile_guild
+
+    task = asyncio.ensure_future(service.reconcile_all_guilds())
+    await asyncio.wait_for(started.wait(), timeout=1)
+    # com limite 5, o 6o guild nao pode ter comecado ainda
+    assert concurrent_count == 5
+    assert max_seen == 5
+
+    release.set()
+    report = await task
+    assert report.guilds_checked == 6
+
+
+async def test_one_guild_failure_does_not_cancel_others(
+    service: ReconciliationService, bot: MagicMock
+) -> None:
+    bot.guilds = _fake_guilds([1, 2, 3])
+
+    async def fake_reconcile_guild(guild: discord.Guild) -> GuildReconciliationResult:
+        if guild.id == 2:
+            raise RuntimeError("boom")
+        return GuildReconciliationResult(guild_id=guild.id)
+
+    service.reconcile_guild = fake_reconcile_guild
+
+    report = await service.reconcile_all_guilds()
+
+    assert report.guilds_checked == 2
+    assert report.errors == 1
+    assert {r.guild_id for r in report.per_guild} == {1, 3}
+
+
+async def test_guild_timeout_does_not_cancel_others(
+    store: RoleSyncFakeStore, bot: MagicMock, monkeypatch
+) -> None:
+    install_reconciliation_fakes(monkeypatch, store)
+    service = ReconciliationService(FakeDatabase(store), bot, max_concurrency=5, guild_timeout_seconds=0.05)
+    bot.guilds = _fake_guilds([1, 2])
+
+    async def fake_reconcile_guild(guild: discord.Guild) -> GuildReconciliationResult:
+        if guild.id == 1:
+            await asyncio.sleep(1)
+        return GuildReconciliationResult(guild_id=guild.id)
+
+    service.reconcile_guild = fake_reconcile_guild
+
+    report = await service.reconcile_all_guilds()
+
+    assert report.timeouts == 1
+    assert report.guilds_checked == 2
+    assert report.errors == 1
+    timed_out = next(r for r in report.per_guild if r.guild_id == 1)
+    assert timed_out.timed_out is True
+
+
+async def test_reconcile_all_guilds_empty_list(service: ReconciliationService, bot: MagicMock) -> None:
+    bot.guilds = []
+
+    report = await service.reconcile_all_guilds()
+
+    assert report.guilds_checked == 0
+    assert report.per_guild == []
+
+
+async def test_reconcile_all_guilds_large_quantity(
+    store: RoleSyncFakeStore, bot: MagicMock, monkeypatch
+) -> None:
+    install_reconciliation_fakes(monkeypatch, store)
+    service = ReconciliationService(FakeDatabase(store), bot, max_concurrency=5)
+    bot.guilds = _fake_guilds(list(range(100)))
+    service.reconcile_guild = AsyncMock(
+        side_effect=lambda guild: GuildReconciliationResult(guild_id=guild.id)
+    )
+
+    report = await service.reconcile_all_guilds()
+
+    assert report.guilds_checked == 100
+    assert len(report.per_guild) == 100
+
+
+async def test_fix_divergence_retries_transient_http_error_then_succeeds(
+    service: ReconciliationService, store: RoleSyncFakeStore, monkeypatch
+) -> None:
+    monkeypatch.setattr("services.reconciliation_service._ROLE_EDIT_RETRY_BACKOFF_SECONDS", 0)
+    product_id = uuid.uuid4()
+    plan = _plan(guild_id=1, product_id=product_id, role_id=999)
+
+    role = MagicMock(spec=discord.Role)
+    member = _member(111, roles=[role])
+    http_error = discord.HTTPException(MagicMock(status=500), "internal error")
+    member.remove_roles = AsyncMock(side_effect=[http_error, None])
+
+    await service._fix_divergence(member, role, plan, grant=False, reason="teste")
+
+    assert member.remove_roles.await_count == 2
+    assert len(store.audit_calls) == 1
+
+
+async def test_fix_divergence_gives_up_after_max_attempts(
+    service: ReconciliationService, store: RoleSyncFakeStore, monkeypatch
+) -> None:
+    monkeypatch.setattr("services.reconciliation_service._ROLE_EDIT_RETRY_BACKOFF_SECONDS", 0)
+    product_id = uuid.uuid4()
+    plan = _plan(guild_id=1, product_id=product_id, role_id=999)
+
+    role = MagicMock(spec=discord.Role)
+    member = _member(111, roles=[role])
+    http_error = discord.HTTPException(MagicMock(status=500), "internal error")
+    member.remove_roles = AsyncMock(side_effect=http_error)
+
+    await service._fix_divergence(member, role, plan, grant=False, reason="teste")
+
+    assert member.remove_roles.await_count == 2
+    assert store.audit_calls == []
+
+
+async def test_fix_divergence_does_not_retry_forbidden(
+    service: ReconciliationService, store: RoleSyncFakeStore
+) -> None:
+    product_id = uuid.uuid4()
+    plan = _plan(guild_id=1, product_id=product_id, role_id=999)
+
+    role = MagicMock(spec=discord.Role)
+    member = _member(111, roles=[role])
+    member.remove_roles = AsyncMock(side_effect=discord.Forbidden(MagicMock(status=403), "no perms"))
+
+    await service._fix_divergence(member, role, plan, grant=False, reason="teste")
+
+    assert member.remove_roles.await_count == 1
+    assert store.audit_calls == []

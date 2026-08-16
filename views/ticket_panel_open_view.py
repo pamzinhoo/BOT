@@ -6,7 +6,12 @@ import discord
 
 from database.models.ticket_panel import TicketPanel
 from database.models.ticket_panel_form_field import TicketPanelFormField
-from services.ticket_panel_service import button_style_from_value
+from services.ticket_panel_service import (
+    button_style_from_value,
+    chunk_panels_for_selects,
+    normalize_selection_mode,
+    selectable_panels,
+)
 from views.base_view import SafeView
 
 if TYPE_CHECKING:
@@ -14,9 +19,30 @@ if TYPE_CHECKING:
 
 _CUSTOM_ID_PREFIX = "limerence:ticket_panel:"
 
+CATEGORY_SELECT_PLACEHOLDER = "📋 Selecionar categoria"
+
 
 def open_button_custom_id(key: str) -> str:
     return f"{_CUSTOM_ID_PREFIX}{key}:open"
+
+
+def category_select_custom_id(index: int) -> str:
+    """Um custom_id por bloco de 25 categorias. Nao carrega guild nem painel:
+    a `key` escolhida vem no proprio valor da opcao e a config e relida do
+    banco a cada clique, igual acontece no modo de botoes."""
+    return f"{_CUSTOM_ID_PREFIX}select:{index}"
+
+
+def panel_select_option(panel: TicketPanel) -> discord.SelectOption:
+    """Opcao do select montada 100% da config real do painel — nada de
+    categoria hardcoded. `value` e a `key` do painel (slug estavel)."""
+    description = " ".join((panel.embed_description or "").split()) or None
+    return discord.SelectOption(
+        label=(panel.button_label or panel.name)[:100],
+        value=panel.key,
+        description=description[:100] if description else None,
+        emoji=panel.button_emoji or None,
+    )
 
 
 class _OpenTicketButton(discord.ui.Button[Any]):
@@ -48,6 +74,43 @@ class _OpenTicketButton(discord.ui.Button[Any]):
         if panel is None:
             await interaction.response.send_message(
                 "Este painel não existe mais. Avise um administrador.", ephemeral=True
+            )
+            return
+
+        await _handle_open_click(interaction, panel)
+
+
+class _OpenTicketSelect(discord.ui.Select[Any]):
+    """Lista suspensa com uma opcao por categoria (painel) do combo. Substitui
+    os botoes quando `ticket_settings.category_selection_mode == "select"`.
+
+    Reaproveita exatamente o mesmo caminho do botao (`_handle_open_click`):
+    formulario, mensagem intermediaria, limites, permissoes, aprovacao e
+    criacao do canal continuam sendo os do painel escolhido."""
+
+    def __init__(self, panels: list[TicketPanel], index: int = 0) -> None:
+        super().__init__(
+            placeholder=CATEGORY_SELECT_PLACEHOLDER,
+            options=[panel_select_option(panel) for panel in panels],
+            min_values=1,
+            max_values=1,
+            custom_id=category_select_custom_id(index),
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
+        if interaction.guild_id is None:
+            await interaction.response.send_message(
+                "Este painel só funciona dentro de um servidor.", ephemeral=True
+            )
+            return
+
+        panel = await bot.ticket_panel_service.get_panel_by_key(
+            interaction.guild_id, self.values[0]
+        )
+        if panel is None:
+            await interaction.response.send_message(
+                "Essa categoria não existe mais. Avise um administrador.", ephemeral=True
             )
             return
 
@@ -170,16 +233,26 @@ class TicketPanelOpenView(SafeView):
 
 
 class TicketPanelGroupOpenView(SafeView):
-    """View persistente com UM botao de abrir ticket por painel do combo —
-    mesma embed unica (do painel principal), varios botoes lado a lado (ex.:
-    "Suporte" + "Denuncia"). Cada botao continua sendo o mesmo
-    `_OpenTicketButton` do painel individual: custom_id, permissao, formulario
-    e aprovacao seguem 100% da config daquele painel, sem duplicar logica.
-    Paineis com `show_button=False` (ex.: o principal, so pra dar embed pro
-    combo) nao ganham botao aqui."""
+    """View persistente com as categorias (paineis) de um combo — mesma embed
+    unica (do painel principal) e, ao lado dela, um botao por categoria OU uma
+    lista suspensa com todas, conforme
+    `ticket_settings.category_selection_mode`.
 
-    def __init__(self, panels: list[TicketPanel]) -> None:
+    Nos dois modos a categoria e o mesmo painel: custom_id, permissao,
+    formulario, aprovacao e comportamento seguem 100% da config daquele painel,
+    sem duplicar logica. Paineis com `show_button=False` (ex.: o principal, so
+    pra dar embed pro combo) nao viram botao nem opcao.
+
+    Se houver mais categorias do que cabe num select (25), elas sao repartidas
+    em ate 5 selects — nenhuma categoria some por conta propria (o excedente
+    alem disso e barrado na publicacao, ver `panels_over_capacity`)."""
+
+    def __init__(self, panels: list[TicketPanel], mode: str | None = None) -> None:
         super().__init__(timeout=None)
-        for panel in panels:
-            if panel.show_button:
-                self.add_item(_OpenTicketButton(panel))
+        visible = selectable_panels(panels)
+        if normalize_selection_mode(mode) == "select":
+            for index, chunk in enumerate(chunk_panels_for_selects(visible)):
+                self.add_item(_OpenTicketSelect(chunk, index))
+            return
+        for panel in visible:
+            self.add_item(_OpenTicketButton(panel))

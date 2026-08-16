@@ -1,0 +1,22 @@
+Estou no meio de um merge conflict em main.py neste repo (pamzinhoo/BOT, branch master), resultado de um `git pull origin master` (merge, não rebase). O conflito é entre duas mudanças:
+
+1. Minha mudança local (commit já feito): adiciona uma função `_start_bot_with_retry(bot, token, logger)` que envolve `bot.start(token)` com retry + backoff exponencial quando o Discord retorna HTTPException 429 (rate limit) durante o login — isso porque hoje um 429 no login sobe sem tratamento e derruba o processo inteiro (status 1), causando loop de deploys falhando no Render.
+
+2. Mudança que veio do remoto (commit 72cdd8c): adiciona `pool_size=settings.db_pool_size, max_overflow=settings.db_max_overflow` na chamada de `init_database(...)`, e uma função `_run_startup_migrations(database, logger)` que roda um `ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS verified_role_id BIGINT` de forma idempotente, chamada logo após `init_database` e antes de criar o `LimerenceBot`.
+
+Preciso que main.py final tenha as DUAS mudanças coexistindo (nenhuma das duas deve ser descartada):
+- `_start_bot_with_retry` continua existindo e é usada dentro do `asyncio.gather(...)` no lugar de `bot.start(settings.discord_token)` direto.
+- `init_database` continua recebendo `pool_size`/`max_overflow`.
+- `_run_startup_migrations` continua sendo chamada logo após `init_database`.
+- O resto do arquivo (imports, tratamento de `discord.LoginFailure`, bloco `finally`, `if __name__ == "__main__"`) permanece igual ao que já existia antes do conflito.
+
+Faça o seguinte:
+1. Rode `git status` e `git diff` para ver o estado atual do conflito em main.py.
+2. Resolva o conflito em main.py exatamente como descrito acima — sem apagar nenhuma das duas features, sem duplicar código, mantendo a formatação/estilo do resto do arquivo (indentação, docstrings em português como as existentes).
+3. Rode `python -m py_compile main.py` pra confirmar que compila sem erro.
+4. `git add main.py`
+5. `git commit -m "merge: resolve conflito retry login (429) + startup migrations + db pool"` (use `--no-edit` ou passe a mensagem inline pra não abrir editor interativo).
+6. `git push origin master`
+7. Me mostre o `git log --oneline -5` final e o diff do main.py resolvido pra eu confirmar antes de considerar concluído.
+
+Não mexa em nenhum outro arquivo do repo além de main.py. Se aparecer qualquer outro conflito além de main.py, pare e me avise antes de resolver.

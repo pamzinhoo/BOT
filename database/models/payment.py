@@ -9,10 +9,12 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -38,6 +40,15 @@ class PaymentHistory(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     __tablename__ = "payment_history"
     __table_args__ = (
         UniqueConstraint("provider", "external_id", name="uq_payment_provider_external_id"),
+        Index(
+            "ix_payment_history_guild_user_created",
+            "guild_id", "user_id", text("created_at DESC"),
+        ),
+        Index(
+            "ix_payment_history_pending_expires",
+            "expires_at",
+            postgresql_where=text("status = 'PENDING'"),
+        ),
     )
 
     guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)

@@ -51,6 +51,13 @@ def render_placeholders(
     status: str | None = None,
     staff: discord.Member | discord.User | None = None,
     date: datetime | None = None,
+    ticket_type: str | None = None,
+    claimed_by: str | None = None,
+    closed_by: str | None = None,
+    opened_at: str | None = None,
+    closed_at: str | None = None,
+    ticket_id: str | None = None,
+    reason: str | None = None,
 ) -> str:
     """Substitui placeholders em mensagens/descricoes 100% editaveis pelo admin.
     Preparado pra novos placeholders: basta acrescentar uma entrada no dict.
@@ -75,6 +82,18 @@ def render_placeholders(
         "{mention}": user_mention,
         "{server_name}": guild.name if guild is not None else "—",
         "{guild}": guild.name if guild is not None else "—",
+        "{server}": guild.name if guild is not None else "—",
+        # avaliacao de tickets (ver services/evaluation_service.py,
+        # views/ticket_actions_view.py) — sem contexto, todos viram "—" como
+        # os demais placeholders acima.
+        "{ticket_type}": ticket_type or "—",
+        "{category}": ticket_type or "—",
+        "{claimed_by}": claimed_by or "—",
+        "{closed_by}": closed_by or "—",
+        "{opened_at}": opened_at or "—",
+        "{closed_at}": closed_at or "—",
+        "{ticket_id}": ticket_id or "—",
+        "{reason}": reason or "—",
         "{plan_name}": plan.name if plan is not None else "—",
         "{plan}": plan.name if plan is not None else "—",
         "{plan_emoji}": (plan.emoji or "") if plan is not None else "",

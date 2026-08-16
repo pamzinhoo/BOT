@@ -3,7 +3,7 @@ from __future__ import annotations
 import enum
 from datetime import datetime
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Enum, Integer, String, Text
+from sqlalchemy import BigInteger, Boolean, DateTime, Enum, Index, Integer, String, Text, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -47,6 +47,17 @@ class Punishment(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     punishment_code e o ID publico (ex.: BAN-82931), id (UUID) e so uso interno."""
 
     __tablename__ = "punishments"
+    __table_args__ = (
+        Index(
+            "ix_punishments_guild_user_created",
+            "guild_id", "user_id", text("created_at DESC"),
+        ),
+        Index(
+            "ix_punishments_pending_review_deadline",
+            "review_deadline_at",
+            postgresql_where=text("status = 'PENDING_REVIEW'"),
+        ),
+    )
 
     guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
     punishment_code: Mapped[str] = mapped_column(String(20), nullable=False, unique=True)

@@ -1,20 +1,31 @@
 from __future__ import annotations
 
+import asyncio
 import time
 from datetime import datetime
 
 import discord
 
+from core.logger import get_logger
 from database.database import Database
 from database.models.audit_log import AuditLogCategory, AuditLogEntry
 from database.models.audit_log_settings import AuditLogSettings
 from database.repositories.audit_log_repository import AuditLogRepository
 from database.repositories.audit_log_settings_repository import AuditLogSettingsRepository
 from utils.model_defaults import reset_row
+from utils.ttl_cache import TTLCache
 from views.embeds import audit_log_embed
+
+logger = get_logger("audit_log_service")
 
 _AUDIT_LOOKUP_TTL_SECONDS = 5.0
 _AUDIT_LOOKUP_MAX_AGE_SECONDS = 10.0
+# mesma janela do ConfigService/AutoModService — settings de auditoria so
+# mudam quando um admin edita via /config, e `get_settings` (por causa de
+# `_enabled()` em cogs/audit_logs.py) e chamado no topo de ~18 listeners de
+# alta frequencia (on_message_edit, on_message_delete, on_voice_state_update,
+# ...), sem depender de canal/usuario/mensagem — so de guild_id.
+_AUDIT_SETTINGS_CACHE_TTL_SECONDS = 300.0
 
 
 class AuditLogService:
@@ -27,10 +38,20 @@ class AuditLogService:
         self._bot = bot
         self._lookup_cache: dict[tuple[int, int, int | None], tuple[float, discord.AuditLogEntry | None]] = {}
         self._used_entry_ids: dict[int, float] = {}
+        self._background_tasks: set[asyncio.Task[None]] = set()
+        # escopo por guild — nunca mistura settings de guilds diferentes.
+        self._settings_cache: TTLCache[int, AuditLogSettings] = TTLCache(
+            _AUDIT_SETTINGS_CACHE_TTL_SECONDS
+        )
 
     async def get_settings(self, guild_id: int) -> AuditLogSettings:
+        cached = self._settings_cache.get(guild_id)
+        if cached is not None:
+            return cached
         async with self._database.session() as session:
-            return await AuditLogSettingsRepository(session).get_or_create(guild_id)
+            settings = await AuditLogSettingsRepository(session).get_or_create(guild_id)
+        self._settings_cache.set(guild_id, settings)
+        return settings
 
     async def update_settings(self, guild_id: int, **fields: object) -> AuditLogSettings:
         async with self._database.session() as session:
@@ -38,13 +59,16 @@ class AuditLogService:
             settings = await repo.get_or_create(guild_id)
             for key, value in fields.items():
                 setattr(settings, key, value)
-            return settings
+        self._settings_cache.invalidate(guild_id)
+        return settings
 
     async def reset_settings(self, guild_id: int) -> dict[str, tuple[object, object]]:
         """Restaura as categorias de auditoria (e o canal) pro padrão (Etapa 3)."""
         async with self._database.session() as session:
             settings = await AuditLogSettingsRepository(session).get_or_create(guild_id)
-            return reset_row(settings)
+            diffs = reset_row(settings)
+        self._settings_cache.invalidate(guild_id)
+        return diffs
 
     async def list_entries(
         self,
@@ -240,3 +264,27 @@ class AuditLogService:
             old_value=old_value,
             new_value=new_value,
         )
+
+    def record_background(self, **kwargs: object) -> None:
+        """Dispara `record(...)` em background sem esperar a escrita no banco
+        nem o envio no canal de auditoria. Metodo NOVO, opt-in — nao muda
+        `record()` nem os chamadores existentes (varios dependem do retorno
+        ou de a auditoria estar gravada antes de prosseguir, ex.: fluxos de
+        punicao/pagamento). Usar so onde a auditoria e so trilha e nao precisa
+        estar gravada antes de responder ao usuario. Excecoes sao logadas,
+        nunca propagadas pro chamador."""
+        task = asyncio.create_task(self._record_safe(**kwargs))
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
+        task.add_done_callback(self._log_background_error)
+
+    async def _record_safe(self, **kwargs: object) -> None:
+        await self.record(**kwargs)  # type: ignore[arg-type]
+
+    @staticmethod
+    def _log_background_error(task: asyncio.Task[None]) -> None:
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is not None:
+            logger.exception("Falha ao registrar audit log em background.", exc_info=exc)

@@ -25,6 +25,14 @@ from utils.automod_wordlist import (
     compact_form,
     normalize_text,
 )
+from utils.ttl_cache import TTLCache
+
+# mesma janela ja usada por ConfigService pros settings mais lidos
+# (guild_settings/ticket_settings/permission_settings/anti_spam_settings) —
+# settings e lista de palavras do AutoMod mudam so quando um staff edita
+# via comando, entao 5 minutos de defasagem maxima e aceitavel e mantem o
+# mesmo padrao de risco ja usado no resto do bot, em vez de inventar um TTL novo.
+_AUTOMOD_CACHE_TTL_SECONDS = 300.0
 
 
 class AutoModError(ValueError):
@@ -68,12 +76,25 @@ ACTION_BAN = "apagar_mensagem+ban"
 class AutoModService:
     def __init__(self, database: Database) -> None:
         self._database = database
+        # escopo por guild, igual ConfigService — nunca mistura guilds
+        # diferentes, cada uma tem sua propria entrada/expiracao.
+        self._settings_cache: TTLCache[int, AutoModSettings] = TTLCache(
+            _AUTOMOD_CACHE_TTL_SECONDS
+        )
+        self._words_cache: TTLCache[int, list[EffectiveWord]] = TTLCache(
+            _AUTOMOD_CACHE_TTL_SECONDS
+        )
 
     # --- configuracao ---------------------------------------------------
 
     async def get_settings(self, guild_id: int) -> AutoModSettings:
+        cached = self._settings_cache.get(guild_id)
+        if cached is not None:
+            return cached
         async with self._database.session() as session:
-            return await AutoModSettingsRepository(session).get_or_create(guild_id)
+            settings = await AutoModSettingsRepository(session).get_or_create(guild_id)
+        self._settings_cache.set(guild_id, settings)
+        return settings
 
     async def update_settings(self, guild_id: int, **fields: object) -> AutoModSettings:
         async with self._database.session() as session:
@@ -83,6 +104,7 @@ class AutoModService:
                 setattr(settings, key, value)
             await session.flush()
             await session.refresh(settings)
+        self._settings_cache.invalidate(guild_id)
         return settings
 
     async def set_enabled(self, guild_id: int, enabled: bool) -> AutoModSettings:
@@ -112,6 +134,7 @@ class AutoModService:
                 existing.active = True
                 await session.flush()
                 await session.refresh(existing)
+                self._words_cache.invalidate(guild_id)
                 return existing
             word = await repo.add(
                 AutoModWord(
@@ -126,6 +149,7 @@ class AutoModService:
             )
             await session.flush()
             await session.refresh(word)
+        self._words_cache.invalidate(guild_id)
         return word
 
     async def remove_word(self, guild_id: int, palavra: str) -> bool:
@@ -137,12 +161,14 @@ class AutoModService:
             existing = await repo.get_by_word(guild_id, normalized)
             if existing is not None and not existing.is_builtin:
                 await repo.delete(existing)
+                self._words_cache.invalidate(guild_id)
                 return True
             if existing is not None and existing.is_builtin:
                 if not existing.active:
                     return False
                 existing.active = False
                 await session.flush()
+                self._words_cache.invalidate(guild_id)
                 return True
             if normalized not in DEFAULT_WORDS_BY_TEXT:
                 return False
@@ -158,10 +184,18 @@ class AutoModService:
                 )
             )
             await session.flush()
+        self._words_cache.invalidate(guild_id)
         return True
 
     async def list_effective_words(self, guild_id: int) -> list[EffectiveWord]:
-        """Lista padrao embutida + overrides da guild (personalizadas e supressoes)."""
+        """Lista padrao embutida + overrides da guild (personalizadas e supressoes).
+        Cacheada por guild — so muda quando `add_word`/`remove_word` roda (os
+        dois invalidam a entrada), entao o resultado nao fica obsoleto por
+        muito alem do TTL de qualquer jeito."""
+        cached = self._words_cache.get(guild_id)
+        if cached is not None:
+            return list(cached)
+
         async with self._database.session() as session:
             overrides = await AutoModWordRepository(session).list_by_guild(guild_id)
 
@@ -177,7 +211,9 @@ class AutoModService:
                 result.append(
                     EffectiveWord(override.palavra, override.categoria, override.nivel, is_builtin=False)
                 )
-        return sorted(result, key=lambda w: w.palavra)
+        effective = sorted(result, key=lambda w: w.palavra)
+        self._words_cache.set(guild_id, effective)
+        return list(effective)
 
     # --- logs ---------------------------------------------------------
 

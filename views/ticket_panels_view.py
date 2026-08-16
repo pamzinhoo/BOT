@@ -11,7 +11,12 @@ from database.models.ticket_panel_form_field import (
     MAX_FORM_FIELDS,
     TicketPanelFormField,
 )
-from services.ticket_panel_service import BUTTON_STYLE_LABELS, TicketPanelError
+from database.models.ticket_settings import CATEGORY_SELECTION_MODES
+from services.ticket_panel_service import (
+    BUTTON_STYLE_LABELS,
+    TicketPanelError,
+    normalize_selection_mode,
+)
 from utils.constants import EMBED_COLOR_DEFAULT, EMBED_COLOR_WARNING
 from views.base_view import SafeView
 
@@ -61,7 +66,9 @@ async def _log_panel_change(
 # =========================== menu principal ================================
 
 
-def tickets_menu_embed(*, enabled: bool, panel_count: int) -> discord.Embed:
+def tickets_menu_embed(
+    *, enabled: bool, panel_count: int, selection_mode: str = "buttons"
+) -> discord.Embed:
     embed = discord.Embed(
         title="🎫 Tickets",
         description=(
@@ -73,6 +80,14 @@ def tickets_menu_embed(*, enabled: bool, panel_count: int) -> discord.Embed:
     )
     embed.add_field(name="Sistema de Tickets", value=_bool_label(enabled))
     embed.add_field(name="Painéis cadastrados", value=str(panel_count))
+    embed.add_field(
+        name="🎫 Método de seleção das categorias",
+        value=(
+            f"Atual: **{CATEGORY_SELECTION_MODES[normalize_selection_mode(selection_mode)]}**\n"
+            "Vale pros combos (vários painéis numa mensagem só)."
+        ),
+        inline=False,
+    )
     embed.set_footer(
         text=(
             "Com o sistema desativado ninguém abre ticket novo — os tickets já "
@@ -87,8 +102,11 @@ async def render_tickets_menu(interaction: discord.Interaction, on_back: Any = N
     bot: LimerenceBot = interaction.client  # type: ignore[assignment]
     settings = await bot.config_service.get_ticket_settings(interaction.guild_id)
     panels = await bot.ticket_panel_service.list_panels(interaction.guild_id)
-    embed = tickets_menu_embed(enabled=settings.enabled, panel_count=len(panels))
-    view = TicketsMenuView(on_back=on_back, enabled=settings.enabled)
+    mode = normalize_selection_mode(getattr(settings, "category_selection_mode", None))
+    embed = tickets_menu_embed(
+        enabled=settings.enabled, panel_count=len(panels), selection_mode=mode
+    )
+    view = TicketsMenuView(on_back=on_back, enabled=settings.enabled, selection_mode=mode)
     if interaction.response.is_done():
         await interaction.edit_original_response(content=None, embed=embed, view=view)
     else:
@@ -99,7 +117,9 @@ class TicketsMenuView(SafeView):
     """Tela inicial da categoria Tickets do /config: kill switch do sistema,
     entrada pros painéis e as configurações globais/legadas (canais da guild)."""
 
-    def __init__(self, on_back: Any = None, *, enabled: bool = True) -> None:
+    def __init__(
+        self, on_back: Any = None, *, enabled: bool = True, selection_mode: str = "buttons"
+    ) -> None:
         super().__init__(timeout=300)
         self.on_back = on_back
         self.toggle_system.label = (
@@ -108,6 +128,7 @@ class TicketsMenuView(SafeView):
         self.toggle_system.style = (
             discord.ButtonStyle.danger if enabled else discord.ButtonStyle.success
         )
+        self.add_item(_CategorySelectionModeSelect(selection_mode, on_back))
         if on_back is not None:
             self.add_item(_BackToMainMenuButton(on_back))
 
@@ -182,6 +203,59 @@ class TicketsMenuView(SafeView):
             embed=build_domain_embed(view.title, fields, settings),
             view=view,
         )
+
+
+class _CategorySelectionModeSelect(discord.ui.Select[Any]):
+    """🎫 Método de seleção das categorias — botões (um por categoria) ou uma
+    lista suspensa única. Grava em `ticket_settings.category_selection_mode`
+    (mesma tabela/serviço do resto da config de tickets: sobrevive a restart,
+    entra no /config export e volta no /config import) e já reedita os combos
+    publicados pra mudança aparecer sem republicar na mão."""
+
+    def __init__(self, current: str, on_back: Any) -> None:
+        super().__init__(
+            placeholder="🎫 Método de seleção das categorias...",
+            options=[
+                discord.SelectOption(
+                    label=label,
+                    value=value,
+                    default=value == normalize_selection_mode(current),
+                    description=(
+                        "Uma categoria por botão (padrão)."
+                        if value == "buttons"
+                        else "Todas as categorias numa lista suspensa."
+                    ),
+                )
+                for value, label in CATEGORY_SELECTION_MODES.items()
+            ],
+            min_values=1,
+            max_values=1,
+            row=2,
+        )
+        self.on_back = on_back
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
+        assert interaction.guild_id is not None
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
+        chosen = normalize_selection_mode(self.values[0])
+        settings = await bot.config_service.get_ticket_settings(interaction.guild_id)
+        before = normalize_selection_mode(getattr(settings, "category_selection_mode", None))
+        if chosen != before:
+            await bot.config_service.update_ticket_settings(
+                interaction.guild_id, category_selection_mode=chosen
+            )
+            await bot.audit_log_service.record_config_change(
+                guild_id=interaction.guild_id,
+                actor_id=interaction.user.id,
+                actor_name=str(interaction.user),
+                config_category="Tickets",
+                config_name="Método de seleção das categorias",
+                old_value=CATEGORY_SELECTION_MODES[before],
+                new_value=CATEGORY_SELECTION_MODES[chosen],
+            )
+            await bot.ticket_panel_service.refresh_published_groups(interaction.guild_id)
+        await render_tickets_menu(interaction, self.on_back)
 
 
 class _BackToMainMenuButton(discord.ui.Button[Any]):

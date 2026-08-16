@@ -38,6 +38,69 @@ async def _deny_if_cant(interaction: discord.Interaction, action: str) -> bool:
     return True
 
 
+async def send_ticket_transcript(interaction: discord.Interaction) -> None:
+    """Gera e envia a transcricao (HTML+PDF) do canal atual. Compartilhado
+    entre o botao Transcrição (pos-fechamento, `TicketClosedView`) e a opcao
+    'Gerar transcrição' do menu ⚙️ Mais (ticket ainda aberto) — mesma logica,
+    sem duplicar. Quem chama ja deve ter deferido a interaction (ephemeral,
+    thinking=True) e checado que quem clicou e staff."""
+    bot: LimerenceBot = interaction.client  # type: ignore[assignment]
+    channel = interaction.channel
+    if not isinstance(channel, discord.TextChannel) or interaction.channel_id is None:
+        return
+
+    ticket = await bot.ticket_service.get_by_channel_id(interaction.channel_id)
+    if ticket is None:
+        await interaction.followup.send("Ticket não encontrado.", ephemeral=True)
+        return
+
+    behaviour = await bot.ticket_panel_service.behaviour_for_ticket(ticket, ticket.guild_id)
+    if not behaviour.transcript_enabled:
+        await interaction.followup.send(
+            "A transcrição está desativada no painel que originou este ticket.",
+            ephemeral=True,
+        )
+        return
+
+    html_content = await build_transcript_html(channel, ticket)
+    pdf_content = await build_transcript_pdf(channel, ticket)
+    save_transcript_locally(ticket, html_content, pdf_content)
+    html_filename = f"transcricao-{str(ticket.id)[:8]}.html"
+    pdf_filename = f"transcricao-{str(ticket.id)[:8]}.pdf"
+
+    def _files() -> list[discord.File]:
+        return [
+            discord.File(io.BytesIO(html_content.encode()), filename=html_filename),
+            discord.File(io.BytesIO(pdf_content), filename=pdf_filename),
+        ]
+
+    await channel.send(files=_files())
+
+    settings = await bot.config_service.get_settings(ticket.guild_id)
+    destination_channel_id = settings.transcript_channel_id or settings.log_channel_id
+    if destination_channel_id is not None:
+        destination = bot.get_channel(destination_channel_id)
+        if isinstance(destination, discord.TextChannel):
+            claimed_staff = (
+                await bot.staff_service.get_by_id(ticket.claimed_by_staff_id)
+                if ticket.claimed_by_staff_id is not None
+                else None
+            )
+            embed = discord.Embed(
+                title=f"📄 Transcrição — ticket #{str(ticket.id)[:8]}",
+                description=(
+                    f"**Canal:** {channel.name}\n"
+                    f"**Aberto por:** <@{ticket.opened_by_discord_id}> "
+                    f"(ID: `{ticket.opened_by_discord_id}`)\n"
+                    f"**Assumido por:** {claimed_staff.display_name if claimed_staff else 'Ninguém assumiu'}\n"
+                    f"**Gerado por:** {interaction.user.mention}"
+                ),
+            )
+            await destination.send(embed=embed, files=_files())
+
+    await interaction.followup.send("Transcrição gerada.", ephemeral=True)
+
+
 class TicketClosedView(SafeView):
     """Botoes Transcricao/Reabrir/Excluir, mostrados apos o fechamento
     confirmado. Persistent (timeout=None), resolve o ticket pelo channel_id."""
@@ -58,61 +121,7 @@ class TicketClosedView(SafeView):
         await interaction.response.defer(ephemeral=True, thinking=True)
         if await _deny_if_not_staff(interaction):
             return
-        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
-        channel = interaction.channel
-        if not isinstance(channel, discord.TextChannel) or interaction.channel_id is None:
-            return
-
-        ticket = await bot.ticket_service.get_by_channel_id(interaction.channel_id)
-        if ticket is None:
-            await interaction.followup.send("Ticket não encontrado.", ephemeral=True)
-            return
-
-        behaviour = await bot.ticket_panel_service.behaviour_for_ticket(ticket, ticket.guild_id)
-        if not behaviour.transcript_enabled:
-            await interaction.followup.send(
-                "A transcrição está desativada no painel que originou este ticket.",
-                ephemeral=True,
-            )
-            return
-
-        html_content = await build_transcript_html(channel, ticket)
-        pdf_content = await build_transcript_pdf(channel, ticket)
-        save_transcript_locally(ticket, html_content, pdf_content)
-        html_filename = f"transcricao-{str(ticket.id)[:8]}.html"
-        pdf_filename = f"transcricao-{str(ticket.id)[:8]}.pdf"
-
-        def _files() -> list[discord.File]:
-            return [
-                discord.File(io.BytesIO(html_content.encode()), filename=html_filename),
-                discord.File(io.BytesIO(pdf_content), filename=pdf_filename),
-            ]
-
-        await channel.send(files=_files())
-
-        settings = await bot.config_service.get_settings(ticket.guild_id)
-        destination_channel_id = settings.transcript_channel_id or settings.log_channel_id
-        if destination_channel_id is not None:
-            destination = bot.get_channel(destination_channel_id)
-            if isinstance(destination, discord.TextChannel):
-                claimed_staff = (
-                    await bot.staff_service.get_by_id(ticket.claimed_by_staff_id)
-                    if ticket.claimed_by_staff_id is not None
-                    else None
-                )
-                embed = discord.Embed(
-                    title=f"📄 Transcrição — ticket #{str(ticket.id)[:8]}",
-                    description=(
-                        f"**Canal:** {channel.name}\n"
-                        f"**Aberto por:** <@{ticket.opened_by_discord_id}> "
-                        f"(ID: `{ticket.opened_by_discord_id}`)\n"
-                        f"**Assumido por:** {claimed_staff.display_name if claimed_staff else 'Ninguém assumiu'}\n"
-                        f"**Gerado por:** {interaction.user.mention}"
-                    ),
-                )
-                await destination.send(embed=embed, files=_files())
-
-        await interaction.followup.send("Transcrição gerada.", ephemeral=True)
+        await send_ticket_transcript(interaction)
 
     @discord.ui.button(
         label="Reabrir",
@@ -146,7 +155,7 @@ class TicketClosedView(SafeView):
         await interaction.edit_original_response(view=self)
 
         await channel.send(
-            content=f"🔓 Ticket reaberto por {member.mention}.", view=TicketActionsView()
+            content=f"🔓 Ticket reaberto por {member.mention}.", view=TicketActionsView(ticket)
         )
 
         await bot.log_service.record(

@@ -73,12 +73,21 @@ class DiscountCouponPlanRepository(BaseRepository[DiscountCouponPlan]):
         return list(result.scalars().all())
 
     async def replace_for_coupon(self, coupon_id: uuid.UUID, plan_ids: list[uuid.UUID]) -> None:
+        """Substitui a lista inteira de planos permitidos do cupom, dentro da
+        transacao corrente (atomico com o delete: se o flush falhar, o delete
+        acima tambem e revertido pelo `async with session()` do chamador).
+
+        `SELECT ... FOR UPDATE` na linha do cupom antes do delete/insert serializa
+        duas chamadas concorrentes pro MESMO coupon_id (ex.: dois admins salvando
+        o mesmo formulario ao mesmo tempo) — a segunda chamada espera a primeira
+        commitar em vez de correr pro mesmo unique constraint
+        (uq_discount_coupon_plan) e estourar IntegrityError."""
+        await self.session.execute(
+            select(DiscountCoupon.id).where(DiscountCoupon.id == coupon_id).with_for_update()
+        )
         await self.session.execute(
             delete(DiscountCouponPlan).where(DiscountCouponPlan.coupon_id == coupon_id)
         )
-        for plan_id in dict.fromkeys(plan_ids):
-            self.session.add(DiscountCouponPlan(coupon_id=coupon_id, plan_id=plan_id))
-        await self.session.flush()
         for plan_id in dict.fromkeys(plan_ids):
             self.session.add(DiscountCouponPlan(coupon_id=coupon_id, plan_id=plan_id))
         await self.session.flush()
