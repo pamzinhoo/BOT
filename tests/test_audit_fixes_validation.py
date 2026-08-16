@@ -321,12 +321,31 @@ async def test_webhook_no_premature_status_write(db: Database) -> None:
 class _FakeResponse:
     sent: list[dict] = field(default_factory=list)
     edited: list[dict] = field(default_factory=list)
+    deferred: bool = False
 
     async def send_message(self, content: str | None = None, **kwargs: object) -> None:
         self.sent.append({"content": content, **kwargs})
 
     async def edit_message(self, **kwargs: object) -> None:
         self.edited.append(kwargs)
+
+    async def defer(self, **kwargs: object) -> None:
+        # Callbacks reais (Fase 1: defer-first evita timeout de 3s) chamam
+        # isso antes de qualquer outra coisa — precisa existir no fake ou
+        # todo callback de Select estoura AttributeError antes de chegar
+        # na guarda cross-guild que o teste quer validar.
+        self.deferred = True
+
+
+@dataclass
+class _FakeFollowup:
+    response: _FakeResponse
+
+    async def send(self, content: str | None = None, **kwargs: object) -> None:
+        # Pos defer-first, a resposta de erro vai por followup (nao mais
+        # por response.send_message) — registra no mesmo `sent` do
+        # response pra manter as asserts dos testes existentes validas.
+        self.response.sent.append({"content": content, **kwargs})
 
 
 @dataclass
@@ -340,6 +359,10 @@ class _FakeInteraction:
     client: _FakeBot
     guild_id: int
     response: _FakeResponse = field(default_factory=_FakeResponse)
+    followup: _FakeFollowup = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.followup = _FakeFollowup(response=self.response)
 
 
 @pytest.mark.asyncio

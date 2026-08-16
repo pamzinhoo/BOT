@@ -43,8 +43,19 @@ def test_help_command_embed_includes_usage_and_examples() -> None:
 
 
 def test_help_main_view_has_one_button_per_category() -> None:
+    """HelpMainView tem 1 botao por categoria (custom_id
+    limerence:help:category:<categoria>) + 1 botao fixo "Geral" (
+    limerence:help:general, lista todos os comandos via _all_commands/
+    help_general_embed) — nao e um botao de categoria a mais, e uma view
+    separada (_open_general) intencional. Daqui o total esperado e
+    len(HELP_CATEGORIES) + 1, nao len(HELP_CATEGORIES)."""
     view = HelpMainView()
-    assert len(view.children) == len(HELP_CATEGORIES)
+    assert len(view.children) == len(HELP_CATEGORIES) + 1
+
+    category_custom_ids = {f"limerence:help:category:{category}" for category in HELP_CATEGORIES}
+    button_custom_ids = {getattr(child, "custom_id", None) for child in view.children}
+    assert category_custom_ids <= button_custom_ids, "falta botao pra alguma categoria de HELP_CATEGORIES"
+    assert "limerence:help:general" in button_custom_ids, "botao Geral (todos os comandos) ausente"
 
 
 def test_help_category_view_has_back_button() -> None:

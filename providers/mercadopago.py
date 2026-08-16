@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 from datetime import UTC, datetime, timedelta
@@ -25,6 +26,31 @@ _REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=15)
 # (Fase 1), entao o impacto de um replay era baixo, mas rejeitar `ts` velho
 # fecha a janela na borda, antes mesmo de tocar o banco.
 _WEBHOOK_MAX_AGE_SECONDS = 300
+
+# Sessao HTTP compartilhada entre todas as instancias de MercadoPagoProvider
+# (cada resolve_provider/webhook cria uma instancia nova, mas o transporte
+# TCP/TLS deve ser reaproveitado). Nao criada no import — so na primeira
+# chamada, dentro do event loop rodando — pra nao prender um ClientSession
+# num loop que ainda nao existe. Fechada explicitamente em Bot.close().
+_shared_session: aiohttp.ClientSession | None = None
+_session_lock = asyncio.Lock()
+
+
+async def _get_session() -> aiohttp.ClientSession:
+    global _shared_session
+    if _shared_session is None or _shared_session.closed:
+        async with _session_lock:
+            if _shared_session is None or _shared_session.closed:
+                _shared_session = aiohttp.ClientSession(timeout=_REQUEST_TIMEOUT)
+    return _shared_session
+
+
+async def close_session() -> None:
+    """Fecha a sessao HTTP compartilhada. Chamado em Bot.close() no shutdown."""
+    global _shared_session
+    if _shared_session is not None and not _shared_session.closed:
+        await _shared_session.close()
+    _shared_session = None
 
 _STATUS_MAP: dict[str, PaymentStatus] = {
     "pending": PaymentStatus.PENDING,
@@ -78,18 +104,18 @@ class MercadoPagoProvider(PaymentProvider):
     ) -> dict[str, object]:
         url = f"{_BASE_URL}{path}"
         try:
-            async with aiohttp.ClientSession(timeout=_REQUEST_TIMEOUT) as session:
-                async with session.request(
-                    method, url, json=json, headers=self._headers(idempotency_key=idempotency_key)
-                ) as response:
-                    body = await response.json(content_type=None)
-                    if response.status >= 400:
-                        logger.warning(
-                            "Mercado Pago retornou %s em %s %s (payment/preapproval id nao exposto no log).",
-                            response.status, method, path,
-                        )
-                        raise PaymentGatewayError(f"Mercado Pago respondeu {response.status} em {path}.")
-                    return body if isinstance(body, dict) else {}
+            session = await _get_session()
+            async with session.request(
+                method, url, json=json, headers=self._headers(idempotency_key=idempotency_key)
+            ) as response:
+                body = await response.json(content_type=None)
+                if response.status >= 400:
+                    logger.warning(
+                        "Mercado Pago retornou %s em %s %s (payment/preapproval id nao exposto no log).",
+                        response.status, method, path,
+                    )
+                    raise PaymentGatewayError(f"Mercado Pago respondeu {response.status} em {path}.")
+                return body if isinstance(body, dict) else {}
         except (aiohttp.ClientError, TimeoutError) as exc:
             logger.exception("Falha de rede ao chamar Mercado Pago (%s %s).", method, path)
             raise PaymentGatewayError("Falha de comunicacao com o Mercado Pago.") from exc

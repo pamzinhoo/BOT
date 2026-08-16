@@ -190,6 +190,7 @@ AUDIT_CATEGORY_LABELS: dict[AuditLogCategory, str] = {
     AuditLogCategory.PLAN: "📦 Plano",
     AuditLogCategory.VERIFICATION: "🛡️ Verificação",
     AuditLogCategory.PARTNERSHIP: "🤝 Parceria",
+    AuditLogCategory.GIVEAWAY: "🎉 Sorteio",
 }
 
 # como montar a mencao do alvo no embed/lista: "user" -> <@id>, "channel" -> <#id>,
@@ -226,6 +227,9 @@ AUDIT_CATEGORY_TARGET_KIND: dict[AuditLogCategory, str] = {
     AuditLogCategory.PLAN: "none",
     AuditLogCategory.VERIFICATION: "user",
     AuditLogCategory.PARTNERSHIP: "user",
+    # sorteio nao tem um alvo unico (winners e uma lista) — cogs/giveaways.py
+    # nunca passa target_id/target_name pro record(), igual ENQUETE.
+    AuditLogCategory.GIVEAWAY: "none",
 }
 
 AUDIT_CATEGORY_COLORS: dict[AuditLogCategory, discord.Color] = {
@@ -260,4 +264,5 @@ AUDIT_CATEGORY_COLORS: dict[AuditLogCategory, discord.Color] = {
     AuditLogCategory.PLAN: EMBED_COLOR_PURPLE,
     AuditLogCategory.VERIFICATION: EMBED_COLOR_VIOLET,
     AuditLogCategory.PARTNERSHIP: EMBED_COLOR_PURPLE,
+    AuditLogCategory.GIVEAWAY: EMBED_COLOR_PURPLE,
 }
