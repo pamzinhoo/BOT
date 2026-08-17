@@ -64,6 +64,21 @@ class PlanBenefitRepository(BaseRepository[PlanBenefit]):
         )
         return list(result.scalars().all())
 
+    async def map_by_plans(self, plan_ids: list[uuid.UUID]) -> dict[uuid.UUID, list[PlanBenefit]]:
+        """Batch de list_by_plan — evita 1 query por plano quando o chamador
+        ja tem a lista inteira (ex.: /loja montando o catalogo)."""
+        if not plan_ids:
+            return {}
+        result = await self.session.execute(
+            select(PlanBenefit)
+            .where(PlanBenefit.plan_id.in_(plan_ids))
+            .order_by(PlanBenefit.position.asc())
+        )
+        grouped: dict[uuid.UUID, list[PlanBenefit]] = {plan_id: [] for plan_id in plan_ids}
+        for benefit in result.scalars().all():
+            grouped[benefit.plan_id].append(benefit)
+        return grouped
+
     async def delete_all_for_plan(self, plan_id: uuid.UUID) -> None:
         await self.session.execute(delete(PlanBenefit).where(PlanBenefit.plan_id == plan_id))
         await self.session.flush()

@@ -42,9 +42,15 @@ async def licenses(request: Request, player: Player = Depends(get_current_player
     product_service: ProductService = request.app.state.product_service
 
     license_rows = await license_service.list_by_player(player.id)
+    products_by_id = {
+        product.id: product
+        for product in await product_service.list_by_ids(
+            [lic.product_id for lic in license_rows], include_deleted=True
+        )
+    }
     responses: list[LicenseResponse] = []
     for lic in license_rows:
-        product = await product_service.get(lic.product_id, include_deleted=True)
+        product = products_by_id.get(lic.product_id)
         responses.append(
             LicenseResponse(
                 id=lic.id,

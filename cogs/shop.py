@@ -47,10 +47,8 @@ class ShopCog(commands.Cog):
             )
             return
 
-        benefits_by_plan = {}
-        for plan in plans:
-            benefits = await self.bot.plan_service.list_benefits(plan.id)
-            benefits_by_plan[plan.id] = [b.text for b in benefits]
+        benefits_map = await self.bot.plan_service.map_benefits([plan.id for plan in plans])
+        benefits_by_plan = {plan_id: [b.text for b in benefits] for plan_id, benefits in benefits_map.items()}
 
         view = ShopView(plans, benefits_by_plan)
         await interaction.followup.send(embed=view.render_embed(), view=view, ephemeral=True)

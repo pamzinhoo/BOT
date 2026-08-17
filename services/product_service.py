@@ -74,6 +74,10 @@ class ProductService:
         async with self._database.session() as session:
             return await ProductRepository(session).get_by_id(product_id, include_deleted=include_deleted)
 
+    async def list_by_ids(self, product_ids: list[uuid.UUID], *, include_deleted: bool = False) -> list[Product]:
+        async with self._database.session() as session:
+            return await ProductRepository(session).list_by_ids(product_ids, include_deleted=include_deleted)
+
     async def get_by_slug(self, slug: str, *, include_deleted: bool = False) -> Product | None:
         async with self._database.session() as session:
             return await ProductRepository(session).get_by_slug(slug, include_deleted=include_deleted)

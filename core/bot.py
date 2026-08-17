@@ -14,6 +14,7 @@ from core.event_bus import EventBus
 from core.logger import get_logger
 from database.database import Database
 from providers import mercadopago as mercadopago_provider
+from services import auth_service as auth_service_module
 from services.audit_log_service import AuditLogService
 from services.automod_service import AutoModService
 from services.booster_service import BoosterService
@@ -280,5 +281,6 @@ class LimerenceBot(commands.Bot):
 
     async def close(self) -> None:
         await mercadopago_provider.close_session()
+        await auth_service_module.close_session()
         await self.database.close()
         await super().close()

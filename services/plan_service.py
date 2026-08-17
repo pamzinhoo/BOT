@@ -252,6 +252,12 @@ class PlanService:
         async with self._database.session() as session:
             return await PlanBenefitRepository(session).list_by_plan(plan_id)
 
+    async def map_benefits(self, plan_ids: list[uuid.UUID]) -> dict[uuid.UUID, list[PlanBenefit]]:
+        """Batch de list_benefits — 1 query pra N planos em vez de N queries
+        (ver PlanBenefitRepository.map_by_plans)."""
+        async with self._database.session() as session:
+            return await PlanBenefitRepository(session).map_by_plans(plan_ids)
+
     async def add_benefit(
         self,
         plan_id: uuid.UUID,

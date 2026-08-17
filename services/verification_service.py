@@ -574,6 +574,14 @@ class VerificationService:
             expired = await VerificationSessionRepository(session).list_expired_pending(now)
             ids = [record.id for record in expired]
 
+        # Sweep global (todas as guilds numa unica varredura, cron 1 min) —
+        # varias sessoes expiradas da MESMA guild nao precisam rebuscar
+        # VerificationSettings uma vez por sessao; cache local escopado a
+        # esta chamada (nao precisa de TTL, a varredura inteira roda em
+        # segundos e settings mudando no meio dela e caso raro o suficiente
+        # pra nao valer a complexidade de invalidar um cache de longa vida).
+        settings_by_guild: dict[int, object] = {}
+
         for session_id in ids:
             async with self._database.session() as session:
                 repo = VerificationSessionRepository(session)
@@ -589,7 +597,10 @@ class VerificationService:
                 record.completed_at = datetime.now(UTC)
                 await session.flush()
                 await session.refresh(record)
-                settings = await VerificationSettingsRepository(session).get_or_create(record.guild_id)
+                settings = settings_by_guild.get(record.guild_id)
+                if settings is None:
+                    settings = await VerificationSettingsRepository(session).get_or_create(record.guild_id)
+                    settings_by_guild[record.guild_id] = settings
 
             action = VerificationExceededAction(settings.on_expire_action)
             await self._finalize(record, settings, action, result_label="Expirado")

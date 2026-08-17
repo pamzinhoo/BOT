@@ -17,6 +17,18 @@ class ProductRepository(BaseRepository[Product]):
             return None
         return product
 
+    async def list_by_ids(self, ids: list[uuid.UUID], *, include_deleted: bool = False) -> list[Product]:
+        """Batch de get_by_id — evita 1 query por Product quando o chamador
+        ja tem a lista inteira de ids (ex.: /player/licenses resolvendo o
+        Product de cada License de uma vez)."""
+        if not ids:
+            return []
+        stmt = select(Product).where(Product.id.in_(ids))
+        if not include_deleted:
+            stmt = stmt.where(Product.deleted_at.is_(None))
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
     async def get_by_slug(self, slug: str, *, include_deleted: bool = False) -> Product | None:
         stmt = select(Product).where(Product.slug == slug)
         if not include_deleted:

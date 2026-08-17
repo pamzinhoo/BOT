@@ -43,6 +43,31 @@ _JWT_KEY_ID = "v1"
 
 PollStatus = Literal["authorization_pending", "slow_down", "success", "expired_token", "access_denied"]
 
+# Sessao HTTP compartilhada entre logins (baixa frequencia comparado a
+# pagamentos, mas mesmo raciocinio de providers/mercadopago.py: reaproveita
+# o transporte TCP/TLS em vez de pagar handshake completo a cada login).
+# Criada so na primeira chamada, dentro do event loop rodando; fechada
+# explicitamente em Bot.close().
+_shared_session: aiohttp.ClientSession | None = None
+_session_lock = asyncio.Lock()
+
+
+async def _get_session() -> aiohttp.ClientSession:
+    global _shared_session
+    if _shared_session is None or _shared_session.closed:
+        async with _session_lock:
+            if _shared_session is None or _shared_session.closed:
+                _shared_session = aiohttp.ClientSession(timeout=_OAUTH_REQUEST_TIMEOUT)
+    return _shared_session
+
+
+async def close_session() -> None:
+    """Fecha a sessao HTTP compartilhada. Chamado em Bot.close() no shutdown."""
+    global _shared_session
+    if _shared_session is not None and not _shared_session.closed:
+        await _shared_session.close()
+    _shared_session = None
+
 
 class AuthError(Exception):
     """Erro de negocio do fluxo de auth — a rota decide o status HTTP a partir de `code`."""
@@ -314,32 +339,32 @@ class AuthService:
         aqui, nunca chega no Launcher) e busca a identidade do usuario. O
         token do Discord e usado uma unica vez nesta funcao e descartado —
         nunca e persistido (regra obrigatoria do prompt)."""
-        async with aiohttp.ClientSession(timeout=_OAUTH_REQUEST_TIMEOUT) as http:
-            token_resp = await http.post(
-                f"{_DISCORD_API_BASE}/oauth2/token",
-                data={
-                    "grant_type": "authorization_code",
-                    "code": code,
-                    "redirect_uri": self._settings.discord_oauth_redirect_uri,
-                    "client_id": self._settings.discord_oauth_client_id,
-                    "client_secret": self._settings.discord_oauth_client_secret,
-                    "code_verifier": code_verifier,
-                },
-                headers={"Content-Type": "application/x-www-form-urlencoded"},
-            )
-            if token_resp.status != 200:
-                raise AuthError("discord_token_exchange_failed", "Discord recusou a troca de codigo.")
-            token_payload = await token_resp.json()
-            discord_access_token = token_payload["access_token"]
+        http = await _get_session()
+        token_resp = await http.post(
+            f"{_DISCORD_API_BASE}/oauth2/token",
+            data={
+                "grant_type": "authorization_code",
+                "code": code,
+                "redirect_uri": self._settings.discord_oauth_redirect_uri,
+                "client_id": self._settings.discord_oauth_client_id,
+                "client_secret": self._settings.discord_oauth_client_secret,
+                "code_verifier": code_verifier,
+            },
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        if token_resp.status != 200:
+            raise AuthError("discord_token_exchange_failed", "Discord recusou a troca de codigo.")
+        token_payload = await token_resp.json()
+        discord_access_token = token_payload["access_token"]
 
-            user_resp = await http.get(
-                f"{_DISCORD_API_BASE}/users/@me",
-                headers={"Authorization": f"Bearer {discord_access_token}"},
-            )
-            if user_resp.status != 200:
-                raise AuthError("discord_user_fetch_failed", "Nao foi possivel obter o perfil do Discord.")
-            user_payload = await user_resp.json()
-            return int(user_payload["id"]), user_payload.get("username")
+        user_resp = await http.get(
+            f"{_DISCORD_API_BASE}/users/@me",
+            headers={"Authorization": f"Bearer {discord_access_token}"},
+        )
+        if user_resp.status != 200:
+            raise AuthError("discord_user_fetch_failed", "Nao foi possivel obter o perfil do Discord.")
+        user_payload = await user_resp.json()
+        return int(user_payload["id"]), user_payload.get("username")
 
     # ------------------------------------------------------------------
     # Passo 4: Launcher da poll ate completar

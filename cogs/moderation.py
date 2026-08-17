@@ -90,13 +90,15 @@ class ModerationCog(commands.Cog):
     async def review_expiration_task(self) -> None:
         """Etapa 22: aplica a punição real automaticamente quando o prazo de análise
         expira sem o usuário recorrer (ou sem a staff decidir um recurso já enviado)."""
-        for punishment in await self.bot.punishment_service.list_expired_pending_reviews():
+        expired = await self.bot.punishment_service.list_expired_pending_reviews()
+        pending_appeals = await self.bot.punishment_service.map_pending_appeals([p.id for p in expired])
+
+        for punishment in expired:
             guild = self.bot.get_guild(punishment.guild_id)
             if guild is None:
                 continue
 
-            pending_appeal = await self.bot.punishment_service.get_pending_appeal(punishment.id)
-            if pending_appeal is not None:
+            if punishment.id in pending_appeals:
                 # ja tem recurso aguardando decisao da staff — nao expira por baixo, staff decide.
                 continue
 

@@ -91,11 +91,13 @@ class PunishmentReviewService:
             punishments = await PunishmentRepository(session).list_pending_review(
                 guild_id, types=types, staff_id=staff_id
             )
-        items: list[PendingPunishmentItem] = []
-        for punishment in punishments:
-            appeal = await self._punishment_service.get_pending_appeal(punishment.id)
-            items.append(PendingPunishmentItem(punishment=punishment, appeal=appeal))
-        return items
+        appeals_by_punishment = await self._punishment_service.map_pending_appeals(
+            [p.id for p in punishments]
+        )
+        return [
+            PendingPunishmentItem(punishment=punishment, appeal=appeals_by_punishment.get(punishment.id))
+            for punishment in punishments
+        ]
 
     async def get_item(self, punishment_id: uuid.UUID) -> PendingPunishmentItem | None:
         punishment = await self._punishment_service.get_by_id(punishment_id)

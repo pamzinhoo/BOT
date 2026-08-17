@@ -527,6 +527,14 @@ class PunishmentService:
         async with self._database.session() as session:
             return await PunishmentAppealRepository(session).get_pending_by_punishment(punishment_id)
 
+    async def map_pending_appeals(
+        self, punishment_ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, PunishmentAppeal]:
+        """Batch de get_pending_appeal — 1 query pra N punicoes em vez de N
+        queries (ver PunishmentAppealRepository.map_pending_by_punishments)."""
+        async with self._database.session() as session:
+            return await PunishmentAppealRepository(session).map_pending_by_punishments(punishment_ids)
+
     async def accept_appeal(
         self,
         *,

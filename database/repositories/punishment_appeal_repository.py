@@ -35,3 +35,19 @@ class PunishmentAppealRepository(BaseRepository[PunishmentAppeal]):
             )
         )
         return result.scalar_one_or_none()
+
+    async def map_pending_by_punishments(
+        self, punishment_ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, PunishmentAppeal]:
+        """Batch de get_pending_by_punishment — evita 1 query por punicao
+        quando o chamador ja tem a lista inteira em maos (ex.: list_pending,
+        review_expiration_task)."""
+        if not punishment_ids:
+            return {}
+        result = await self.session.execute(
+            select(PunishmentAppeal).where(
+                PunishmentAppeal.punishment_id.in_(punishment_ids),
+                PunishmentAppeal.status == AppealStatus.PENDING,
+            )
+        )
+        return {appeal.punishment_id: appeal for appeal in result.scalars().all()}
