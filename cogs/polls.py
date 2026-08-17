@@ -11,16 +11,46 @@ from discord.ext import commands, tasks
 from core.bot import LimerenceBot
 from core.logger import get_logger
 from database.models.audit_log import AuditLogCategory
-from database.models.poll import PollOption
+from database.models.poll import PollOption, PollStatus
 from services.poll_service import AlreadyVotedError, EnqueteDisabledError, InvalidOptionsError
 from utils.checks import is_admin
+from utils.constants import EMBED_COLOR_DEFAULT
+from utils.poll_style import discord_button_style, option_dot
 from utils.time import InvalidDurationError, parse_duration
 from views.base_view import SafeView
-from views.embeds import poll_creation_embed, poll_results_embed
+from views.embeds import poll_live_embed
 
 logger = get_logger("polls")
 
 _CHECK_INTERVAL_MINUTES = 5
+_BUTTONS_PER_ROW = 5
+
+
+async def _refresh_poll_message(bot: LimerenceBot, poll_id: uuid.UUID) -> None:
+    """Reconstroi embed+view da enquete e edita a mensagem ja publicada —
+    chamado a cada voto/remocao de voto pra manter percentuais/barras ao
+    vivo, igual o exemplo de referencia. Falha (mensagem apagada, canal
+    sumiu) e so logada — nunca derruba o voto que ja foi registrado."""
+    poll = await bot.poll_service.get_poll(poll_id)
+    if poll is None or poll.message_id is None:
+        return
+    channel = bot.get_channel(poll.channel_id)
+    if not isinstance(channel, discord.abc.Messageable):
+        return
+    try:
+        message = await channel.fetch_message(poll.message_id)
+    except discord.HTTPException:
+        return
+
+    options = await bot.poll_service.list_options(poll.id)
+    totals = await bot.poll_service.weighted_totals(poll.id)
+    participants = await bot.poll_service.count_participants(poll.id)
+    embed = poll_live_embed(poll, options, totals, participants)
+    view = PollVoteView(poll.id, options, totals) if poll.status == PollStatus.OPEN else None
+    try:
+        await message.edit(embed=embed, view=view)
+    except discord.HTTPException:
+        logger.exception("Falha ao atualizar embed da enquete %s.", poll.id)
 
 
 class PollVoteButton(
@@ -30,14 +60,28 @@ class PollVoteButton(
     """Botao persistente de voto — 1 por opcao. Sobrevive a restart do bot;
     numero de opcoes varia por enquete, entao nao da pra usar add_view estatico."""
 
-    def __init__(self, poll_id: uuid.UUID, option_id: uuid.UUID, label: str) -> None:
-        super().__init__(
-            discord.ui.Button(
-                label=label[:80],
-                style=discord.ButtonStyle.secondary,
-                custom_id=f"poll:vote:{poll_id}:{option_id}",
-            )
+    def __init__(
+        self,
+        poll_id: uuid.UUID,
+        option_id: uuid.UUID,
+        *,
+        label: str,
+        style: discord.ButtonStyle = discord.ButtonStyle.secondary,
+        emoji: str | None = None,
+        row: int | None = None,
+    ) -> None:
+        button = discord.ui.Button(
+            label=label[:80],
+            style=style,
+            custom_id=f"poll:vote:{poll_id}:{option_id}",
+            row=row,
         )
+        if emoji:
+            try:
+                button.emoji = emoji
+            except Exception:
+                logger.warning("Emoji inválido pra opção de enquete (poll=%s, option=%s): %r", poll_id, option_id, emoji)
+        super().__init__(button)
         self.poll_id = poll_id
         self.option_id = option_id
 
@@ -76,16 +120,127 @@ class PollVoteButton(
             await interaction.followup.send(str(exc), ephemeral=True)
             return
 
+        await _refresh_poll_message(bot, poll.id)
         await interaction.followup.send(
             f"✅ Voto registrado com peso **{vote.weight}**.", ephemeral=True
         )
 
 
-class PollVoteView(SafeView):
-    def __init__(self, poll_id: uuid.UUID, options: list[PollOption]) -> None:
-        super().__init__(timeout=None)
+class PollRemoveVoteButton(
+    discord.ui.DynamicItem[discord.ui.Button],
+    template=r"poll:removevote:(?P<poll_id>[0-9a-fA-F-]{36})",
+):
+    def __init__(self, poll_id: uuid.UUID, *, row: int | None = None) -> None:
+        super().__init__(
+            discord.ui.Button(
+                label="🗑️ Remover voto",
+                style=discord.ButtonStyle.secondary,
+                custom_id=f"poll:removevote:{poll_id}",
+                row=row,
+            )
+        )
+        self.poll_id = poll_id
+
+    @classmethod
+    async def from_custom_id(
+        cls, interaction: discord.Interaction, item: discord.ui.Item, match: Any
+    ) -> PollRemoveVoteButton:
+        return cls(uuid.UUID(match["poll_id"]))
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
+        member = interaction.user
+        if not isinstance(member, discord.Member):
+            return
+        await interaction.response.defer()
+
+        poll = await bot.poll_service.get_poll(self.poll_id)
+        if poll is None or poll.guild_id != interaction.guild_id:
+            await interaction.followup.send("Enquete não encontrada.", ephemeral=True)
+            return
+        if poll.status != PollStatus.OPEN:
+            await interaction.followup.send("Essa enquete já foi encerrada.", ephemeral=True)
+            return
+
+        removed = await bot.poll_service.remove_vote(poll.id, member.id)
+        if not removed:
+            await interaction.followup.send("Você não tinha votado nessa enquete.", ephemeral=True)
+            return
+
+        await _refresh_poll_message(bot, poll.id)
+        await interaction.followup.send("🗑️ Voto removido.", ephemeral=True)
+
+
+class PollDetailsButton(
+    discord.ui.DynamicItem[discord.ui.Button],
+    template=r"poll:details:(?P<poll_id>[0-9a-fA-F-]{36})",
+):
+    def __init__(self, poll_id: uuid.UUID, *, row: int | None = None) -> None:
+        super().__init__(
+            discord.ui.Button(
+                label="📋 Detalhes",
+                style=discord.ButtonStyle.secondary,
+                custom_id=f"poll:details:{poll_id}",
+                row=row,
+            )
+        )
+        self.poll_id = poll_id
+
+    @classmethod
+    async def from_custom_id(
+        cls, interaction: discord.Interaction, item: discord.ui.Item, match: Any
+    ) -> PollDetailsButton:
+        return cls(uuid.UUID(match["poll_id"]))
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
+        await interaction.response.defer(ephemeral=True)
+
+        poll = await bot.poll_service.get_poll(self.poll_id)
+        if poll is None:
+            await interaction.followup.send("Enquete não encontrada.", ephemeral=True)
+            return
+
+        options = await bot.poll_service.list_options(poll.id)
+        totals = await bot.poll_service.option_totals(poll.id)
+
+        embed = discord.Embed(title=f"📋 Detalhes — {poll.title}", color=EMBED_COLOR_DEFAULT)
         for option in options:
-            self.add_item(PollVoteButton(poll_id, option.id, option.name))
+            raw, weighted = totals.get(option.id, (0, 0))
+            embed.add_field(
+                name=f"{option_dot(option)} {option.name}",
+                value=f"{raw} voto(s) bruto(s) · {weighted} ponderado(s)",
+                inline=False,
+            )
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+
+class PollVoteView(SafeView):
+    def __init__(
+        self,
+        poll_id: uuid.UUID,
+        options: list[PollOption],
+        weighted_totals: dict[uuid.UUID, int] | None = None,
+    ) -> None:
+        super().__init__(timeout=None)
+        totals = weighted_totals or {}
+        total_weight = sum(totals.values())
+        for index, option in enumerate(options):
+            votes = totals.get(option.id, 0)
+            percent = (votes / total_weight * 100) if total_weight else 0.0
+            self.add_item(
+                PollVoteButton(
+                    poll_id,
+                    option.id,
+                    label=f"{option.name} · {percent:.1f}%",
+                    style=discord_button_style(option.button_style),
+                    emoji=option.emoji,
+                    row=index // _BUTTONS_PER_ROW,
+                )
+            )
+        control_row = ((len(options) - 1) // _BUTTONS_PER_ROW) + 1
+        self.add_item(PollRemoveVoteButton(poll_id, row=control_row))
+        self.add_item(PollDetailsButton(poll_id, row=control_row))
 
 
 class _EnqueteCreateModal(discord.ui.Modal, title="Criar Enquete"):
@@ -96,9 +251,15 @@ class _EnqueteCreateModal(discord.ui.Modal, title="Criar Enquete"):
         max_length=500,
     )
     opcoes: discord.ui.TextInput[Any] = discord.ui.TextInput(
-        label="Opções (1 por linha, mín. 2, máx. 10)",
+        label="Opções: Nome | emoji | cor (1 por linha)",
         style=discord.TextStyle.paragraph,
+        placeholder="Sim | ✅ | verde\nNão | ❌ | vermelho",
         required=True,
+        max_length=500,
+    )
+    imagem: discord.ui.TextInput[Any] = discord.ui.TextInput(
+        label="Imagem (URL, opcional)",
+        required=False,
         max_length=500,
     )
     duracao: discord.ui.TextInput[Any] = discord.ui.TextInput(
@@ -138,13 +299,22 @@ class _EnqueteCreateModal(discord.ui.Modal, title="Criar Enquete"):
                 description=str(self.descricao.value).strip() or None,
                 options=options,
                 duration=duration,
+                image_url=str(self.imagem.value).strip() or None,
             )
         except (EnqueteDisabledError, InvalidOptionsError) as exc:
             await interaction.followup.send(str(exc), ephemeral=True)
             return
 
         view = PollVoteView(poll.id, created_options)
-        message = await self.canal.send(embed=poll_creation_embed(poll, created_options), view=view)
+        embed = poll_live_embed(poll, created_options, {}, 0)
+        try:
+            message = await self.canal.send(embed=embed, view=view)
+        except discord.HTTPException as exc:
+            await interaction.followup.send(
+                f"Não consegui publicar a enquete — verifique os emojis digitados. Detalhe: {exc}",
+                ephemeral=True,
+            )
+            return
         await bot.poll_service.set_message_id(poll.id, message.id)
 
         await bot.audit_log_service.record(
@@ -209,16 +379,18 @@ class PollsCog(commands.Cog):
             return
         channel = guild.get_channel(closed.channel_id)
 
+        result_embed = poll_live_embed(closed, options, totals, participants)
+
         if closed.message_id is not None and isinstance(channel, discord.abc.Messageable):
             try:
                 message = await channel.fetch_message(closed.message_id)
-                await message.edit(view=None)
+                await message.edit(embed=result_embed, view=None)
             except discord.HTTPException:
                 pass
 
         if isinstance(channel, discord.abc.Messageable):
             try:
-                await channel.send(embed=poll_results_embed(closed, options, totals, participants))
+                await channel.send(embed=result_embed)
             except discord.HTTPException:
                 logger.exception("Falha ao enviar resultado da enquete %s.", closed.id)
 

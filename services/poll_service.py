@@ -19,6 +19,7 @@ from database.repositories.poll_repository import (
 )
 from services.subscription_service import SubscriptionService
 from services.vote_weight_service import VoteWeightService
+from utils.poll_style import parse_option_line
 
 if TYPE_CHECKING:
     from core.bot import LimerenceBot
@@ -111,12 +112,18 @@ class PollService:
         visibility: PollVisibility = PollVisibility.PUBLIC,
         required_role_id: int | None = None,
         required_plan_id: uuid.UUID | None = None,
+        image_url: str | None = None,
     ) -> tuple[Poll, list[PollOption]]:
-        cleaned_options = [opt.strip() for opt in options if opt.strip()]
-        if len(cleaned_options) < MIN_OPTIONS:
+        """`options` e 1 linha por opcao, no formato `Nome | emoji | cor`
+        (emoji e cor opcionais — ver utils/poll_style.parse_option_line).
+        `cor` e uma das 4 palavras-chave verde/vermelho/azul/cinza, que mapeia
+        pros 4 unicos estilos reais de botao do Discord."""
+        cleaned_lines = [opt.strip() for opt in options if opt.strip()]
+        if len(cleaned_lines) < MIN_OPTIONS:
             raise InvalidOptionsError(f"A enquete precisa de pelo menos {MIN_OPTIONS} opções.")
-        if len(cleaned_options) > MAX_OPTIONS:
+        if len(cleaned_lines) > MAX_OPTIONS:
             raise InvalidOptionsError(f"A enquete pode ter no máximo {MAX_OPTIONS} opções.")
+        parsed_options = [parse_option_line(line) for line in cleaned_lines]
 
         settings = await self.get_settings(guild_id)
         if not settings.enabled:
@@ -135,13 +142,16 @@ class PollService:
                     required_role_id=required_role_id,
                     required_plan_id=required_plan_id,
                     weight_mode=settings.default_weight_mode,
+                    image_url=image_url,
                     expires_at=datetime.now(UTC) + duration,
                 )
             )
             option_repo = PollOptionRepository(session)
             created_options = [
-                await option_repo.add(PollOption(poll_id=poll.id, name=name, position=position))
-                for position, name in enumerate(cleaned_options)
+                await option_repo.add(
+                    PollOption(poll_id=poll.id, name=name, position=position, emoji=emoji, button_style=button_style)
+                )
+                for position, (name, emoji, button_style) in enumerate(parsed_options)
             ]
             await session.refresh(poll)
         return poll, created_options
@@ -202,9 +212,34 @@ class PollService:
             raise AlreadyVotedError("Você já votou nessa enquete.") from exc
         return vote
 
+    async def remove_vote(self, poll_id: uuid.UUID, user_id: int) -> bool:
+        """Remove o voto do usuario nessa enquete, se existir. Retorna True
+        se removeu algo, False se o usuario nunca votou (idempotente do
+        ponto de vista do chamador — nunca levanta erro por "nada a
+        remover")."""
+        async with self._database.session() as session:
+            repo = PollVoteRepository(session)
+            vote = await repo.get_by_poll_and_user(poll_id, user_id)
+            if vote is None:
+                return False
+            await repo.delete(vote)
+        return True
+
     async def weighted_totals(self, poll_id: uuid.UUID) -> dict[uuid.UUID, int]:
         async with self._database.session() as session:
             return await PollVoteRepository(session).weighted_totals(poll_id)
+
+    async def raw_totals(self, poll_id: uuid.UUID) -> dict[uuid.UUID, int]:
+        async with self._database.session() as session:
+            return await PollVoteRepository(session).raw_totals(poll_id)
+
+    async def option_totals(self, poll_id: uuid.UUID) -> dict[uuid.UUID, tuple[int, int]]:
+        """Bruto + ponderado por opcao numa unica query — ver
+        PollVoteRepository.totals. Usar isso em vez de chamar raw_totals +
+        weighted_totals separados quando os dois valores forem precisos
+        juntos (ex.: botao Detalhes)."""
+        async with self._database.session() as session:
+            return await PollVoteRepository(session).totals(poll_id)
 
     async def count_participants(self, poll_id: uuid.UUID) -> int:
         async with self._database.session() as session:

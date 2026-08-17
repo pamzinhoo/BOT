@@ -15,7 +15,7 @@ from database.models.partnership import Partnership
 from database.models.payment import PaymentHistory
 from database.models.payment_dm_settings import PaymentDmSettings
 from database.models.plan import Plan
-from database.models.poll import Poll, PollOption
+from database.models.poll import Poll, PollOption, PollStatus
 from database.models.punishment import APPEALABLE_TYPES, Punishment, PunishmentType
 from database.models.punishment_appeal import PunishmentAppeal
 from database.models.staff_stats import StaffStats
@@ -47,6 +47,7 @@ from utils.constants import (
     achievement_label,
 )
 from utils.formatter import rank_marker
+from utils.poll_style import option_dot
 from utils.time import humanize_duration
 
 if TYPE_CHECKING:
@@ -1087,30 +1088,47 @@ def partnership_log_embed(record: Partnership, *, action: str) -> discord.Embed:
     return embed
 
 
-def poll_creation_embed(poll: Poll, options: list[PollOption]) -> discord.Embed:
-    embed = discord.Embed(title=f"🗳️ {poll.title}", description=poll.description or None, color=EMBED_COLOR_DEFAULT)
-    for option in options:
-        embed.add_field(name=option.name, value="​", inline=False)
-    embed.add_field(name="Criado por", value=f"<@{poll.creator_id}>", inline=True)
-    embed.add_field(name="Encerra em", value=discord.utils.format_dt(poll.expires_at, style="R"), inline=True)
-    embed.set_footer(text="Clique num botão abaixo pra votar. 1 voto por pessoa.")
-    return embed
-
-
-def poll_results_embed(
+def poll_live_embed(
     poll: Poll,
     options: list[PollOption],
     weighted_totals: dict,
     participant_count: int,
 ) -> discord.Embed:
-    embed = discord.Embed(title=f"🗳️ Resultado — {poll.title}", color=EMBED_COLOR_PURPLE)
+    """Embed da enquete — usado tanto na criação quanto reconstruído a cada
+    voto/remoção (live update) e no anúncio de encerramento (`poll.status`
+    já reflete o estado atual em todos os casos, então a mesma função serve
+    pros três momentos)."""
+    embed = discord.Embed(title=poll.title, color=EMBED_COLOR_DEFAULT)
+    if poll.description:
+        embed.description = f"*{poll.description}*"
+    if poll.image_url:
+        embed.set_thumbnail(url=poll.image_url)
+
+    is_open = poll.status == PollStatus.OPEN
+    embed.add_field(name="Estado", value="🟢 Aberta" if is_open else "🔴 Encerrada", inline=True)
+    if is_open:
+        embed.add_field(name="Encerra em", value=discord.utils.format_dt(poll.expires_at, style="R"), inline=True)
+    else:
+        embed.add_field(
+            name="Encerrada em",
+            value=discord.utils.format_dt(poll.closed_at or poll.expires_at, style="R"),
+            inline=True,
+        )
+    embed.add_field(name="Participantes", value=str(participant_count), inline=True)
+
+    total_weight = sum(weighted_totals.values())
     max_total = max(weighted_totals.values(), default=0)
     for option in options:
-        total = weighted_totals.get(option.id, 0)
-        marker = "🏆 " if total == max_total and max_total > 0 else ""
-        embed.add_field(name=f"{marker}{option.name}", value=f"{total} voto(s) ponderado(s)", inline=False)
-    embed.set_footer(text=f"{participant_count} participante(s) — encerrada.")
-    embed.timestamp = discord.utils.utcnow()
+        votes = weighted_totals.get(option.id, 0)
+        percent = (votes / total_weight * 100) if total_weight else 0.0
+        trophy = "🏆 " if not is_open and votes == max_total and max_total > 0 else ""
+        embed.add_field(
+            name=f"{trophy}{option_dot(option)} {option.name}",
+            value=f"{votes} voto(s) · {percent:.1f}%",
+            inline=True,
+        )
+
+    embed.set_footer(text="Enquete | Aether ©")
     return embed
 
 

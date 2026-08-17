@@ -54,6 +54,10 @@ class Poll(Base, GuildScopedMixin, UUIDPrimaryKeyMixin, TimestampMixin):
         ForeignKey("plans.id", ondelete="SET NULL")
     )
     weight_mode: Mapped[str] = mapped_column(String(20), nullable=False, default="SNAPSHOT")
+    # thumbnail exibida no embed da enquete (logo/imagem do tema) — URL colada
+    # pelo staff na criacao, nunca upload direto (Modal do Discord nao aceita
+    # arquivo).
+    image_url: Mapped[str | None] = mapped_column(String(500))
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
@@ -68,6 +72,12 @@ class PollOption(Base, UUIDPrimaryKeyMixin):
     poll_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("polls.id", ondelete="CASCADE"), nullable=False)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # emoji custom por opcao (aparece no embed e no botao) — None usa um
+    # marcador padrao derivado de button_style (ver utils/poll_style.py).
+    emoji: Mapped[str | None] = mapped_column(String(64))
+    # um dos 4 estilos REAIS de botao do Discord (nao aceita hex arbitrario,
+    # limitacao da propria API): success/danger/primary/secondary.
+    button_style: Mapped[str] = mapped_column(String(20), nullable=False, default="secondary")
 
 
 class PollVote(Base, UUIDPrimaryKeyMixin, TimestampMixin):

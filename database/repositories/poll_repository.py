@@ -52,6 +52,28 @@ class PollVoteRepository(BaseRepository[PollVote]):
         )
         return {option_id: int(total) for option_id, total in result.all()}
 
+    async def raw_totals(self, poll_id: uuid.UUID) -> dict[uuid.UUID, int]:
+        """Contagem BRUTA de votos por opcao (1 por voto, sem peso)."""
+        result = await self.session.execute(
+            select(PollVote.option_id, func.count())
+            .where(PollVote.poll_id == poll_id)
+            .group_by(PollVote.option_id)
+        )
+        return {option_id: int(total) for option_id, total in result.all()}
+
+    async def totals(self, poll_id: uuid.UUID) -> dict[uuid.UUID, tuple[int, int]]:
+        """Bruto + ponderado por opcao em UMA query so (COUNT e SUM sobre o
+        mesmo GROUP BY) — usado pelo botao "Detalhes", que precisa dos dois
+        ao mesmo tempo; evita escanear poll_votes duas vezes pra montar a
+        mesma agregacao (raw_totals + weighted_totals separados faziam
+        exatamente isso)."""
+        result = await self.session.execute(
+            select(PollVote.option_id, func.count(), func.sum(PollVote.weight))
+            .where(PollVote.poll_id == poll_id)
+            .group_by(PollVote.option_id)
+        )
+        return {option_id: (int(raw), int(weighted)) for option_id, raw, weighted in result.all()}
+
     async def count_participants(self, poll_id: uuid.UUID) -> int:
         result = await self.session.execute(
             select(func.count()).select_from(PollVote).where(PollVote.poll_id == poll_id)
