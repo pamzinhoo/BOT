@@ -58,6 +58,29 @@ class ProductCatalogItemResponse(BaseModel):
     license_status: str | None
 
 
+class DlcCatalogItemResponse(BaseModel):
+    id: uuid.UUID
+    slug: str
+    name: str
+    description: str | None
+    access_type: str  # "free" | "paid" — free checa cargo (via License
+    # source=role_grant), paid checa License concedida por pagamento; ver
+    # services/dlc_service.py
+    price_amount: int | None
+    currency: str
+    unlocked: bool
+    license_status: str | None
+
+
+class DlcPurchaseResponse(BaseModel):
+    payment_id: uuid.UUID
+    status: str
+    checkout_url: str | None
+    qr_code: str | None
+    qr_code_base64: str | None
+    expires_at: str | None
+
+
 class DownloadRequest(BaseModel):
     product_id: uuid.UUID
     entry_type: str = Field(default="full")

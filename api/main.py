@@ -74,6 +74,7 @@ def create_app(bot: LimerenceBot) -> FastAPI:
     app.state.auth_service = AuthService(bot.database, bot.settings)
     app.state.product_service = bot.product_service
     app.state.license_service = bot.license_service
+    app.state.dlc_service = bot.dlc_service
     app.state.launcher_content_service = LauncherContentService(bot.database)
     app.state.download_service = DownloadService(
         bot.database, bot.license_service, _build_storage_provider(bot), bot.settings

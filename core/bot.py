@@ -21,6 +21,7 @@ from services.bot_status_service import BotStatusService
 from services.claim_service import ClaimService
 from services.config_service import ConfigService
 from services.coupon_service import CouponService
+from services.dlc_service import DlcService
 from services.evaluation_service import EvaluationService
 from services.giveaway_service import GiveawayService
 from services.guild_service import GuildService
@@ -95,6 +96,7 @@ class LimerenceBot(commands.Bot):
         self.product_service = ProductService(database)
         self.event_bus = EventBus()
         self.license_service = LicenseService(database, self.event_bus)
+        self.dlc_service = DlcService(database, self.license_service, self)
         self.role_sync_service = RoleSyncService(database, self)
         self.role_sync_service.register(self.event_bus)
         self.reconciliation_service = ReconciliationService(

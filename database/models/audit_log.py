@@ -47,6 +47,7 @@ class AuditLogCategory(enum.Enum):
     VERIFICATION = "verification"
     PARTNERSHIP = "partnership"
     GIVEAWAY = "giveaway"
+    PRODUCT = "product"
 
 
 class AuditLogEntry(Base, UUIDPrimaryKeyMixin):

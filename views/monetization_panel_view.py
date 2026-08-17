@@ -167,6 +167,15 @@ class MonetizationMenuView(SafeView):
 
         await render_coupons_menu(interaction)
 
+    @discord.ui.button(label="🎮 DLC", style=discord.ButtonStyle.secondary)
+    async def dlc_button(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await interaction.response.defer()
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
+        from views.dlc_panel_view import DlcListView, dlc_list_embed
+
+        dlcs = await bot.dlc_service.list_dlcs()
+        await interaction.edit_original_response(content=None, embed=dlc_list_embed(dlcs), view=DlcListView(dlcs))
+
 
 async def _back_to_monetization_menu(interaction: discord.Interaction) -> None:
     await interaction.response.edit_message(

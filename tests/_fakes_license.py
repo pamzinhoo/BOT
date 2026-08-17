@@ -91,6 +91,16 @@ class FakeLicenseRepository:
             if lic.product_id == product_id and lic.status == LicenseStatus.ACTIVE
         ]
 
+    async def list_active_by_players_and_product(
+        self, player_ids: list[uuid.UUID], product_id: uuid.UUID
+    ) -> list[License]:
+        wanted = set(player_ids)
+        return [
+            lic
+            for lic in self._store.licenses.values()
+            if lic.player_id in wanted and lic.product_id == product_id and lic.status == LicenseStatus.ACTIVE
+        ]
+
 
 class FakeLicenseEventRepository:
     def __init__(self, session: FakeSession, *, store: LicenseFakeStore) -> None:

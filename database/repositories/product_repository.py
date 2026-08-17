@@ -4,7 +4,7 @@ import uuid
 
 from sqlalchemy import select
 
-from database.models.product import Product
+from database.models.product import Product, ProductType
 from database.repositories.base_repository import BaseRepository
 
 
@@ -30,4 +30,27 @@ class ProductRepository(BaseRepository[Product]):
             stmt = stmt.where(Product.is_active.is_(True))
         stmt = stmt.order_by(Product.position.asc(), Product.name.asc())
         result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def list_dlc(self, *, only_active: bool = False) -> list[Product]:
+        stmt = select(Product).where(Product.deleted_at.is_(None), Product.product_type == ProductType.DLC)
+        if only_active:
+            stmt = stmt.where(Product.is_active.is_(True))
+        stmt = stmt.order_by(Product.position.asc(), Product.name.asc())
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def list_free_dlc_by_guild(self, guild_id: int) -> list[Product]:
+        """DLC gratuita (product_type=DLC, sem preco) cujo cargo obrigatorio
+        vive nesta guild — base do listener de member_update e da
+        reconciliacao periodica (services/dlc_service.py)."""
+        result = await self.session.execute(
+            select(Product).where(
+                Product.deleted_at.is_(None),
+                Product.is_active.is_(True),
+                Product.product_type == ProductType.DLC,
+                Product.required_role_guild_id == guild_id,
+                Product.required_role_id.is_not(None),
+            )
+        )
         return list(result.scalars().all())

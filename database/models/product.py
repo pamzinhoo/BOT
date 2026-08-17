@@ -38,6 +38,18 @@ class Product(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     price_amount: Mapped[int | None] = mapped_column(Integer)  # centavos
     currency: Mapped[str] = mapped_column(String(8), nullable=False, default="BRL")
 
+    # Cargo que libera acesso SEM compra — so usado quando product_type=DLC e
+    # price_amount e None/0 (DLC gratuita). O cargo, nao a License, e a fonte
+    # de verdade de posse nesse caso; a License gerada (purchase_source=
+    # "role_grant") e so a representacao persistida desse estado, mantida em
+    # sincronia por listener de member_update + reconciliacao periodica (ver
+    # services/dlc_service.py). DLC paga NUNCA usa estes campos — o cargo
+    # dela vive em Plan.role_id, junto do restante do pipeline de pagamento.
+    # guild_id fica junto do role_id porque Product e global mas o cargo
+    # pertence a uma guild especifica (normalmente a oficial do jogo).
+    required_role_id: Mapped[int | None] = mapped_column(BigInteger)
+    required_role_guild_id: Mapped[int | None] = mapped_column(BigInteger)
+
     position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
