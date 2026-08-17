@@ -39,6 +39,36 @@ async def _start_bot_with_retry(bot: LimerenceBot, token: str, logger) -> None:
             await asyncio.sleep(wait)
 
 
+def _run_alembic_upgrade_sync() -> None:
+    """Roda `alembic upgrade head` de dentro do processo. Sem isso nada aqui
+    aplicava as migrations novas automaticamente (ex.: ticket_settings,
+    evaluation_settings, indices de performance) — ficavam pendentes ate
+    alguem rodar `alembic upgrade head` manualmente, e features que dependem
+    dessas tabelas/colunas quebravam em runtime com erro de schema. Roda
+    sincrono via asyncio.to_thread porque alembic/env.py usa asyncio.run()
+    internamente e nao pode ser chamado dentro de um loop ja rodando."""
+    from pathlib import Path
+
+    from alembic import command
+    from alembic.config import Config
+
+    repo_root = Path(__file__).resolve().parent
+    cfg = Config(str(repo_root / "alembic.ini"))
+    cfg.set_main_option("script_location", str(repo_root / "alembic"))
+    command.upgrade(cfg, "head")
+
+
+async def _run_alembic_upgrade(logger) -> None:
+    try:
+        await asyncio.to_thread(_run_alembic_upgrade_sync)
+        logger.info("Alembic upgrade head OK.")
+    except Exception:
+        logger.exception(
+            "Falha ao rodar alembic upgrade head — schema pode estar desatualizado, "
+            "verificar manualmente."
+        )
+
+
 async def _run_startup_migrations(database, logger) -> None:
     """Fix pontual, mesmo padrao usado no backend (ver backend/api/main.py):
     adiciona a coluna verified_role_id em guild_settings sem depender de
@@ -72,6 +102,7 @@ async def main() -> None:
         pool_size=settings.db_pool_size,
         max_overflow=settings.db_max_overflow,
     )
+    await _run_alembic_upgrade(logger)
     await _run_startup_migrations(database, logger)
     bot = LimerenceBot(settings=settings, database=database)
 
