@@ -7,6 +7,7 @@ import discord
 
 from database.models.log import LogAction
 from database.models.ticket import Ticket
+from services.evaluation_service import normalize_evaluation_method
 from services.ticket_service import TicketNotFoundError
 from utils.checks import member_can, member_is_staff
 from utils.ticket_lifecycle import schedule_channel_deletion
@@ -203,10 +204,18 @@ class TicketClosedView(SafeView):
             ticket is not None
             and ticket.claimed_by_staff_id is not None
             and (behaviour is None or behaviour.dm_on_close_enabled)
+            and guild is not None
         ):
-            evaluated = await bot.evaluation_service.has_evaluation(ticket.id)
-            if not evaluated:
-                await self._dm_evaluation_fallback(bot, guild, ticket, channel)
+            eval_settings = await bot.config_service.get_evaluation_settings(guild.id)
+            method = normalize_evaluation_method(eval_settings.evaluation_method)
+            # "dm"/"both" ja mandou a DM de avaliacao no fechamento
+            # (ticket_actions_view._send_evaluation_dm) — mandar de novo aqui
+            # duplicaria. Fallback so faz sentido quando metodo era "ticket"
+            # (nenhuma DM saiu antes) e o ticket foi excluido sem avaliacao.
+            if method not in ("dm", "both"):
+                evaluated = await bot.evaluation_service.has_evaluation(ticket.id)
+                if not evaluated:
+                    await self._dm_evaluation_fallback(bot, guild, ticket, channel)
 
         if guild is not None:
             await bot.log_service.record(
