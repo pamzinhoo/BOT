@@ -573,3 +573,77 @@ async def test_shop_refresh_failure_does_not_break_dlc_mutation(dlc_service: Dlc
     )
 
     assert product.price_amount == 1490
+
+
+# --- ordenacao (posicao) -------------------------------------------------
+
+
+async def test_new_free_dlc_gets_last_position(dlc_service: DlcService) -> None:
+    """Sem position explicito, cada nova DLC entra no final da lista — mesmo
+    padrao de PlanService.create_plan (position=len(planos)). Antes desse
+    fix, position sempre virava 0 e a ordenacao caia no fallback alfabetico
+    (Product.position.asc(), Product.name.asc())."""
+    first = await dlc_service.create_free(
+        guild_id=_GUILD_ID, name="Z DLC", slug="pos-z", description=None, required_role_id=1
+    )
+    second = await dlc_service.create_free(
+        guild_id=_GUILD_ID, name="A DLC", slug="pos-a", description=None, required_role_id=2
+    )
+
+    assert first.position == 0
+    assert second.position == 1
+    # nome "A DLC" vem antes alfabeticamente, mas foi criada depois — tem
+    # que continuar por ultimo na listagem (ORDER BY position, name)
+    ordered = await dlc_service.list_dlcs()
+    ordered_slugs = [p.slug for p in ordered if p.slug in ("pos-z", "pos-a")]
+    assert ordered_slugs == ["pos-z", "pos-a"]
+
+
+async def test_new_paid_dlc_gets_last_position(dlc_service: DlcService) -> None:
+    await dlc_service.create_free(
+        guild_id=_GUILD_ID, name="Free", slug="pos-free-1", description=None, required_role_id=1
+    )
+    product, _plan = await dlc_service.create_paid(
+        guild_id=_GUILD_ID, name="Paid", slug="pos-paid-1", description=None,
+        price_amount=1490, role_id=_ROLE_ID,
+    )
+    assert product.position == 1
+
+
+# --- descricao propagada pro Plan de venda (loja) -------------------------
+
+
+async def test_create_paid_dlc_sets_plan_description_for_shop_card(dlc_service: DlcService) -> None:
+    product, plan = await dlc_service.create_paid(
+        guild_id=_GUILD_ID, name="Devil", slug="devil-desc-1", description="Conteúdo extra sombrio",
+        price_amount=1490, role_id=_ROLE_ID,
+    )
+    assert product.description == "Conteúdo extra sombrio"
+    assert plan.description == "Conteúdo extra sombrio"
+
+
+async def test_update_info_syncs_description_to_plan_for_paid_dlc(
+    dlc_service: DlcService, dlc_store: DlcFakeStore
+) -> None:
+    product, plan = await dlc_service.create_paid(
+        guild_id=_GUILD_ID, name="Devil", slug="devil-desc-2", description="Original",
+        price_amount=1490, role_id=_ROLE_ID,
+    )
+
+    await dlc_service.update_info(product.id, description="Descrição nova pra loja")
+
+    stored_plan = dlc_store.plans[plan.id]
+    assert stored_plan.description == "Descrição nova pra loja"
+
+
+async def test_update_info_does_not_touch_plan_for_free_dlc(
+    dlc_service: DlcService, dlc_store: DlcFakeStore
+) -> None:
+    product = await dlc_service.create_free(
+        guild_id=_GUILD_ID, name="Free", slug="free-desc-1", description="Original", required_role_id=1
+    )
+
+    updated = await dlc_service.update_info(product.id, description="Nova descrição")
+
+    assert updated.description == "Nova descrição"
+    assert not any(p.product_id == product.id for p in dlc_store.plans.values())

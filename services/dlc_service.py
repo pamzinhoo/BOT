@@ -107,11 +107,13 @@ class DlcService:
         description: str | None,
         required_role_id: int,
         currency: str = "BRL",
-        position: int = 0,
+        position: int | None = None,
         created_by_staff_id: int | None = None,
         executor: discord.Member | discord.User | None = None,
     ) -> Product:
         await self._ensure_slug_available(slug)
+        if position is None:
+            position = len(await self.list_dlcs())
         async with self._database.session() as session:
             product = await ProductRepository(session).add(
                 Product(
@@ -144,13 +146,15 @@ class DlcService:
         price_amount: int,
         currency: str = "BRL",
         role_id: int,
-        position: int = 0,
+        position: int | None = None,
         created_by_staff_id: int | None = None,
         executor: discord.Member | discord.User | None = None,
     ) -> tuple[Product, Plan]:
         if price_amount <= 0:
             raise DlcError("Preço de DLC paga tem que ser maior que zero.")
         await self._ensure_slug_available(slug)
+        if position is None:
+            position = len(await self.list_dlcs())
         async with self._database.session() as session:
             product = await ProductRepository(session).add(
                 Product(
@@ -169,6 +173,7 @@ class DlcService:
                 Plan(
                     guild_id=guild_id,
                     name=name,
+                    description=description,
                     product_id=product.id,
                     price_one_time=price_amount,
                     currency=currency,
@@ -206,6 +211,22 @@ class DlcService:
         product = await self._products.update(product_id, **fields)
         if product is None:
             raise DlcError("DLC não encontrada.")
+
+        # DLC paga: nome/descricao tambem aparecem no card da loja
+        # (views/shop_view.py le plan.name/plan.description, nao
+        # product.name/product.description) — mantem os dois em sincronia.
+        plan = await self.get_purchase_plan(product_id)
+        if plan is not None and fields:
+            async with self._database.session() as session:
+                plan_row = await PlanRepository(session).get_by_id(plan.id)
+                if plan_row is not None:
+                    if "name" in fields:
+                        plan_row.name = fields["name"]
+                    if "description" in fields:
+                        plan_row.description = fields["description"]
+                    await session.flush()
+            await self._refresh_shop(plan.guild_id)
+
         await self._audit_product(product, action="DLC editada", executor=executor, details=fields)
         return product
 
