@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import discord
+import pytest
 
-from database.models.partnership_settings import PartnershipRoleRemovedAction
+from database.models.partnership_settings import PartnershipRoleRemovedAction, PartnershipSettings
 from services.partnership_service import (
     PartnershipService,
     member_has_partnership_role,
@@ -540,3 +542,76 @@ def test_build_overwrites_inherits_category_permissions() -> None:
     assert overwrites[other_role] is category_overwrite
     assert overwrites[other_role].manage_messages is True
     assert overwrites[guild.default_role].view_channel is True
+
+
+# --- cache de get_settings ------------------------------------------------
+
+
+class _FakeSession:
+    async def flush(self) -> None:
+        pass
+
+    async def refresh(self, entity: object) -> None:
+        pass
+
+
+class _FakeDatabase:
+    @asynccontextmanager
+    async def session(self):
+        yield _FakeSession()
+
+
+class _CountingPartnershipSettingsRepository:
+    calls = 0
+    store: dict[int, PartnershipSettings] = {}
+
+    def __init__(self, session: object) -> None:
+        pass
+
+    async def get_or_create(self, guild_id: int) -> PartnershipSettings:
+        type(self).calls += 1
+        if guild_id not in self.store:
+            settings = PartnershipSettings(guild_id=guild_id)
+            settings.id = guild_id
+            self.store[guild_id] = settings
+        return self.store[guild_id]
+
+
+@pytest.fixture
+def counting_repo(monkeypatch) -> type[_CountingPartnershipSettingsRepository]:
+    _CountingPartnershipSettingsRepository.calls = 0
+    _CountingPartnershipSettingsRepository.store = {}
+    monkeypatch.setattr(
+        "services.partnership_service.PartnershipSettingsRepository",
+        _CountingPartnershipSettingsRepository,
+    )
+    return _CountingPartnershipSettingsRepository
+
+
+async def test_get_settings_hits_repository_once_then_caches(counting_repo) -> None:
+    service = PartnershipService(_FakeDatabase(), bot=MagicMock())
+
+    await service.get_settings(1)
+    await service.get_settings(1)
+    await service.get_settings(1)
+
+    assert counting_repo.calls == 1
+
+
+async def test_get_settings_cache_is_scoped_per_guild(counting_repo) -> None:
+    service = PartnershipService(_FakeDatabase(), bot=MagicMock())
+
+    await service.get_settings(1)
+    await service.get_settings(2)
+
+    assert counting_repo.calls == 2
+
+
+async def test_update_settings_invalidates_cache(counting_repo) -> None:
+    service = PartnershipService(_FakeDatabase(), bot=MagicMock())
+
+    await service.get_settings(1)
+    await service.update_settings(1, enabled=False)
+    await service.get_settings(1)
+
+    assert counting_repo.calls == 3

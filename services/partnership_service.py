@@ -14,9 +14,15 @@ from database.models.partnership import Partnership
 from database.models.partnership_settings import PartnershipRoleRemovedAction, PartnershipSettings
 from database.repositories.partnership_repository import PartnershipRepository
 from database.repositories.partnership_settings_repository import PartnershipSettingsRepository
+from utils.ttl_cache import TTLCache
 
 if TYPE_CHECKING:
     from core.bot import LimerenceBot
+
+# mesmo padrao/janela ja usado em ConfigService/AutoModService/AuditLogService/
+# BoosterService — get_settings e chamado por membro divergente dentro do
+# reconcile_guild (cron), evita rebuscar do zero pra cada um.
+_SETTINGS_TTL_SECONDS = 300.0
 
 logger = get_logger("partnership_service")
 
@@ -86,12 +92,18 @@ class PartnershipService:
     def __init__(self, database: Database, bot: LimerenceBot) -> None:
         self._database = database
         self._bot = bot
+        self._settings_cache: TTLCache[int, PartnershipSettings] = TTLCache(_SETTINGS_TTL_SECONDS)
 
     # --- configuracao -----------------------------------------------------
 
     async def get_settings(self, guild_id: int) -> PartnershipSettings:
+        cached = self._settings_cache.get(guild_id)
+        if cached is not None:
+            return cached
         async with self._database.session() as session:
-            return await PartnershipSettingsRepository(session).get_or_create(guild_id)
+            settings = await PartnershipSettingsRepository(session).get_or_create(guild_id)
+        self._settings_cache.set(guild_id, settings)
+        return settings
 
     async def update_settings(self, guild_id: int, **fields: object) -> PartnershipSettings:
         async with self._database.session() as session:
@@ -101,6 +113,7 @@ class PartnershipService:
                 setattr(settings, key, value)
             await session.flush()
             await session.refresh(settings)
+        self._settings_cache.invalidate(guild_id)
         return settings
 
     async def get_partner_role_ids(self, guild_id: int) -> tuple[int | None, int | None]:

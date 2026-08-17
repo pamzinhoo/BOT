@@ -11,11 +11,17 @@ from database.models.booster import Booster
 from database.models.booster_settings import BoosterSettings
 from database.repositories.booster_repository import BoosterRepository
 from database.repositories.booster_settings_repository import BoosterSettingsRepository
+from utils.ttl_cache import TTLCache
 
 if TYPE_CHECKING:
     from core.bot import LimerenceBot
 
 logger = get_logger("booster_service")
+
+# mesmo padrao/janela ja usado em ConfigService/AutoModService/AuditLogService
+# — settings mudam so quando staff edita via /config, reconcile_guild (cron
+# 1h) senao rebuscava do zero por membro divergente.
+_SETTINGS_TTL_SECONDS = 300.0
 
 DEFAULT_DM_MESSAGE = (
     "💜 Obrigado por impulsionar {server_name}!\n\n"
@@ -50,12 +56,18 @@ class BoosterService:
     def __init__(self, database: Database, bot: LimerenceBot) -> None:
         self._database = database
         self._bot = bot
+        self._settings_cache: TTLCache[int, BoosterSettings] = TTLCache(_SETTINGS_TTL_SECONDS)
 
     # --- configuracao ---------------------------------------------------
 
     async def get_settings(self, guild_id: int) -> BoosterSettings:
+        cached = self._settings_cache.get(guild_id)
+        if cached is not None:
+            return cached
         async with self._database.session() as session:
-            return await BoosterSettingsRepository(session).get_or_create(guild_id)
+            settings = await BoosterSettingsRepository(session).get_or_create(guild_id)
+        self._settings_cache.set(guild_id, settings)
+        return settings
 
     async def update_settings(self, guild_id: int, **fields: object) -> BoosterSettings:
         async with self._database.session() as session:
@@ -65,6 +77,7 @@ class BoosterService:
                 setattr(settings, key, value)
             await session.flush()
             await session.refresh(settings)
+        self._settings_cache.invalidate(guild_id)
         return settings
 
     # --- historico (base pro futuro Hall dos Boosters/ranking) -----------------

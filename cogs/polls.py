@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import uuid
 from datetime import UTC, datetime
 from typing import Any
@@ -11,7 +12,7 @@ from discord.ext import commands, tasks
 from core.bot import LimerenceBot
 from core.logger import get_logger
 from database.models.audit_log import AuditLogCategory
-from database.models.poll import PollOption, PollStatus
+from database.models.poll import Poll, PollOption, PollStatus
 from services.poll_service import AlreadyVotedError, EnqueteDisabledError, InvalidOptionsError
 from utils.checks import is_admin
 from utils.constants import EMBED_COLOR_DEFAULT
@@ -26,25 +27,36 @@ _CHECK_INTERVAL_MINUTES = 5
 _BUTTONS_PER_ROW = 5
 
 
-async def _refresh_poll_message(bot: LimerenceBot, poll_id: uuid.UUID) -> None:
+async def _refresh_poll_message(bot: LimerenceBot, poll_id: uuid.UUID, *, poll: Poll | None = None) -> None:
     """Reconstroi embed+view da enquete e edita a mensagem ja publicada —
     chamado a cada voto/remocao de voto pra manter percentuais/barras ao
     vivo, igual o exemplo de referencia. Falha (mensagem apagada, canal
-    sumiu) e so logada — nunca derruba o voto que ja foi registrado."""
-    poll = await bot.poll_service.get_poll(poll_id)
+    sumiu) e so logada — nunca derruba o voto que ja foi registrado.
+
+    `poll` opcional evita reconsultar o banco quando o chamador (botao de
+    voto/remocao) ja tem o registro em mãos. As 3 consultas de dados
+    (opcoes/totais/participantes) e a busca da mensagem no Discord sao
+    independentes entre si — rodam em paralelo (asyncio.gather) em vez de
+    sequenciais, o que soma bastante numa hospedagem/banco de plano
+    gratuito onde cada ida à rede tem latência maior."""
+    if poll is None:
+        poll = await bot.poll_service.get_poll(poll_id)
     if poll is None or poll.message_id is None:
         return
     channel = bot.get_channel(poll.channel_id)
     if not isinstance(channel, discord.abc.Messageable):
         return
+
     try:
-        message = await channel.fetch_message(poll.message_id)
+        message, options, totals, participants = await asyncio.gather(
+            channel.fetch_message(poll.message_id),
+            bot.poll_service.list_options(poll.id),
+            bot.poll_service.weighted_totals(poll.id),
+            bot.poll_service.count_participants(poll.id),
+        )
     except discord.HTTPException:
         return
 
-    options = await bot.poll_service.list_options(poll.id)
-    totals = await bot.poll_service.weighted_totals(poll.id)
-    participants = await bot.poll_service.count_participants(poll.id)
     embed = poll_live_embed(poll, options, totals, participants)
     view = PollVoteView(poll.id, options, totals) if poll.status == PollStatus.OPEN else None
     try:
@@ -120,7 +132,7 @@ class PollVoteButton(
             await interaction.followup.send(str(exc), ephemeral=True)
             return
 
-        await _refresh_poll_message(bot, poll.id)
+        await _refresh_poll_message(bot, poll.id, poll=poll)
         await interaction.followup.send(
             f"✅ Voto registrado com peso **{vote.weight}**.", ephemeral=True
         )
@@ -167,7 +179,7 @@ class PollRemoveVoteButton(
             await interaction.followup.send("Você não tinha votado nessa enquete.", ephemeral=True)
             return
 
-        await _refresh_poll_message(bot, poll.id)
+        await _refresh_poll_message(bot, poll.id, poll=poll)
         await interaction.followup.send("🗑️ Voto removido.", ephemeral=True)
 
 
@@ -367,9 +379,11 @@ class PollsCog(commands.Cog):
         await self.bot.wait_until_ready()
 
     async def _close_and_announce(self, poll_id: uuid.UUID) -> None:
-        options = await self.bot.poll_service.list_options(poll_id)
-        totals = await self.bot.poll_service.weighted_totals(poll_id)
-        participants = await self.bot.poll_service.count_participants(poll_id)
+        options, totals, participants = await asyncio.gather(
+            self.bot.poll_service.list_options(poll_id),
+            self.bot.poll_service.weighted_totals(poll_id),
+            self.bot.poll_service.count_participants(poll_id),
+        )
         closed = await self.bot.poll_service.close_poll(poll_id)
         if closed is None:
             return

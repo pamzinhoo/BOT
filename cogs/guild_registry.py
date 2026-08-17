@@ -16,9 +16,19 @@ class GuildRegistryCog(commands.Cog):
 
     def __init__(self, bot: LimerenceBot) -> None:
         self.bot = bot
+        # on_ready do discord.py dispara a cada RESUME/reconexao do gateway,
+        # nao so no boot frio — sem essa guarda, rede instavel faz o bot
+        # reprocessar (ensure_guild = 1-2 round-trips) TODAS as guilds a
+        # cada reconexao. So precisa rodar uma vez por processo: cobre
+        # guilds que o bot ja estava mas nunca tinham sido registradas;
+        # entrada/saida depois disso ja e tratada por on_guild_join/remove.
+        self._synced_once = False
 
     @commands.Cog.listener()
     async def on_ready(self) -> None:
+        if self._synced_once:
+            return
+        self._synced_once = True
         for guild in self.bot.guilds:
             try:
                 await self.bot.guild_service.ensure_guild(guild)
