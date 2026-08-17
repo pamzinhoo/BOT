@@ -472,3 +472,104 @@ async def test_start_purchase_fails_for_inactive_dlc(dlc_service: DlcService) ->
 
     with pytest.raises(DlcError):
         await dlc_service.start_purchase(product.id, 42)
+
+
+# --- painel da loja (refresh apos mutar DLC paga) ---------------------
+
+
+def _bot_with_shop() -> MagicMock:
+    bot = MagicMock()
+    bot.painel_service.refresh_shop_panel = AsyncMock()
+    return bot
+
+
+async def test_create_paid_dlc_refreshes_shop_panel(dlc_service: DlcService) -> None:
+    bot = _bot_with_shop()
+    dlc_service._bot = bot
+
+    await dlc_service.create_paid(
+        guild_id=_GUILD_ID, name="Devil", slug="devil-shop-1", description=None,
+        price_amount=1490, role_id=_ROLE_ID,
+    )
+
+    bot.painel_service.refresh_shop_panel.assert_awaited_once_with(_GUILD_ID)
+
+
+async def test_update_price_refreshes_shop_panel(dlc_service: DlcService) -> None:
+    product, _plan = await dlc_service.create_paid(
+        guild_id=_GUILD_ID, name="Devil", slug="devil-shop-2", description=None,
+        price_amount=1490, role_id=_ROLE_ID,
+    )
+    bot = _bot_with_shop()
+    dlc_service._bot = bot
+
+    await dlc_service.update_price(product.id, price_amount=2990)
+
+    bot.painel_service.refresh_shop_panel.assert_awaited_once_with(_GUILD_ID)
+
+
+async def test_update_role_refreshes_shop_panel_for_paid_dlc(dlc_service: DlcService) -> None:
+    product, _plan = await dlc_service.create_paid(
+        guild_id=_GUILD_ID, name="Devil", slug="devil-shop-3", description=None,
+        price_amount=1490, role_id=_ROLE_ID,
+    )
+    bot = _bot_with_shop()
+    dlc_service._bot = bot
+
+    await dlc_service.update_role(product.id, role_id=999, guild_id=_GUILD_ID)
+
+    bot.painel_service.refresh_shop_panel.assert_awaited_once_with(_GUILD_ID)
+
+
+async def test_update_role_does_not_touch_shop_panel_for_free_dlc(dlc_service: DlcService) -> None:
+    product = await dlc_service.create_free(
+        guild_id=_GUILD_ID, name="Free", slug="free-shop-1", description=None, required_role_id=1
+    )
+    bot = _bot_with_shop()
+    dlc_service._bot = bot
+
+    await dlc_service.update_role(product.id, role_id=999, guild_id=_GUILD_ID)
+
+    bot.painel_service.refresh_shop_panel.assert_not_awaited()
+
+
+async def test_toggle_active_refreshes_shop_panel_for_paid_dlc(dlc_service: DlcService) -> None:
+    product, _plan = await dlc_service.create_paid(
+        guild_id=_GUILD_ID, name="Devil", slug="devil-shop-4", description=None,
+        price_amount=1490, role_id=_ROLE_ID,
+    )
+    bot = _bot_with_shop()
+    dlc_service._bot = bot
+
+    await dlc_service.toggle_active(product.id, is_active=False)
+
+    bot.painel_service.refresh_shop_panel.assert_awaited_once_with(_GUILD_ID)
+
+
+async def test_disable_refreshes_shop_panel_for_paid_dlc(dlc_service: DlcService) -> None:
+    product, _plan = await dlc_service.create_paid(
+        guild_id=_GUILD_ID, name="Devil", slug="devil-shop-5", description=None,
+        price_amount=1490, role_id=_ROLE_ID,
+    )
+    bot = _bot_with_shop()
+    dlc_service._bot = bot
+
+    await dlc_service.disable(product.id)
+
+    bot.painel_service.refresh_shop_panel.assert_awaited_once_with(_GUILD_ID)
+
+
+async def test_shop_refresh_failure_does_not_break_dlc_mutation(dlc_service: DlcService) -> None:
+    """Acoplamento opcional/best-effort: se o painel falhar ao atualizar
+    (canal apagado, mensagem sumiu, etc.), a mutacao da DLC em si tem que
+    continuar valendo — nunca falha a operacao principal por causa disso."""
+    bot = _bot_with_shop()
+    bot.painel_service.refresh_shop_panel = AsyncMock(side_effect=RuntimeError("canal sumiu"))
+    dlc_service._bot = bot
+
+    product, _plan = await dlc_service.create_paid(
+        guild_id=_GUILD_ID, name="Devil", slug="devil-shop-6", description=None,
+        price_amount=1490, role_id=_ROLE_ID,
+    )
+
+    assert product.price_amount == 1490

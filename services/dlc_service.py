@@ -180,6 +180,7 @@ class DlcService:
             guild_id, action="DLC criada (paga)", executor=executor,
             details={"dlc": name, "slug": slug, "preco_centavos": price_amount, "role_id": role_id},
         )
+        await self._refresh_shop(guild_id)
         return product, plan
 
     async def _ensure_slug_available(self, slug: str) -> None:
@@ -235,6 +236,7 @@ class DlcService:
             product_row, action="Preço de DLC alterado", executor=executor,
             details={"novo_preco_centavos": price_amount},
         )
+        await self._refresh_shop(plan.guild_id)
         return product_row
 
     async def update_role(
@@ -258,6 +260,7 @@ class DlcService:
                 plan_row.role_id = role_id
                 await session.flush()
             updated = product
+            await self._refresh_shop(plan.guild_id)
         else:
             # DLC gratuita: cargo vive no proprio Product
             updated = await self._products.update(
@@ -285,16 +288,20 @@ class DlcService:
         product = await self._products.update(product_id, is_active=is_active)
         if product is None:
             raise DlcError("DLC não encontrada.")
+        guild_ids: set[int] = set()
         async with self._database.session() as session:
             plan_repo = PlanRepository(session)
             for plan in await plan_repo.list_by_product(product_id):
                 plan_row = await plan_repo.get_by_id(plan.id)
                 if plan_row is not None:
                     plan_row.is_active = is_active
+                    guild_ids.add(plan_row.guild_id)
             await session.flush()
         await self._audit_product(
             product, action="DLC ativada" if is_active else "DLC desativada", executor=executor
         )
+        for guild_id in guild_ids:
+            await self._refresh_shop(guild_id)
         return product
 
     async def disable(
@@ -305,14 +312,18 @@ class DlcService:
         product = await self._products.soft_delete(product_id)
         if product is None:
             return None
+        guild_ids: set[int] = set()
         async with self._database.session() as session:
             plan_repo = PlanRepository(session)
             for plan in await plan_repo.list_by_product(product_id):
                 plan_row = await plan_repo.get_by_id(plan.id)
                 if plan_row is not None:
                     plan_row.is_active = False
+                    guild_ids.add(plan_row.guild_id)
             await session.flush()
         await self._audit_product(product, action="DLC excluída do catálogo", executor=executor)
+        for guild_id in guild_ids:
+            await self._refresh_shop(guild_id)
         return product
 
     # --- DLC gratuita: cargo -> License ------------------------------------
@@ -471,6 +482,24 @@ class DlcService:
         return await self._bot.subscription_service.start_purchase(
             member, plan, BillingCycle.ONE_TIME, payer_information=payer_information
         )
+
+    # --- painel da loja (Discord) ------------------------------------------
+
+    async def _refresh_shop(self, guild_id: int) -> None:
+        """DLC paga e vendida atraves de um Plan comum — o mesmo painel fixo
+        da loja (views/shop_view.py, PainelService) que ja lista Planos de
+        assinatura tambem lista Plan(billing_cycle=ONE_TIME) de DLC sem
+        nenhuma mudanca de UI. So precisa ser avisado quando o Plan muda,
+        igual PlanEditView ja faz pra planos comuns — sem isso o painel ja
+        postado no canal fica desatualizado ate alguem reposta manualmente.
+        Acoplamento opcional (sem bot montado, ex. testes, e no-op) e nunca
+        derruba a operacao principal se falhar."""
+        if self._bot is None:
+            return
+        try:
+            await self._bot.painel_service.refresh_shop_panel(guild_id)
+        except Exception:
+            logger.exception("Falha ao atualizar painel da loja (guild %s) após mudança de DLC.", guild_id)
 
     # --- auditoria -----------------------------------------------------
 
