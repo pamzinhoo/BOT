@@ -8,6 +8,7 @@ from __future__ import annotations
 import uuid
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 
 from database.models.plan import Plan
 from database.models.player import Player
@@ -98,6 +99,8 @@ class FakePlanRepository:
 
     async def add(self, entity: Plan) -> Plan:
         _new_id(entity)
+        if entity.created_at is None:
+            entity.created_at = datetime.now(UTC)
         self._store.plans[entity.id] = entity
         return entity
 
@@ -105,7 +108,11 @@ class FakePlanRepository:
         return self._store.plans.get(id_)
 
     async def list_by_product(self, product_id: uuid.UUID) -> list[Plan]:
-        return [p for p in self._store.plans.values() if p.product_id == product_id]
+        """Espelha o `ORDER BY created_at ASC` de PlanRepository.list_by_product
+        real — mesmo contrato de determinismo que DlcService.get_purchase_plan
+        depende (ver database/repositories/plan_repository.py)."""
+        items = [p for p in self._store.plans.values() if p.product_id == product_id]
+        return sorted(items, key=lambda p: p.created_at)
 
     async def list_by_guild(self, guild_id: int, *, only_active: bool = False) -> list[Plan]:
         items = [p for p in self._store.plans.values() if p.guild_id == guild_id]

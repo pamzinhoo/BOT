@@ -36,9 +36,19 @@ class PlanRepository(BaseRepository[Plan]):
         precisam encontrar, pra um Product, TODOS os planos de TODAS as
         guilds que concedem cargo por ele, pra refletir License->cargo em
         cada servidor. Nao serve pra UI (nao lista dado de uma guild pra
-        outra), so pra sincronizacao interna backend->Discord."""
+        outra), so pra sincronizacao interna backend->Discord.
+
+        `ORDER BY created_at ASC` torna deterministico qual Plan
+        DlcService.get_purchase_plan() escolhe quando mais de um Plan ativo
+        vincula o mesmo Product (cenario hoje so alcancavel manualmente no
+        banco, nao via nenhuma UI) — sem isso a escolha dependia da ordem de
+        retorno do Postgres, que nao e garantida. Nao muda comportamento de
+        RoleSyncService/ReconciliationService, que iteram TODOS os planos
+        sem se importar com ordem."""
         result = await self.session.execute(
-            select(Plan).where(Plan.product_id == product_id, Plan.role_id.is_not(None))
+            select(Plan)
+            .where(Plan.product_id == product_id, Plan.role_id.is_not(None))
+            .order_by(Plan.created_at.asc())
         )
         return list(result.scalars().all())
 

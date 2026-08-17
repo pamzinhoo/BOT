@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 import discord
 import pytest
 
+from database.models.plan import Plan
 from database.models.product import ProductType
 from services.dlc_service import DlcError, DlcService
 from services.license_service import LicenseService
@@ -87,6 +88,40 @@ async def test_create_dlc_rejects_duplicate_slug(dlc_service: DlcService) -> Non
     await dlc_service.create_free(guild_id=_GUILD_ID, name="A", slug="dup", description=None, required_role_id=1)
     with pytest.raises(DlcError):
         await dlc_service.create_free(guild_id=_GUILD_ID, name="B", slug="dup", description=None, required_role_id=2)
+
+
+async def test_get_purchase_plan_is_deterministic_when_multiple_plans_exist(
+    dlc_service: DlcService, dlc_store: DlcFakeStore
+) -> None:
+    """Divida tecnica conhecida (Problema 1 da auditoria): hoje nenhuma UI
+    cria 2 Plans pro mesmo Product (create_paid sempre cria um par novo), mas
+    o repositorio tem que continuar deterministico mesmo se isso acontecer
+    manualmente no banco — ORDER BY created_at ASC (mesmo padrao replicado
+    em tests/_fakes_dlc.py) garante que a MESMA escolha se repete sempre,
+    em vez de depender de ordem de retorno nao garantida do Postgres."""
+    product, plan_a = await dlc_service.create_paid(
+        guild_id=_GUILD_ID, name="Devil", slug="devil-determinism", description=None,
+        price_amount=1490, role_id=_ROLE_ID,
+    )
+    # segundo Plan pro MESMO product — cenario so alcancavel manualmente hoje
+    # (nao ha UI/service que crie isso), criado DEPOIS de plan_a de proposito
+    # pra provar que get_purchase_plan nao pega "o ultimo inserido" por acaso.
+    plan_b = Plan(
+        guild_id=_GUILD_ID, name="Devil (outra guild vitrine)", product_id=product.id,
+        price_one_time=2990, currency="BRL", role_id=999, is_active=True,
+    )
+    import services.dlc_service as dlc_service_module
+
+    async with dlc_service._database.session() as session:
+        await dlc_service_module.PlanRepository(session).add(plan_b)
+    assert plan_b.id in dlc_store.plans  # confirma que o cenario de 2 Plans foi criado
+
+    resolved_first = await dlc_service.get_purchase_plan(product.id)
+    resolved_second = await dlc_service.get_purchase_plan(product.id)
+    resolved_third = await dlc_service.get_purchase_plan(product.id)
+
+    assert resolved_first is not None
+    assert resolved_first.id == plan_a.id == resolved_second.id == resolved_third.id
 
 
 # --- edicao ------------------------------------------------------------
