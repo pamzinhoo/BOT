@@ -65,6 +65,19 @@ async def receive_player_verified(request: Request, body: PlayerVerifiedRequest)
     await bot.role_sync_service.handle_player_verified(body.discord_id)
 
 
+@router.get("/verification-status/{discord_id}")
+async def get_verification_status(discord_id: int, request: Request) -> dict[str, bool]:
+    """Consulta AO VIVO (nao best-effort, o chamador espera resposta) se
+    `discord_id` tem agora o cargo de verificado em alguma guild
+    configurada. Usado pelo backend (GET /player/verified) pra responder o
+    jogo em tempo real, sem depender de estado cacheado que poderia ficar
+    desatualizado se o jogador remover o cargo manualmente — ver docstring
+    completa em RoleSyncService.is_currently_verified."""
+    bot: LimerenceBot = request.app.state.bot
+    is_verified = await bot.role_sync_service.is_currently_verified(discord_id)
+    return {"verified": is_verified}
+
+
 @router.post("/reconcile", response_model=ReconciliationReportResponse)
 async def trigger_reconciliation(request: Request) -> ReconciliationReportResponse:
     """Reconciliacao sob demanda (alem do ciclo periodico do

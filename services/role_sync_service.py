@@ -65,7 +65,13 @@ class RoleSyncService:
         Cargos). Se o membro ainda nao estiver na guild, simplesmente nao
         concede nada agora — nao ha reconciliacao periodica pra isso (ao
         contrario de licenca), entao so funciona se o dono do Discord ja
-        tiver entrado no servidor antes ou depois de logar."""
+        tiver entrado no servidor antes ou depois de logar.
+
+        IMPORTANTE: este metodo so CONCEDE, nunca revoga. A checagem de "esse
+        cargo ainda esta ativo" e' feita ao vivo por `is_currently_verified`
+        (ver backend GET /player/verified), nao por reconciliacao — de
+        proposito, porque License nao e' a fonte de verdade pra este cargo
+        especifico (ver docstring de is_currently_verified)."""
         async with self._database.session() as session:
             guild_settings_list = await GuildSettingsRepository(session).list_with_verified_role()
 
@@ -94,6 +100,48 @@ class RoleSyncService:
                     guild_settings.guild_id,
                     discord_id,
                 )
+
+    async def is_currently_verified(self, discord_id: int) -> bool:
+        """Checagem AO VIVO (sem cache, sem banco intermediario) se
+        `discord_id` tem, agora mesmo, o cargo de verificado em QUALQUER
+        guild configurada. Chamada por
+        backend/providers/internal_events_client.py::check_player_verified,
+        que o backend expoe como GET /player/verified pro jogo consultar.
+
+        Por que nao usar License/reconciliacao aqui (ao contrario do resto
+        deste arquivo): "Verificado" nunca foi vendido/concedido como
+        entitlement — e' so uma confirmacao de "esta pessoa logou com
+        Discord e tem esse cargo". Se modelassemos como License permanente,
+        a reconciliacao (fonte de verdade = License) devolveria o cargo
+        sozinha sempre que alguem o removesse manualmente — exatamente o
+        oposto do que faz sentido aqui. Por isso a fonte de verdade pra este
+        caso especifico e' o proprio Discord, consultado na hora, sem
+        estado intermediario pra ficar dessincronizado.
+
+        Retorna False (nao True) se: a guild nao estiver em cache do bot, o
+        cargo nao existir mais, ou o membro nao for encontrado — fail-closed,
+        igual ao restante do sistema de autorizacao deste projeto."""
+        async with self._database.session() as session:
+            guild_settings_list = await GuildSettingsRepository(session).list_with_verified_role()
+
+        for guild_settings in guild_settings_list:
+            guild = self._bot.get_guild(guild_settings.guild_id)
+            if guild is None or guild_settings.verified_role_id is None:
+                continue
+            role = guild.get_role(guild_settings.verified_role_id)
+            if role is None:
+                continue
+            member = guild.get_member(discord_id)  # so cache local, de proposito:
+            # esta rota pode ser chamada com frequencia pelo jogo (toda vez
+            # que a tela de selecao de genero abre) — um fetch_member (chamada
+            # de API) por consulta escalaria mal e esbarraria em rate limit
+            # do Discord. O cache de membros do discord.py e' atualizado em
+            # tempo real por eventos de gateway (on_member_update ja mantem
+            # isso quente), entao `get_member` aqui reflete remocao de cargo
+            # em questao de segundos, nao precisa de fetch sincrono.
+            if member is not None and role in member.roles:
+                return True
+        return False
 
     # --- Discord ----------------------------------------------------------
 
