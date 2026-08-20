@@ -31,8 +31,13 @@ class ClaimService:
                 raise ClaimError("Ticket nao encontrado para este canal.")
             if ticket.status not in (TicketStatus.OPEN, TicketStatus.CLAIMED):
                 raise ClaimError("Este ticket nao pode ser reivindicado no status atual.")
-            if ticket.claimed_by_staff_id is not None and ticket.claimed_by_staff_id != staff_id:
-                raise ClaimError("Este ticket ja esta em atendimento por outro membro da staff.")
+            if ticket.claimed_by_staff_id is not None:
+                if ticket.claimed_by_staff_id != staff_id:
+                    raise ClaimError("Este ticket ja esta em atendimento por outro membro da staff.")
+                # mesmo staff clicando "Assumir" de novo (duplo-clique/spam) —
+                # sem isso, cada clique extra criava outro Claim, outro log e
+                # outra mensagem publica "assumiu este ticket" no canal.
+                raise ClaimError("Voce ja esta atendendo este ticket.")
 
             claim_repo = ClaimRepository(session)
             first_claim = not await claim_repo.has_prior_claim(ticket.id, staff_id)

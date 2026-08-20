@@ -165,7 +165,12 @@ class LimerenceBot(commands.Bot):
             )
 
     async def _register_persistent_views(self) -> None:
-        from cogs.giveaways import GiveawayCloseButton, GiveawayEnterButton, GiveawayRerollButton
+        from cogs.giveaways import (
+            GiveawayCloseButton,
+            GiveawayEnterButton,
+            GiveawayLeaveButton,
+            GiveawayRerollButton,
+        )
         from cogs.polls import PollVoteButton
         from views.appeal_view import AppealAcceptButton, AppealButton, AppealDenyButton
         from views.dm_evaluation_view import DMRatingButton
@@ -199,7 +204,9 @@ class LimerenceBot(commands.Bot):
             AnalisesNavButton, AnalisesSelect, AnalisesAcceptButton, AnalisesDenyButton, AnalisesBackButton
         )
         self.add_dynamic_items(PollVoteButton)
-        self.add_dynamic_items(GiveawayEnterButton, GiveawayCloseButton, GiveawayRerollButton)
+        self.add_dynamic_items(
+            GiveawayEnterButton, GiveawayLeaveButton, GiveawayCloseButton, GiveawayRerollButton
+        )
         # avaliacao de ticket por DM (metodo "dm"/"both" em EvaluationSettings,
         # ou fallback quando o canal do ticket ja foi excluido) — custom_id
         # carrega ticket_id+nota, tem que sobreviver a qualquer restart.

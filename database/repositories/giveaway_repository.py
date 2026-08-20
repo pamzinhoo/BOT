@@ -52,6 +52,14 @@ class GiveawayEntryRepository(BaseRepository[GiveawayEntry]):
         )
         return list(result.scalars().all())
 
+    async def delete_by_giveaway_and_user(self, giveaway_id: uuid.UUID, user_id: int) -> bool:
+        entry = await self.get_by_giveaway_and_user(giveaway_id, user_id)
+        if entry is None:
+            return False
+        await self.session.delete(entry)
+        await self.session.flush()
+        return True
+
     async def count_by_giveaway(self, giveaway_id: uuid.UUID) -> int:
         result = await self.session.execute(
             select(func.count()).select_from(GiveawayEntry).where(GiveawayEntry.giveaway_id == giveaway_id)

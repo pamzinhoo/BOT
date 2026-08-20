@@ -12,8 +12,9 @@ from core.bot import LimerenceBot
 from core.logger import get_logger
 from database.models.audit_log import AuditLogCategory
 from database.models.giveaway import Giveaway
-from services.giveaway_service import AlreadyEnteredError
+from services.giveaway_service import AlreadyEnteredError, NotEnteredError
 from utils.checks import member_is_staff
+from utils.debounce import try_acquire
 from views.embeds import giveaway_panel_embed, giveaway_result_embed
 
 logger = get_logger("giveaways")
@@ -42,42 +43,113 @@ class GiveawayEnterButton(
         return cls(uuid.UUID(match["giveaway_id"]))
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         member = interaction.user
         if not isinstance(member, discord.Member):
             return
 
-        # Defere de imediato: get_giveaway/can_enter/enter sao chamadas ao
-        # banco que podem passar dos 3s de prazo do Discord antes da 1a
-        # resposta, num botao publico de participacao.
-        await interaction.response.defer()
+        # Trava contra duplo-clique/spam no botao: enquanto o 1o clique deste
+        # usuario neste sorteio ainda esta em voo, cliques extras nem tocam
+        # banco nem editam a mensagem de novo.
+        with try_acquire(("giveaway:enter", self.giveaway_id, member.id)) as acquired:
+            if not acquired:
+                await interaction.response.send_message(
+                    "⏳ Seu clique anterior ainda está sendo processado, aguarde.", ephemeral=True
+                )
+                return
 
-        giveaway = await bot.giveaway_service.get_giveaway(self.giveaway_id)
-        if giveaway is None or giveaway.guild_id != interaction.guild_id:
-            await interaction.followup.send("Sorteio não encontrado.", ephemeral=True)
-            return
+            bot: LimerenceBot = interaction.client  # type: ignore[assignment]
 
-        can_enter, reason = await bot.giveaway_service.can_enter(giveaway, member)
-        if not can_enter:
-            await interaction.followup.send(
-                reason or "Você não pode participar desse sorteio.", ephemeral=True
-            )
-            return
+            # Defere de imediato: get_giveaway/can_enter/enter sao chamadas ao
+            # banco que podem passar dos 3s de prazo do Discord antes da 1a
+            # resposta, num botao publico de participacao.
+            await interaction.response.defer()
 
-        try:
-            await bot.giveaway_service.enter(giveaway, member)
-        except AlreadyEnteredError as exc:
-            await interaction.followup.send(str(exc), ephemeral=True)
-            return
+            giveaway = await bot.giveaway_service.get_giveaway(self.giveaway_id)
+            if giveaway is None or giveaway.guild_id != interaction.guild_id:
+                await interaction.followup.send("Sorteio não encontrado.", ephemeral=True)
+                return
 
-        await interaction.followup.send("✅ Você está participando do sorteio!", ephemeral=True)
+            can_enter, reason = await bot.giveaway_service.can_enter(giveaway, member)
+            if not can_enter:
+                await interaction.followup.send(
+                    reason or "Você não pode participar desse sorteio.", ephemeral=True
+                )
+                return
 
-        count = await bot.giveaway_service.count_entries(giveaway.id)
-        if interaction.message is not None:
             try:
-                await interaction.message.edit(embed=giveaway_panel_embed(giveaway, count))
-            except discord.HTTPException:
-                logger.warning("Falha ao atualizar contagem de participantes do sorteio %s.", giveaway.id)
+                await bot.giveaway_service.enter(giveaway, member)
+            except AlreadyEnteredError as exc:
+                await interaction.followup.send(str(exc), ephemeral=True)
+                return
+
+            await interaction.followup.send("✅ Você está participando do sorteio!", ephemeral=True)
+
+            count = await bot.giveaway_service.count_entries(giveaway.id)
+            if interaction.message is not None:
+                try:
+                    await interaction.message.edit(embed=giveaway_panel_embed(giveaway, count))
+                except discord.HTTPException:
+                    logger.warning(
+                        "Falha ao atualizar contagem de participantes do sorteio %s.", giveaway.id
+                    )
+
+
+class GiveawayLeaveButton(
+    discord.ui.DynamicItem[discord.ui.Button],
+    template=r"giveaway:leave:(?P<giveaway_id>[0-9a-fA-F-]{36})",
+):
+    def __init__(self, giveaway_id: uuid.UUID) -> None:
+        super().__init__(
+            discord.ui.Button(
+                label="🚪 Sair do sorteio",
+                style=discord.ButtonStyle.secondary,
+                custom_id=f"giveaway:leave:{giveaway_id}",
+            )
+        )
+        self.giveaway_id = giveaway_id
+
+    @classmethod
+    async def from_custom_id(
+        cls, interaction: discord.Interaction, item: discord.ui.Item, match: Any
+    ) -> "GiveawayLeaveButton":
+        return cls(uuid.UUID(match["giveaway_id"]))
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        member = interaction.user
+        if not isinstance(member, discord.Member):
+            return
+
+        with try_acquire(("giveaway:leave", self.giveaway_id, member.id)) as acquired:
+            if not acquired:
+                await interaction.response.send_message(
+                    "⏳ Seu clique anterior ainda está sendo processado, aguarde.", ephemeral=True
+                )
+                return
+
+            bot: LimerenceBot = interaction.client  # type: ignore[assignment]
+            await interaction.response.defer()
+
+            giveaway = await bot.giveaway_service.get_giveaway(self.giveaway_id)
+            if giveaway is None or giveaway.guild_id != interaction.guild_id:
+                await interaction.followup.send("Sorteio não encontrado.", ephemeral=True)
+                return
+
+            try:
+                await bot.giveaway_service.leave(giveaway, member)
+            except NotEnteredError as exc:
+                await interaction.followup.send(str(exc), ephemeral=True)
+                return
+
+            await interaction.followup.send("👋 Você saiu do sorteio.", ephemeral=True)
+
+            count = await bot.giveaway_service.count_entries(giveaway.id)
+            if interaction.message is not None:
+                try:
+                    await interaction.message.edit(embed=giveaway_panel_embed(giveaway, count))
+                except discord.HTTPException:
+                    logger.warning(
+                        "Falha ao atualizar contagem de participantes do sorteio %s.", giveaway.id
+                    )
 
 
 class GiveawayCloseButton(
@@ -106,9 +178,15 @@ class GiveawayCloseButton(
                 "Só a staff pode encerrar um sorteio.", ephemeral=True
             )
             return
-        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
-        await interaction.response.defer()
-        await close_and_announce(bot, self.giveaway_id)
+        with try_acquire(("giveaway:close", self.giveaway_id)) as acquired:
+            if not acquired:
+                await interaction.response.send_message(
+                    "⏳ Esse sorteio já está sendo encerrado.", ephemeral=True
+                )
+                return
+            bot: LimerenceBot = interaction.client  # type: ignore[assignment]
+            await interaction.response.defer()
+            await close_and_announce(bot, self.giveaway_id)
 
 
 class GiveawayRerollButton(
@@ -158,6 +236,7 @@ class GiveawayOpenView(SafeView):
     def __init__(self, giveaway_id: uuid.UUID) -> None:
         super().__init__(timeout=None)
         self.add_item(GiveawayEnterButton(giveaway_id))
+        self.add_item(GiveawayLeaveButton(giveaway_id))
         self.add_item(GiveawayCloseButton(giveaway_id))
 
 

@@ -17,6 +17,7 @@ from services.ticket_service import TicketNotClaimedError, TicketNotFoundError
 from utils.achievements import announce_achievements
 from utils.checks import member_can, member_is_staff
 from utils.constants import EMBED_COLOR_DEFAULT
+from utils.debounce import try_acquire
 from views.base_view import SafeView
 from views.confirm_close_view import ConfirmCloseView
 from views.dm_evaluation_view import DMEvaluationView
@@ -181,6 +182,20 @@ class TicketActionsView(SafeView):
     async def claim(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
         if await _deny_if_cant(interaction, "claim"):
             return
+        if interaction.channel_id is None:
+            return
+        # Trava contra clique repetido em "Assumir" antes do painel ser
+        # reeditado (spam) — sem isso cada clique extra virava outro Claim no
+        # banco, outro log e outra mensagem publica "assumiu este ticket".
+        with try_acquire(("ticket:claim", interaction.channel_id)) as acquired:
+            if not acquired:
+                await interaction.response.send_message(
+                    "⏳ Esse ticket já está sendo assumido, aguarde.", ephemeral=True
+                )
+                return
+            await self._claim(interaction)
+
+    async def _claim(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         guild = interaction.guild
@@ -240,6 +255,17 @@ class TicketActionsView(SafeView):
     async def unclaim(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
         if await _deny_if_cant(interaction, "unclaim"):
             return
+        if interaction.channel_id is None:
+            return
+        with try_acquire(("ticket:unclaim", interaction.channel_id)) as acquired:
+            if not acquired:
+                await interaction.response.send_message(
+                    "⏳ Esse ticket já está sendo liberado, aguarde.", ephemeral=True
+                )
+                return
+            await self._unclaim(interaction)
+
+    async def _unclaim(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         guild = interaction.guild

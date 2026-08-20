@@ -58,6 +58,10 @@ class AlreadyEnteredError(ValueError):
     pass
 
 
+class NotEnteredError(ValueError):
+    pass
+
+
 class GiveawayService:
     """Regras de negocio do sistema de Sorteios. Cog/painel nunca falam
     direto com os repositorios, mesmo padrao de PollService/VerificationService."""
@@ -155,6 +159,16 @@ class GiveawayService:
         except IntegrityError as exc:
             raise AlreadyEnteredError("Você já está participando desse sorteio.") from exc
         return entry
+
+    async def leave(self, giveaway: Giveaway, member: discord.Member) -> None:
+        if giveaway.status != GiveawayStatus.OPEN:
+            raise NotEnteredError("Esse sorteio já foi encerrado.")
+        async with self._database.session() as session:
+            removed = await GiveawayEntryRepository(session).delete_by_giveaway_and_user(
+                giveaway.id, member.id
+            )
+        if not removed:
+            raise NotEnteredError("Você não está participando desse sorteio.")
 
     # --- encerramento e sorteio -------------------------------------------------
 

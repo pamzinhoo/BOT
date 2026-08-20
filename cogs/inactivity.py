@@ -9,6 +9,7 @@ from core.bot import LimerenceBot
 from core.logger import get_logger
 from database.models.log import LogAction
 from database.models.ticket import Ticket
+from services.evaluation_service import normalize_evaluation_method
 from services.ticket_service import TicketNotClaimedError, TicketNotFoundError
 from utils.achievements import announce_achievements
 from utils.constants import EMBED_COLOR_DANGER
@@ -146,14 +147,36 @@ class InactivityCog(commands.Cog):
             closed_ticket, guild.id
         )
         if opener is not None and eval_settings.enabled and behaviour.evaluation_enabled:
-            await channel.send(
-                content=opener.mention,
-                embed=discord.Embed(
-                    title="Como foi o seu atendimento?",
-                    description="Avalie o suporte que você recebeu.",
-                ),
-                view=EvaluationView(),
-            )
+            method = normalize_evaluation_method(eval_settings.evaluation_method)
+            # Mesma regra do fechamento manual (ticket_actions_view.close):
+            # "ticket"/"both" manda no canal, "dm"/"both" manda por DM.
+            if method in ("ticket", "both"):
+                await channel.send(
+                    content=opener.mention,
+                    embed=discord.Embed(
+                        title="Como foi o seu atendimento?",
+                        description="Avalie o suporte que você recebeu.",
+                    ),
+                    view=EvaluationView(),
+                )
+            if method in ("dm", "both"):
+                from views.ticket_actions_view import _send_evaluation_dm
+
+                claimed_staff = (
+                    await self.bot.staff_service.get_by_id(closed_ticket.claimed_by_staff_id)
+                    if closed_ticket.claimed_by_staff_id is not None
+                    else None
+                )
+                panel = await self.bot.ticket_panel_service.get_panel_for_ticket(closed_ticket)
+                assert self.bot.user is not None
+                await _send_evaluation_dm(
+                    self.bot,
+                    guild,
+                    closed_ticket,
+                    panel,
+                    claimed_by_name=claimed_staff.display_name if claimed_staff else "Não assumido",
+                    closed_by_name=self.bot.user.display_name,
+                )
 
     async def _auto_cancel_unclaimed(
         self, guild: discord.Guild, channel: discord.TextChannel, ticket: Ticket
