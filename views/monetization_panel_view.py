@@ -54,6 +54,9 @@ _LOJA_FIELDS = [
     SettingsField("shop_channel_id", "Canal da Loja", FieldKind.CHANNEL, MonetizationSettings),
     SettingsField("approval_channel_id", "Canal de Aprovação Manual", FieldKind.CHANNEL, MonetizationSettings),
     SettingsField("log_channel_id", "Canal de Logs", FieldKind.CHANNEL, MonetizationSettings),
+    SettingsField(
+        "dlc_announcement_channel_id", "Canal de Aviso de DLC Grátis", FieldKind.CHANNEL, MonetizationSettings
+    ),
 ]
 
 

@@ -23,6 +23,7 @@ class MonetizationSettings(Base, UUIDPrimaryKeyMixin):
     shop_message_id: Mapped[int | None] = mapped_column(BigInteger)
     approval_channel_id: Mapped[int | None] = mapped_column(BigInteger)
     log_channel_id: Mapped[int | None] = mapped_column(BigInteger)
+    dlc_announcement_channel_id: Mapped[int | None] = mapped_column(BigInteger)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow, onupdate=_utcnow
     )

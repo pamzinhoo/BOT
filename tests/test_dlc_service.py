@@ -505,6 +505,63 @@ def _bot_with_shop() -> MagicMock:
     return bot
 
 
+async def test_create_free_dlc_announces_in_configured_channel(
+    dlc_service: DlcService, dlc_store: DlcFakeStore
+) -> None:
+    """Canal de Aviso de DLC Gratis (Monetizacao > config) configurado -- ao
+    criar a DLC, dispara @everyone la, sem bloquear a criacao se der erro."""
+    dlc_store.verified_role_id_by_guild[_GUILD_ID] = _ROLE_ID
+    bot = MagicMock()
+    settings = MagicMock(dlc_announcement_channel_id=999)
+    bot.subscription_service.get_settings = AsyncMock(return_value=settings)
+    channel = AsyncMock(spec=discord.TextChannel)
+    bot.get_channel = MagicMock(return_value=channel)
+    dlc_service._bot = bot
+
+    product = await dlc_service.create_free(
+        guild_id=_GUILD_ID, name="Genesis", slug="genesis-announce", description="Primeiro fragmento."
+    )
+
+    bot.get_channel.assert_called_once_with(999)
+    channel.send.assert_awaited_once()
+    _, kwargs = channel.send.call_args
+    assert kwargs["content"] == "@everyone"
+    assert product.name in kwargs["embed"].description
+    assert kwargs["allowed_mentions"].everyone is True
+
+
+async def test_create_free_dlc_skips_announcement_when_channel_not_configured(
+    dlc_service: DlcService, dlc_store: DlcFakeStore
+) -> None:
+    dlc_store.verified_role_id_by_guild[_GUILD_ID] = _ROLE_ID
+    bot = MagicMock()
+    settings = MagicMock(dlc_announcement_channel_id=None)
+    bot.subscription_service.get_settings = AsyncMock(return_value=settings)
+    bot.get_channel = MagicMock()
+    dlc_service._bot = bot
+
+    await dlc_service.create_free(
+        guild_id=_GUILD_ID, name="Sem canal", slug="sem-canal-announce", description=None
+    )
+
+    bot.get_channel.assert_not_called()
+
+
+async def test_create_free_dlc_announcement_failure_does_not_block_creation(
+    dlc_service: DlcService, dlc_store: DlcFakeStore
+) -> None:
+    dlc_store.verified_role_id_by_guild[_GUILD_ID] = _ROLE_ID
+    bot = MagicMock()
+    bot.subscription_service.get_settings = AsyncMock(side_effect=RuntimeError("db fora"))
+    dlc_service._bot = bot
+
+    product = await dlc_service.create_free(
+        guild_id=_GUILD_ID, name="Resiliente", slug="resiliente-announce", description=None
+    )
+
+    assert product.slug == "resiliente-announce"
+
+
 async def test_create_paid_dlc_refreshes_shop_panel(dlc_service: DlcService) -> None:
     bot = _bot_with_shop()
     dlc_service._bot = bot

@@ -145,6 +145,7 @@ class DlcService:
             guild_id, action="DLC criada (gratuita)", executor=executor,
             details={"dlc": name, "slug": slug, "role_id": required_role_id},
         )
+        await self._announce_free_dlc(guild_id, product)
         return product
 
     async def create_paid(
@@ -545,6 +546,44 @@ class DlcService:
             await self._bot.painel_service.refresh_shop_panel(guild_id)
         except Exception:
             logger.exception("Falha ao atualizar painel da loja (guild %s) após mudança de DLC.", guild_id)
+
+    async def _announce_free_dlc(self, guild_id: int, product: Product) -> None:
+        """Avisa @everyone no canal configurado (Monetização > Canal de Aviso
+        de DLC Grátis) sempre que uma DLC gratuita nova e criada. Canal e
+        opcional: sem configuracao, so nao avisa ninguem (nunca bloqueia a
+        criacao da DLC). Acoplamento opcional igual _refresh_shop — sem bot
+        montado (testes) ou qualquer falha de Discord, so loga e segue."""
+        if self._bot is None:
+            return
+        try:
+            settings = await self._bot.subscription_service.get_settings(guild_id)
+            channel_id = settings.dlc_announcement_channel_id
+            if channel_id is None:
+                return
+            channel = self._bot.get_channel(channel_id)
+            if not isinstance(channel, discord.abc.Messageable):
+                return
+            embed = discord.Embed(
+                title="🎁 Nova DLC Grátis!",
+                description=(
+                    f"**{product.name}** já está disponível!\n"
+                    + (product.description or "")
+                ).strip(),
+                color=discord.Color.green(),
+            )
+            embed.set_footer(
+                text="Tem o cargo Verificado? Já pode jogar. Ainda não vinculou sua conta? "
+                "Entre no jogo e conecte seu Discord."
+            )
+            await channel.send(
+                content="@everyone",
+                embed=embed,
+                allowed_mentions=discord.AllowedMentions(everyone=True),
+            )
+        except Exception:
+            logger.exception(
+                "Falha ao avisar DLC gratuita '%s' no canal configurado (guild %s).", product.name, guild_id
+            )
 
     # --- auditoria -----------------------------------------------------
 
