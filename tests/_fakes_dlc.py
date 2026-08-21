@@ -20,6 +20,7 @@ class DlcFakeStore:
     products: dict[uuid.UUID, Product] = field(default_factory=dict)
     plans: dict[uuid.UUID, Plan] = field(default_factory=dict)
     players: dict[uuid.UUID, Player] = field(default_factory=dict)
+    verified_role_id_by_guild: dict[int, int] = field(default_factory=dict)
 
 
 class FakeSession:
@@ -148,6 +149,22 @@ class FakePlayerRepository:
         return [p for p in self._store.players.values() if p.id in wanted]
 
 
+class _FakeGuildSettings:
+    def __init__(self, verified_role_id: int | None) -> None:
+        self.verified_role_id = verified_role_id
+
+
+class FakeGuildSettingsRepository:
+    def __init__(self, session: FakeSession, *, store: DlcFakeStore) -> None:
+        self._store = store
+
+    async def get_by_guild_id(self, guild_id: int) -> _FakeGuildSettings | None:
+        role_id = self._store.verified_role_id_by_guild.get(guild_id)
+        if role_id is None:
+            return None
+        return _FakeGuildSettings(role_id)
+
+
 def install_dlc_fakes(monkeypatch, store: DlcFakeStore) -> None:
     monkeypatch.setattr(
         "services.dlc_service.ProductRepository", lambda session: FakeProductRepository(session, store=store)
@@ -157,6 +174,10 @@ def install_dlc_fakes(monkeypatch, store: DlcFakeStore) -> None:
     )
     monkeypatch.setattr(
         "services.dlc_service.PlayerRepository", lambda session: FakePlayerRepository(session, store=store)
+    )
+    monkeypatch.setattr(
+        "services.dlc_service.GuildSettingsRepository",
+        lambda session: FakeGuildSettingsRepository(session, store=store),
     )
     # DlcService instancia ProductService internamente — mesmo store, modulo diferente.
     monkeypatch.setattr(

@@ -63,6 +63,27 @@ async def test_create_free_dlc(dlc_service: DlcService, dlc_store: DlcFakeStore)
     assert dlc_service.is_free(product) is True
 
 
+async def test_create_free_dlc_auto_uses_verified_role_when_not_given(
+    dlc_service: DlcService, dlc_store: DlcFakeStore
+) -> None:
+    """Fluxo real (views/dlc_panel_view.py) nunca passa required_role_id —
+    a DLC gratuita tem que pegar sozinha o cargo Verificado configurado
+    pra guild, garantindo "vinculou Discord = libera DLC gratuita"."""
+    dlc_store.verified_role_id_by_guild[_GUILD_ID] = 555
+
+    product = await dlc_service.create_free(guild_id=_GUILD_ID, name="Auto", slug="auto-free", description=None)
+
+    assert product.required_role_id == 555
+    assert product.required_role_guild_id == _GUILD_ID
+
+
+async def test_create_free_dlc_fails_when_verified_role_not_configured(
+    dlc_service: DlcService, dlc_store: DlcFakeStore
+) -> None:
+    with pytest.raises(DlcError):
+        await dlc_service.create_free(guild_id=_GUILD_ID, name="Auto", slug="auto-free-2", description=None)
+
+
 async def test_create_paid_dlc_creates_linked_plan(dlc_service: DlcService, dlc_store: DlcFakeStore) -> None:
     product, plan = await dlc_service.create_paid(
         guild_id=_GUILD_ID, name="The Devil", slug="devil", description=None,
@@ -164,13 +185,14 @@ async def test_update_role_routes_to_plan_when_paid(dlc_service: DlcService, dlc
     assert stored_plan.role_id == 999
 
 
-async def test_update_role_routes_to_product_when_free(dlc_service: DlcService) -> None:
+async def test_update_role_rejects_manual_change_for_free_dlc(dlc_service: DlcService) -> None:
+    """DLC gratuita nunca aceita troca manual de cargo — é sempre o
+    Verificado da guild (ver DlcService.create_free)."""
     product = await dlc_service.create_free(
         guild_id=_GUILD_ID, name="Free", slug="free-2", description=None, required_role_id=1
     )
-    updated = await dlc_service.update_role(product.id, role_id=999, guild_id=_GUILD_ID)
-
-    assert updated.required_role_id == 999
+    with pytest.raises(DlcError):
+        await dlc_service.update_role(product.id, role_id=999, guild_id=_GUILD_ID)
 
 
 async def test_toggle_active_also_disables_linked_plan(dlc_service: DlcService, dlc_store: DlcFakeStore) -> None:
@@ -528,7 +550,8 @@ async def test_update_role_does_not_touch_shop_panel_for_free_dlc(dlc_service: D
     bot = _bot_with_shop()
     dlc_service._bot = bot
 
-    await dlc_service.update_role(product.id, role_id=999, guild_id=_GUILD_ID)
+    with pytest.raises(DlcError):
+        await dlc_service.update_role(product.id, role_id=999, guild_id=_GUILD_ID)
 
     bot.painel_service.refresh_shop_panel.assert_not_awaited()
 

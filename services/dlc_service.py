@@ -12,6 +12,7 @@ from database.models.audit_log import AuditLogCategory
 from database.models.plan import Plan
 from database.models.product import Product, ProductType
 from database.models.subscription import BillingCycle
+from database.repositories.guild_settings_repository import GuildSettingsRepository
 from database.repositories.license_repository import LicenseRepository
 from database.repositories.plan_repository import PlanRepository
 from database.repositories.player_repository import PlayerRepository
@@ -105,12 +106,22 @@ class DlcService:
         name: str,
         slug: str,
         description: str | None,
-        required_role_id: int,
+        required_role_id: int | None = None,
         currency: str = "BRL",
         position: int | None = None,
         created_by_staff_id: int | None = None,
         executor: discord.Member | discord.User | None = None,
     ) -> Product:
+        """DLC gratuita nunca pede cargo manual em produção — o acesso e
+        sempre o cargo Verificado da guild (GuildSettings.verified_role_id),
+        o mesmo que a vinculacao Discord<->jogo concede. Garante "vinculou =
+        libera DLC gratuita automaticamente" sem depender de staff escolher
+        o cargo certo na hora de criar (ver incidente: 2 DLCs de teste foram
+        criadas apontando pro cargo errado por escolha manual). `required_role_id`
+        so existe pra flexibilidade de teste/scripting — o fluxo real
+        (views/dlc_panel_view.py) nunca passa esse argumento."""
+        if required_role_id is None:
+            required_role_id = await self._get_verified_role_id(guild_id)
         await self._ensure_slug_available(slug)
         if position is None:
             position = len(await self.list_dlcs())
@@ -192,6 +203,16 @@ class DlcService:
         existing = await self._products.get_by_slug(slug, include_deleted=True)
         if existing is not None:
             raise DlcError(f"Já existe um produto com o slug '{slug}'.")
+
+    async def _get_verified_role_id(self, guild_id: int) -> int:
+        async with self._database.session() as session:
+            settings = await GuildSettingsRepository(session).get_by_guild_id(guild_id)
+        if settings is None or settings.verified_role_id is None:
+            raise DlcError(
+                "Cargo de Verificado não configurado nesta guild ainda. "
+                "Configure em /config → Verificado (login com Discord no jogo) antes de criar DLC gratuita."
+            )
+        return settings.verified_role_id
 
     # --- edicao -----------------------------------------------------------
 
@@ -283,12 +304,15 @@ class DlcService:
             updated = product
             await self._refresh_shop(plan.guild_id)
         else:
-            # DLC gratuita: cargo vive no proprio Product
-            updated = await self._products.update(
-                product_id, required_role_id=role_id, required_role_guild_id=guild_id
+            # DLC gratuita: cargo e sempre o Verificado da guild, nunca
+            # escolhido manualmente (ver create_free) — impede a mesma
+            # inconsistencia que gerou o incidente das 2 DLCs de teste
+            # apontando pro cargo errado.
+            raise DlcError(
+                "DLC gratuita libera automaticamente pra quem tem o cargo Verificado — "
+                "não dá pra trocar o cargo manualmente. Se quiser exigir um cargo exclusivo, "
+                "crie como DLC paga (mesmo que o preço seja simbólico)."
             )
-            if updated is None:
-                raise DlcError("DLC não encontrada.")
         await self._audit_product(
             updated, action="Cargo de DLC alterado", executor=executor,
             details={"role_id": role_id, "guild_id": guild_id},

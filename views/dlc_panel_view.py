@@ -109,16 +109,33 @@ class _CreateDlcModal(discord.ui.Modal):
         name = str(self.name_input.value).strip()
         description = str(self.description_input.value).strip() or None
         slug = _slugify(name)
-        price_amount: int | None = None
-        if self.paid:
+
+        if not self.paid:
+            # DLC gratuita nunca pede cargo manual — libera sozinha pra quem
+            # tem o cargo Verificado da guild (ver DlcService.create_free).
+            assert interaction.guild_id is not None
+            bot: LimerenceBot = interaction.client  # type: ignore[assignment]
             try:
-                price_amount = _parse_reais(str(self.price_input.value))
-            except ValueError:
-                await interaction.response.send_message("Preço inválido — use números (ex: 14.90).", ephemeral=True)
+                product = await bot.dlc_service.create_free(
+                    guild_id=interaction.guild_id, name=name, slug=slug, description=description,
+                    executor=interaction.user,
+                )
+            except DlcError as exc:
+                await interaction.response.send_message(str(exc), ephemeral=True)
                 return
-            if not price_amount:
-                await interaction.response.send_message("DLC paga precisa de um preço maior que zero.", ephemeral=True)
-                return
+            await interaction.response.edit_message(
+                content=None, embed=await _dlc_edit_embed(bot, product), view=DlcEditView(product)
+            )
+            return
+
+        try:
+            price_amount = _parse_reais(str(self.price_input.value))
+        except ValueError:
+            await interaction.response.send_message("Preço inválido — use números (ex: 14.90).", ephemeral=True)
+            return
+        if not price_amount:
+            await interaction.response.send_message("DLC paga precisa de um preço maior que zero.", ephemeral=True)
+            return
 
         await interaction.response.edit_message(
             content="Selecione o cargo Discord desta DLC:",
@@ -239,6 +256,14 @@ class DlcEditView(SafeView):
 
     @discord.ui.button(label="🎭 Cargo", style=discord.ButtonStyle.secondary, row=1)
     async def role_button(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
+        if await bot.dlc_service.get_purchase_plan(self.product.id) is None:
+            await interaction.response.send_message(
+                "DLC gratuita libera automaticamente pra quem tem o cargo Verificado — "
+                "não dá pra trocar manualmente.",
+                ephemeral=True,
+            )
+            return
         view = SafeView(timeout=120)
         view.add_item(_EditRolePicker(self.product))
         await interaction.response.edit_message(
