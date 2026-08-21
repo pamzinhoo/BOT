@@ -18,8 +18,16 @@ _MAX_SLUG_LENGTH = 80
 
 def _slugify(raw: str) -> str:
     import re
+    import unicodedata
 
-    slug = re.sub(r"[^a-z0-9]+", "-", raw.strip().lower()).strip("-")
+    # Normaliza acentos pra letra base (NFKD separa "é" em "e" + acento,
+    # o encode/decode ascii descarta o acento sozinho) antes de colapsar o
+    # resto -- sem isso "GÉNESIS"/"Gênesis"/"Genesis" viram slugs diferentes
+    # de forma imprevisivel (acento virava so um traço solto, ex.:
+    # "Ⅰ GÉNESIS" -> "g-nesis", colidindo com nomes sem nenhuma relacao).
+    normalized = unicodedata.normalize("NFKD", raw.strip().lower())
+    ascii_only = normalized.encode("ascii", "ignore").decode("ascii")
+    slug = re.sub(r"[^a-z0-9]+", "-", ascii_only).strip("-")
     return slug[:_MAX_SLUG_LENGTH] or "dlc"
 
 
@@ -113,17 +121,25 @@ class _CreateDlcModal(discord.ui.Modal):
         if not self.paid:
             # DLC gratuita nunca pede cargo manual — libera sozinha pra quem
             # tem o cargo Verificado da guild (ver DlcService.create_free).
+            # Deferir ANTES de chamar create_free: alem do insert, o service
+            # agora tambem consulta config e pode mandar o aviso @everyone
+            # (_announce_free_dlc) — facilmente passa dos 3s que o Discord da
+            # pra responder a interacao sem deferir. Sem isso a DLC e criada
+            # no banco mas a resposta falha com "Unknown interaction" (404),
+            # deixando o staff sem confirmacao nenhuma (ja aconteceu — DLC
+            # "Genesis" criada silenciosamente assim em 2026-08-21).
             assert interaction.guild_id is not None
             bot: LimerenceBot = interaction.client  # type: ignore[assignment]
+            await interaction.response.defer()
             try:
                 product = await bot.dlc_service.create_free(
                     guild_id=interaction.guild_id, name=name, slug=slug, description=description,
                     executor=interaction.user,
                 )
             except DlcError as exc:
-                await interaction.response.send_message(str(exc), ephemeral=True)
+                await interaction.followup.send(str(exc), ephemeral=True)
                 return
-            await interaction.response.edit_message(
+            await interaction.edit_original_response(
                 content=None, embed=await _dlc_edit_embed(bot, product), view=DlcEditView(product)
             )
             return

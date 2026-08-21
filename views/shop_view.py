@@ -74,6 +74,28 @@ def plan_card_embed(plan: Plan, benefits: list[str], *, position: int, total: in
     return embed
 
 
+def free_dlc_list_embed(products: list[Any]) -> discord.Embed:
+    """Lista publica das DLCs gratuitas ativas da guild -- sem preco, sem
+    botao de compra (nao existe compra pra elas): acesso e automatico pra
+    quem tem o cargo Verificado. Painel principal da loja so lista Plan
+    (planos/DLC paga), entao sem isto a DLC gratuita fica invisivel pro
+    jogador mesmo depois de criada certinho no bot."""
+    embed = discord.Embed(
+        title="🎁 DLCs Grátis",
+        description=(
+            "Essas DLCs liberam sozinhas pra quem tem o cargo **Verificado** "
+            "(o mesmo que você ganha ao conectar sua conta do jogo com o Discord)."
+        ),
+        color=discord.Color.green(),
+    )
+    if not products:
+        embed.description += "\n\nNenhuma DLC gratuita disponível no momento."
+        return embed
+    for product in products:
+        embed.add_field(name=f"🎁 {product.name}", value=product.description or "—", inline=False)
+    return embed
+
+
 def shop_panel_embed(plans: list[Plan]) -> discord.Embed:
     embed = discord.Embed(
         title="🛒 Loja",
@@ -127,6 +149,16 @@ class ShopPanelView(SafeView):
             benefits_by_plan[plan.id] = [b.text for b in benefits]
         view = ShopView(plans, benefits_by_plan)
         await interaction.followup.send(embed=view.render_embed(), view=view, ephemeral=True)
+
+    @discord.ui.button(
+        label="🎁 DLCs Grátis", style=discord.ButtonStyle.secondary, custom_id="limerence:shop:free_dlcs"
+    )
+    async def open_free_dlcs(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        bot: LimerenceBot = interaction.client  # type: ignore[assignment]
+        assert interaction.guild_id is not None
+        await interaction.response.defer(ephemeral=True)
+        products = await bot.dlc_service.list_free_dlcs_by_guild(interaction.guild_id)
+        await interaction.followup.send(embed=free_dlc_list_embed(products), ephemeral=True)
 
 
 class ShopView(SafeView):
