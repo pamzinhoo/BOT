@@ -8,6 +8,75 @@ type Props = {
   options?: DiscordOptions;
 };
 
+const UNIT_LABELS = {
+  seconds: "segundos",
+  minutes: "minutos",
+  hours: "horas",
+  days: "dias",
+} as const;
+
+const UNIT_TO_SECONDS = {
+  seconds: 1,
+  minutes: 60,
+  hours: 3600,
+  days: 86400,
+} as const;
+
+type DisplayUnit = keyof typeof UNIT_TO_SECONDS;
+
+function storageToSeconds(field: SettingDefinition, value: number) {
+  if (field.unit === "minutes") return value * 60;
+  return value;
+}
+
+function secondsToStorage(field: SettingDefinition, seconds: number) {
+  if (field.unit === "minutes") return Math.round(seconds / 60);
+  return Math.round(seconds);
+}
+
+function bestUnit(seconds: number): DisplayUnit {
+  if (seconds > 0 && seconds % UNIT_TO_SECONDS.days === 0) return "days";
+  if (seconds > 0 && seconds % UNIT_TO_SECONDS.hours === 0) return "hours";
+  if (seconds > 0 && seconds % UNIT_TO_SECONDS.minutes === 0) return "minutes";
+  return "seconds";
+}
+
+function DurationControl({ field, value, onChange }: Props) {
+  const raw = value == null || value === "" ? null : Number(value);
+  const seconds = raw == null || Number.isNaN(raw) ? 0 : storageToSeconds(field, raw);
+  const selectedUnit = bestUnit(seconds);
+  const amount = raw == null || Number.isNaN(raw) ? "" : String(seconds / UNIT_TO_SECONDS[selectedUnit]);
+
+  const setDuration = (nextAmount: string, nextUnit: DisplayUnit) => {
+    if (nextAmount === "") {
+      onChange(null);
+      return;
+    }
+    const parsed = Number(nextAmount);
+    if (Number.isNaN(parsed) || parsed < 0) return;
+    onChange(secondsToStorage(field, parsed * UNIT_TO_SECONDS[nextUnit]));
+  };
+
+  return (
+    <div className="duration-control">
+      <input
+        type="number"
+        min="0"
+        step="1"
+        value={amount}
+        onChange={(event) => setDuration(event.target.value, selectedUnit)}
+        aria-label={field.label}
+      />
+      <select value={selectedUnit} onChange={(event) => setDuration(amount, event.target.value as DisplayUnit)} aria-label="Unidade de tempo">
+        {(field.display_units?.length ? field.display_units : Object.entries(UNIT_LABELS).map(([unit, label]) => ({ value: unit, label }))).map((unit) => (
+          <option value={unit.value} key={unit.value}>{unit.label}</option>
+        ))}
+      </select>
+      <small>Salvo em {field.unit_label || field.unit}</small>
+    </div>
+  );
+}
+
 export function SettingControl({ field, value, onChange, options }: Props) {
   if (field.type === "bool") {
     return (
@@ -78,6 +147,9 @@ export function SettingControl({ field, value, onChange, options }: Props) {
   }
 
   if (field.type === "number") {
+    if (field.unit) {
+      return <DurationControl field={field} value={value} onChange={onChange} options={options} />;
+    }
     return (
       <input
         type="number"
