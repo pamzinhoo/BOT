@@ -5,7 +5,7 @@ Base: `master` at `ea1bf87bb2e71a7e1c52db38e710a296b64a33ee`
 
 ## Current status
 
-Phase A is implemented, Phase A.1 is implemented and Phase C.1 is now started. This focuses on the highest-risk dashboard bugs before adding destructive actions like giveaways/DLC edits.
+Phase A is implemented, Phase A.1 is implemented, Phase A.2 fixed boolean persistence/display, and Phase C.1 is started. This focuses on the highest-risk dashboard bugs before adding destructive actions like giveaways/DLC edits.
 
 ## What is fixed now
 
@@ -15,6 +15,7 @@ Phase A is implemented, Phase A.1 is implemented and Phase C.1 is now started. T
 - Settings are still read from the same sources used by `/config` through `views.master_config_view.iter_categories`.
 - Channel/role fields are validated against the live Discord guild before saving.
 - The UI highlights saved channels/roles that no longer exist in Discord.
+- Boolean values now remain booleans in the settings API. This fixes toggles like `verificacao.enabled` appearing active again after saving `false`.
 - The sidebar no longer shows a fake Sorteios page pointing to alert settings. Sorteios/DLCs must only appear when real CRUD pages exist.
 - Time fields show units and keep the value saved in the canonical database unit.
 - A local SSE endpoint now pushes `dashboard.invalidate` events every 15 seconds.
