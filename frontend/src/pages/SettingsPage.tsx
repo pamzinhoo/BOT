@@ -17,11 +17,13 @@ export function SettingsPage() {
     queryKey: ["settings", guild?.id],
     queryFn: () => api<SettingsPayload>(`/guild/${guild!.id}/settings`),
     enabled: Boolean(guild),
+    refetchInterval: () => (Object.keys(draft).length === 0 ? 30_000 : false),
   });
   const options = useQuery({
     queryKey: ["discord-options", guild?.id],
     queryFn: () => api<DiscordOptions>(`/guild/${guild!.id}/discord-options`),
     enabled: Boolean(guild),
+    refetchInterval: 60_000,
   });
   const mutation = useMutation({
     mutationFn: (values: Record<string, unknown>) => api<SettingsPayload>(`/guild/${guild!.id}/settings`, { method: "PATCH", body: JSON.stringify({ values }) }),
@@ -29,6 +31,7 @@ export function SettingsPage() {
       setDraft({});
       queryClient.invalidateQueries({ queryKey: ["settings", guild?.id] });
       queryClient.invalidateQueries({ queryKey: ["overview", guild?.id] });
+      queryClient.invalidateQueries({ queryKey: ["discord-options", guild?.id] });
     },
   });
 
@@ -36,7 +39,7 @@ export function SettingsPage() {
   const values = { ...(settings.data?.values || {}), ...draft };
   const changed = Object.keys(draft).length;
   const fields = active?.fields.filter((field) => {
-    const haystack = `${displayLabel(field.label)} ${field.description} ${active.title}`.toLowerCase();
+    const haystack = `${displayLabel(field.label)} ${field.description} ${active.title} ${field.key}`.toLowerCase();
     return haystack.includes(search.toLowerCase());
   });
   const grouped = groupFields(section, fields || []);
@@ -104,10 +107,10 @@ function displayLabel(label: string) {
 
 function groupFields(section: string, fields: NonNullable<SettingsPayload["sections"][number]["fields"]>) {
   const groups = [
-    { title: "Geral", description: "Comportamento principal.", match: ["enabled", "allow_multiple_tickets", "max_tickets_per_user", "criteria", "default_period", "min_comment_rating", "star_emoji", "evaluation_method", "window_seconds", "cross_channel_threshold", "flood_threshold", "ignore_staff", "default_action"] },
+    { title: "Geral", description: "Comportamento principal.", match: ["enabled", "allow_multiple_tickets", "max_tickets_per_user", "criteria", "default_period", "min_comment_rating", "star_emoji", "evaluation_method", "window_seconds", "cross_channel_threshold", "flood_threshold", "ignore_staff", "default_action", "auto_update_enabled", "top_count", "show_chart"] },
     { title: "Canais", description: "Destinos e categorias do Discord.", match: ["channel", "category"] },
     { title: "Cargos", description: "Cargos associados a permissões e operação.", match: ["role"] },
-    { title: "Auto fechamento", description: "Fecha tickets inativos após o período definido.", match: ["auto_close", "inactive_after", "delete_delay"] },
+    { title: "Tempos", description: "Prazos, janelas e intervalos com unidade clara.", match: ["seconds", "minutes", "delay", "interval", "inactive", "window", "timeout"] },
     { title: "Mensagem por DM", description: "Textos enviados ao usuário após atendimento.", match: ["dm_"] },
     { title: "Ações", description: "Quem pode executar cada ação.", match: ["claim", "unclaim", "fechar", "reabrir", "excluir", "auditoria", "ranking", "config", "recurso_banimento", "analises", "convite"] },
   ];
@@ -117,7 +120,7 @@ function groupFields(section: string, fields: NonNullable<SettingsPayload["secti
   for (const group of groups) {
     const groupFields = fields.filter((field) => {
       if (used.has(field.key)) return false;
-      const key = field.key.toLowerCase();
+      const key = `${field.key} ${field.attr || ""}`.toLowerCase();
       const hit = group.match.some((needle) => key.includes(needle));
       if (hit) used.add(field.key);
       return hit;
