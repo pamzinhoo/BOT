@@ -5,13 +5,24 @@ Base: `master` at `ea1bf87bb2e71a7e1c52db38e710a296b64a33ee`
 
 ## Current status
 
-Phase A is implemented. It focuses on the highest-risk dashboard bug: settings key collisions between modules.
+Phase A is implemented and Phase A.1 was added after local validation. This focuses on the highest-risk dashboard bugs before adding destructive actions like giveaways/DLC edits.
+
+## What is fixed now
+
+- Settings keys are explicit and namespaced, such as `avaliacoes.enabled`, `verificacao.enabled`, `tickets.log_channel_id` and `dashboard.update_interval_minutes`.
+- PATCH resolves the namespaced key to the real field attr before calling the existing updater/service.
+- The dashboard now rejects ambiguous old keys instead of silently updating the wrong module.
+- Settings are still read from the same sources used by `/config` through `views.master_config_view.iter_categories`.
+- Channel/role fields are validated against the live Discord guild before saving.
+- The UI highlights saved channels/roles that no longer exist in Discord.
+- The sidebar no longer shows a fake Sorteios page pointing to alert settings. Sorteios/DLCs must only appear when real CRUD pages exist.
+- Time fields show units and keep the value saved in the canonical database unit.
 
 ## Why this phase came first
 
 The previous dashboard shape used raw attribute names as API keys. Different settings models reuse names like `enabled`, `log_channel_id`, `channel_id`, `verified_role_id` and `update_interval_minutes`. A dashboard save could therefore target the wrong module.
 
-The new router makes dashboard keys explicit and namespaced, such as `avaliacoes.enabled` and `verificacao.enabled`.
+The new router makes dashboard keys explicit and namespaced. This prevents a web save from corrupting a different `/config` section.
 
 ## Files changed
 
@@ -23,7 +34,9 @@ The new router makes dashboard keys explicit and namespaced, such as `avaliacoes
 - `frontend/src/pages/SettingsPage.tsx`
 - `frontend/src/main.tsx`
 - `frontend/src/dashboard-overrides.css`
+- `tests/test_admin_settings_router_static.py`
 - `docs/DASHBOARD_PHASE2_PLAN.md`
+- `docs/DASHBOARD_100_PERCENT_PLAN.md`
 
 ## Risk controls
 
@@ -31,11 +44,24 @@ The new router makes dashboard keys explicit and namespaced, such as `avaliacoes
 - Existing legacy admin router remains in the project.
 - New settings router is registered before legacy routes so only the settings endpoints are replaced.
 - Write operations still call the existing category update functions/services.
+- Channel and role IDs are validated against Discord before saving.
 - Ambiguous legacy keys are rejected instead of silently updating the wrong target.
 - Auto refresh pauses while a user has unsaved local edits.
+- Buttons for features without real web CRUD were not exposed as fake pages.
+
+## Local validation commands
+
+Run from the repository root:
+
+```bash
+python -m pytest tests/test_admin_settings_router_static.py
+python -m ruff check api/routes/admin/settings_router.py api/routes/admin/__init__.py tests/test_admin_settings_router_static.py
+cd frontend
+npm run build
+```
 
 ## Next phases
 
-- Phase B: web pages/actions for giveaways and DLCs.
-- Phase C: SSE/live invalidation for dashboard updates.
+- Phase B: read/write action pages for giveaways and DLCs using existing services.
+- Phase C: live event invalidation for dashboard updates without relying on F5.
 - Phase D: stronger admin identity, rate limits, CSRF/token and permission/hierarchy guards for future write actions.
