@@ -11,6 +11,15 @@ def test_dashboard_settings_router_uses_namespaced_keys() -> None:
     assert "Configuracao desconhecida ou ambigua." in source
 
 
+def test_dashboard_settings_router_validates_discord_references() -> None:
+    source = Path("api/routes/admin/settings_router.py").read_text(encoding="utf-8")
+
+    assert "def _validate_reference" in source
+    assert "Canal nao encontrado neste servidor." in source
+    assert "Cargo nao encontrado ou invalido neste servidor." in source
+    assert '"missing_reference": True' in source
+
+
 def test_dashboard_settings_router_keeps_legacy_router_separate() -> None:
     source = Path("api/routes/admin/__init__.py").read_text(encoding="utf-8")
 
