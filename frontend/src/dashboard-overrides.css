@@ -1,0 +1,21 @@
+.duration-control {
+  display: grid;
+  grid-template-columns: minmax(90px, 1fr) minmax(120px, 150px);
+  gap: 8px;
+  align-items: center;
+  max-width: 420px;
+  margin-left: auto;
+}
+
+.duration-control small {
+  grid-column: 1 / -1;
+  color: var(--muted-2);
+  font-size: 11px;
+}
+
+@media (max-width: 720px) {
+  .duration-control {
+    max-width: none;
+    margin-left: 0;
+  }
+}
