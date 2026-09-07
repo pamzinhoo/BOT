@@ -15,14 +15,22 @@ export type Readiness = {
   ready: boolean;
 };
 
+export type SettingOption = { value: string; label: string };
+
 export type SettingDefinition = {
   key: string;
+  attr?: string;
   label: string;
   description: string;
   type: "channel" | "role" | "role_multi" | "number" | "bool" | "choice" | "text";
   section: string;
-  options: { value: string; label: string }[];
+  section_title?: string;
+  options: SettingOption[];
   required: boolean;
+  allow_clear?: boolean;
+  unit?: "seconds" | "minutes";
+  unit_label?: string;
+  display_units?: SettingOption[];
 };
 
 export type SettingsPayload = {
