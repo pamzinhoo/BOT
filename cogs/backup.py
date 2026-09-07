@@ -4,7 +4,7 @@ import asyncio
 import json
 import shutil
 import zipfile
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from pathlib import Path
 from uuid import UUID
@@ -25,12 +25,23 @@ from database.models.staff_stats import StaffStats
 from database.models.ticket import Ticket
 from database.models.ticket_message import TicketMessage
 from database.repositories.achievement_repository import AchievementRepository
+from database.repositories.scheduled_job_state_repository import ScheduledJobStateRepository
 from services.ranking_service import RankingPeriod
 from utils.transcript import TRANSCRIPTS_DIR
 
 logger = get_logger("backup")
 
 _BACKUP_DIR = Path("data/backups")
+_BACKUP_JOB_NAME = "daily_backup"
+_BACKUP_JOB_LEASE = timedelta(hours=2)
+_DEFAULT_BACKUP_TIME_UTC = time(hour=5, tzinfo=UTC)
+
+
+def _backup_period_start(now: datetime, hour_utc: int) -> datetime:
+    candidate = now.astimezone(UTC).replace(hour=hour_utc, minute=0, second=0, microsecond=0)
+    if now.astimezone(UTC) < candidate:
+        return candidate - timedelta(days=1)
+    return candidate
 
 # cada consulta ja vem filtrada por guild_id — direto pras tabelas que tem a
 # coluna, e via JOIN pras que so guardam staff_id/ticket_id (auditoria:
@@ -79,12 +90,14 @@ class BackupCog(commands.Cog):
 
     def __init__(self, bot: LimerenceBot) -> None:
         self.bot = bot
+        daily_time = time(hour=bot.settings.backup_daily_hour_utc, tzinfo=UTC)
+        self.daily_backup.change_interval(time=daily_time)
         self.daily_backup.start()
 
     def cog_unload(self) -> None:
         self.daily_backup.cancel()
 
-    @tasks.loop(hours=24)
+    @tasks.loop(time=_DEFAULT_BACKUP_TIME_UTC)
     async def daily_backup(self) -> None:
         try:
             await self._run()
@@ -95,16 +108,44 @@ class BackupCog(commands.Cog):
     async def _before_loop(self) -> None:
         await self.bot.wait_until_ready()
 
-    async def _run(self) -> None:
-        today = datetime.now(UTC)
+    async def _run(self, *, now: datetime | None = None) -> None:
+        today = now or datetime.now(UTC)
+        period_start = _backup_period_start(today, self.bot.settings.backup_daily_hour_utc)
         await self._check_monthly_top1(today)
 
         date_label = today.strftime("%Y-%m-%d")
         for guild in self.bot.guilds:
             try:
+                if not await self._try_begin_backup(guild.id, period_start, today):
+                    logger.info(
+                        "Backup diario ignorado para guild %s: ja executado ou tentativa em andamento.",
+                        guild.id,
+                    )
+                    continue
+                logger.info("Backup diario iniciado para guild %s (%s).", guild.id, date_label)
                 await self._backup_guild(guild, date_label)
+                await self._mark_backup_success(guild.id)
+                logger.info("Backup diario concluido para guild %s (%s).", guild.id, date_label)
             except Exception:
                 logger.exception("Falha ao gerar backup da guild %s.", guild.id)
+
+    async def _try_begin_backup(self, guild_id: int, period_start: datetime, now: datetime) -> bool:
+        async with self.bot.database.session() as session:
+            return await ScheduledJobStateRepository(session).try_begin_daily(
+                guild_id,
+                _BACKUP_JOB_NAME,
+                period_start=period_start,
+                now=now,
+                lease=_BACKUP_JOB_LEASE,
+            )
+
+    async def _mark_backup_success(self, guild_id: int) -> None:
+        async with self.bot.database.session() as session:
+            await ScheduledJobStateRepository(session).mark_success(
+                guild_id,
+                _BACKUP_JOB_NAME,
+                finished_at=datetime.now(UTC),
+            )
 
     async def _backup_guild(self, guild: discord.Guild, date_label: str) -> None:
         """ACHADO DE AUDITORIA (critico, corrigido): a versao anterior gerava

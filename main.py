@@ -11,7 +11,6 @@ from core.bot import LimerenceBot
 from core.logger import get_logger, setup_logging
 from database.database import init_database
 
-
 _MAX_LOGIN_RETRIES = 5
 _BASE_BACKOFF_SECONDS = 30
 
@@ -49,8 +48,9 @@ def _run_alembic_upgrade_sync() -> None:
     internamente e nao pode ser chamado dentro de um loop ja rodando."""
     from pathlib import Path
 
-    from alembic import command
     from alembic.config import Config
+
+    from alembic import command
 
     repo_root = Path(__file__).resolve().parent
     cfg = Config(str(repo_root / "alembic.ini"))
@@ -60,8 +60,9 @@ def _run_alembic_upgrade_sync() -> None:
 
 async def _run_alembic_upgrade(logger) -> None:
     try:
+        logger.info("Startup migration Alembic iniciada.")
         await asyncio.to_thread(_run_alembic_upgrade_sync)
-        logger.info("Alembic upgrade head OK.")
+        logger.info("Startup migration Alembic concluida.")
     except Exception:
         logger.exception(
             "Falha ao rodar alembic upgrade head — schema pode estar desatualizado, "
@@ -77,11 +78,12 @@ async def _run_startup_migrations(database, logger) -> None:
     from sqlalchemy import text
 
     try:
+        logger.info("Startup migration pontual iniciada.")
         async with database.engine.begin() as conn:
             await conn.execute(
                 text("ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS verified_role_id BIGINT")
             )
-        logger.info("Startup migrations (guild_settings.verified_role_id) OK.")
+        logger.info("Startup migration pontual concluida: guild_settings.verified_role_id.")
     except Exception:
         logger.exception("Falha ao rodar startup migrations do bot — verificar schema manualmente.")
 
@@ -116,6 +118,8 @@ async def main() -> None:
 
     try:
         logger.info("Iniciando BOT LIMERENCE (ambiente: %s)...", settings.environment)
+        logger.info("FastAPI iniciando em %s:%s.", settings.api_host, settings.api_port)
+        logger.info("Discord login iniciado.")
         await asyncio.gather(
             _start_bot_with_retry(bot, settings.discord_token, logger),
             api_server.serve(),

@@ -1,0 +1,136 @@
+import {
+  Activity,
+  BarChart3,
+  Bot,
+  ClipboardList,
+  FileText,
+  LayoutDashboard,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Settings,
+  Shield,
+  Star,
+  Ticket,
+  Users,
+} from "lucide-react";
+import { createContext, useContext, useMemo, useState } from "react";
+import { NavLink } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { api, Guild, Readiness } from "../lib/api";
+
+type ShellContextValue = { guild?: Guild; readiness?: Readiness; guildsError?: Error | null };
+
+const ShellContext = createContext<ShellContextValue>({});
+
+export function useShell() {
+  return useContext(ShellContext);
+}
+
+const nav = [
+  {
+    label: "Visão geral",
+    items: [{ label: "Dashboard", to: "/", icon: LayoutDashboard }],
+  },
+  {
+    label: "Gerenciamento",
+    items: [
+      { label: "Tickets", to: "/tickets", icon: Ticket },
+      { label: "Staff", to: "/staff", icon: Users },
+      { label: "Avaliações", to: "/settings/avaliacoes", icon: Star },
+      { label: "Ranking", to: "/settings/ranking", icon: BarChart3 },
+    ],
+  },
+  {
+    label: "Servidor",
+    items: [
+      { label: "Cargos e permissões", to: "/settings/permissoes", icon: Shield },
+      { label: "Anti-Spam", to: "/settings/antispam", icon: Activity },
+      { label: "Auditoria", to: "/audit", icon: ClipboardList },
+    ],
+  },
+  {
+    label: "Conteúdo",
+    items: [{ label: "Painéis", to: "/panels", icon: FileText }],
+  },
+  {
+    label: "Sistema",
+    items: [
+      { label: "Bot", to: "/system", icon: Bot },
+      { label: "Configurações", to: "/settings/tickets", icon: Settings },
+    ],
+  },
+];
+
+export function AppShell({ children }: { children: React.ReactNode }) {
+  const [collapsed, setCollapsed] = useState(false);
+  const readyQuery = useQuery({
+    queryKey: ["ready"],
+    queryFn: () => api<Readiness>("/ready"),
+    refetchInterval: (query) => (query.state.data?.ready ? false : 2_000),
+  });
+  const guildsQuery = useQuery({
+    queryKey: ["guilds"],
+    queryFn: () => api<Guild[]>("/guilds"),
+    refetchInterval: () => (readyQuery.data?.ready ? false : 2_000),
+  });
+  const guilds = guildsQuery.data || [];
+  const guild = useMemo(() => guilds.find((item) => item.selected) || guilds[0], [guilds]);
+  const readiness = readyQuery.data;
+  const guildLabel = readiness?.discord_ready
+    ? guild?.name || "Nenhum servidor disponível"
+    : "Conectando ao Discord...";
+  const botLabel = readiness?.ready ? "Bot conectado" : "Bot inicializando";
+
+  return (
+    <ShellContext.Provider value={{ guild, readiness, guildsError: guildsQuery.error as Error | null }}>
+      <div className={`shell ${collapsed ? "is-collapsed" : ""}`}>
+        <aside className="sidebar">
+          <div className="brand">
+            <div>
+              <strong>Limerence</strong>
+              {!collapsed && <span>Admin Console</span>}
+            </div>
+            <button className="icon-button" onClick={() => setCollapsed((value) => !value)} aria-label="Alternar sidebar">
+              {collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+            </button>
+          </div>
+          {!collapsed && (
+            <div className="bot-chip">
+              <span className="status-dot" />
+              <div>
+                <b>{botLabel}</b>
+                <small>{guildLabel}</small>
+              </div>
+            </div>
+          )}
+          <nav className="nav">
+            {nav.map((group) => (
+              <div className="nav-group" key={group.label}>
+                {!collapsed && <p>{group.label}</p>}
+                {group.items.map((item) => (
+                  <NavLink className="nav-item" to={item.to} key={item.to} title={item.label}>
+                    <item.icon size={18} />
+                    {!collapsed && <span>{item.label}</span>}
+                  </NavLink>
+                ))}
+              </div>
+            ))}
+          </nav>
+        </aside>
+        <main className="main">
+          <header className="topbar">
+            <div>
+              <span className="breadcrumb">Admin Console</span>
+              <strong>{guildLabel}</strong>
+            </div>
+            <div className="top-actions">
+              <span className="pill">Local</span>
+              <span className="pill muted">127.0.0.1</span>
+            </div>
+          </header>
+          <div className="content">{children}</div>
+        </main>
+      </div>
+    </ShellContext.Provider>
+  );
+}

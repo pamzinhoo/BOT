@@ -117,6 +117,7 @@ class Settings:
     # guild travada (Discord lento, DB lento) prenda o ciclo inteiro.
     reconcile_max_concurrency: int = field(default=5)
     reconcile_guild_timeout_seconds: int = field(default=30)
+    backup_daily_hour_utc: int = field(default=5)
 
     # CORS explicito — a API e consumida por Bearer token (Tauri/Launcher),
     # nao por cookie, entao nao ha CSRF classico via navegador; ainda assim
@@ -233,6 +234,11 @@ class Settings:
                 "verificar assinatura. Configure o secret antes de subir em producao."
             )
 
+        backup_daily_hour_raw = _optional_int("BACKUP_DAILY_HOUR_UTC")
+        backup_daily_hour_utc = backup_daily_hour_raw if backup_daily_hour_raw is not None else 5
+        if backup_daily_hour_utc < 0 or backup_daily_hour_utc > 23:
+            raise SettingsError("BACKUP_DAILY_HOUR_UTC deve estar entre 0 e 23.")
+
         return cls(
             discord_token=discord_token,
             database_url=database_url,
@@ -270,6 +276,7 @@ class Settings:
             cors_allowed_origins=cors_allowed_origins,
             reconcile_max_concurrency=_optional_int("RECONCILE_MAX_CONCURRENCY") or 5,
             reconcile_guild_timeout_seconds=_optional_int("RECONCILE_GUILD_TIMEOUT_SECONDS") or 30,
+            backup_daily_hour_utc=backup_daily_hour_utc,
         )
 
 

@@ -51,6 +51,7 @@ from database.repositories.product_repository import ProductRepository
 from database.repositories.punishment_appeal_repository import PunishmentAppealRepository
 from database.repositories.punishment_repository import PunishmentRepository
 from database.repositories.ranking_settings_repository import RankingSettingsRepository
+from database.repositories.scheduled_job_state_repository import ScheduledJobStateRepository
 from database.repositories.staff_activity_repository import StaffActivityRepository
 from database.repositories.staff_repository import StaffRepository
 from database.repositories.staff_stats_repository import StaffStatsRepository
@@ -120,6 +121,7 @@ __all__ = [
     "PunishmentAppealRepository",
     "PunishmentRepository",
     "RankingSettingsRepository",
+    "ScheduledJobStateRepository",
     "StaffActivityRepository",
     "StaffRepository",
     "StaffStatsRepository",

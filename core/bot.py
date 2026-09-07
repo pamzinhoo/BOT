@@ -283,7 +283,10 @@ class LimerenceBot(commands.Bot):
 
     async def on_ready(self) -> None:
         logger.info(
-            "Bot conectado como %s (ID: %s).", self.user, self.user.id if self.user else "?"
+            "Discord ready: bot=%s id=%s guilds=%s.",
+            self.user,
+            self.user.id if self.user else "?",
+            len(self.guilds),
         )
 
     async def close(self) -> None:

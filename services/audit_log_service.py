@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+import uuid
 from datetime import datetime
 
 import discord
@@ -80,6 +81,7 @@ class AuditLogService:
         action: str | None = None,
         config_category: str | None = None,
         config_name: str | None = None,
+        search: str | None = None,
         since: datetime | None = None,
         limit: int = 20,
         offset: int = 0,
@@ -93,6 +95,7 @@ class AuditLogService:
                 action=action,
                 config_category=config_category,
                 config_name=config_name,
+                search=search,
                 since=since,
                 limit=limit,
                 offset=offset,
@@ -108,6 +111,7 @@ class AuditLogService:
         action: str | None = None,
         config_category: str | None = None,
         config_name: str | None = None,
+        search: str | None = None,
         since: datetime | None = None,
     ) -> int:
         async with self._database.session() as session:
@@ -119,8 +123,13 @@ class AuditLogService:
                 action=action,
                 config_category=config_category,
                 config_name=config_name,
+                search=search,
                 since=since,
             )
+
+    async def get_entry(self, guild_id: int, entry_id: uuid.UUID) -> AuditLogEntry | None:
+        async with self._database.session() as session:
+            return await AuditLogRepository(session).get_for_guild(guild_id, entry_id)
 
     async def resolve_executor(
         self,

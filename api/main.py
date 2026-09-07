@@ -4,7 +4,10 @@ from typing import TYPE_CHECKING
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
+from api.routes.admin import router as admin_router
 from api.routes.auth_routes import router as auth_router
 from api.routes.download_routes import router as download_router
 from api.routes.health_routes import router as health_router
@@ -68,6 +71,7 @@ def create_app(bot: LimerenceBot) -> FastAPI:
         )
 
     app.state.bot = bot
+    app.state.admin_ready_logged = False
     app.state.webhook_service = WebhookService(
         bot.database, bot.payment_service, bot.subscription_service, bot.settings
     )
@@ -86,4 +90,21 @@ def create_app(bot: LimerenceBot) -> FastAPI:
     app.include_router(player_router)
     app.include_router(download_router)
     app.include_router(internal_router)
+    app.include_router(admin_router)
+
+    from pathlib import Path
+
+    frontend_dist = Path(__file__).resolve().parents[1] / "frontend" / "dist"
+    assets_dir = frontend_dist / "assets"
+    if assets_dir.exists():
+        app.mount("/admin/assets", StaticFiles(directory=assets_dir), name="admin-assets")
+
+    @app.get("/admin", include_in_schema=False)
+    @app.get("/admin/{path:path}", include_in_schema=False)
+    async def admin_frontend(path: str = "") -> FileResponse:
+        index = frontend_dist / "index.html"
+        if not index.exists():
+            return FileResponse(Path(__file__).resolve().parents[1] / "docs" / "LAUNCHER_API_CONTRACT.md")
+        return FileResponse(index)
+
     return app
