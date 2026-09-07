@@ -233,12 +233,20 @@ def _setting_definition(category_key: str, category_title: str, field: SettingsF
 
 
 def _serialize_value(raw: Any) -> Any:
+    # bool precisa vir antes de int: em Python, bool herda de int.
+    # Sem isso False virava "False" (string), e o toggle do frontend
+    # continuava aparecendo como ativo porque string nao vazia e truthy.
+    if isinstance(raw, bool):
+        return raw
     if isinstance(raw, uuid.UUID):
         return str(raw)
     if isinstance(raw, datetime):
         return raw.astimezone(UTC).isoformat()
     if isinstance(raw, list):
-        return [str(item) if isinstance(item, int) else item for item in raw]
+        return [
+            str(item) if isinstance(item, int) and not isinstance(item, bool) else item
+            for item in raw
+        ]
     if isinstance(raw, int):
         return str(raw)
     return raw
