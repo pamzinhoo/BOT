@@ -11,6 +11,16 @@ def test_dashboard_settings_router_uses_namespaced_keys() -> None:
     assert "Configuracao desconhecida ou ambigua." in source
 
 
+def test_dashboard_settings_router_preserves_bool_values() -> None:
+    source = Path("api/routes/admin/settings_router.py").read_text(encoding="utf-8")
+    serialize_index = source.index("def _serialize_value")
+    bool_index = source.index("isinstance(raw, bool)", serialize_index)
+    int_index = source.index("isinstance(raw, int)", serialize_index)
+
+    assert bool_index < int_index
+    assert "bool herda de int" in source
+
+
 def test_dashboard_settings_router_validates_discord_references() -> None:
     source = Path("api/routes/admin/settings_router.py").read_text(encoding="utf-8")
 
