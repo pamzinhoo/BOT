@@ -1,10 +1,10 @@
 import {
   Activity,
   BarChart3,
+  Bell,
   Bot,
   ClipboardList,
   FileText,
-  Gift,
   Handshake,
   Heart,
   LayoutDashboard,
@@ -42,7 +42,6 @@ const nav = [
       { label: "Tickets", to: "/tickets", icon: Ticket },
       { label: "Staff", to: "/staff", icon: Users },
       { label: "Painéis", to: "/panels", icon: FileText },
-      { label: "Sorteios", to: "/settings/alertas", icon: Gift },
     ],
   },
   {
@@ -62,6 +61,7 @@ const nav = [
       { label: "Permissões", to: "/settings/permissoes", icon: Shield },
       { label: "Anti-Spam", to: "/settings/antispam", icon: Activity },
       { label: "Moderação", to: "/settings/moderacao", icon: Trophy },
+      { label: "Alertas", to: "/settings/alertas", icon: Bell },
       { label: "Auditoria", to: "/audit", icon: ClipboardList },
     ],
   },
