@@ -20,9 +20,22 @@ def test_dashboard_settings_router_validates_discord_references() -> None:
     assert '"missing_reference": True' in source
 
 
-def test_dashboard_settings_router_keeps_legacy_router_separate() -> None:
+def test_dashboard_events_router_is_registered_before_legacy_router() -> None:
     source = Path("api/routes/admin/__init__.py").read_text(encoding="utf-8")
 
+    assert "events_router" in source
     assert "settings_router" in source
     assert "legacy_router" in source
-    assert source.index("router.include_router(settings_router)") < source.index("router.include_router(legacy_router)")
+    assert source.index("router.include_router(settings_router)") < source.index("router.include_router(events_router)")
+    assert source.index("router.include_router(events_router)") < source.index("router.include_router(legacy_router)")
+
+
+def test_dashboard_events_router_pushes_invalidation_events() -> None:
+    source = Path("api/routes/admin/events_router.py").read_text(encoding="utf-8")
+
+    assert "text/event-stream" in source
+    assert "dashboard.invalidate" in source
+    assert "settings" in source
+    assert "discord-options" in source
+    assert "dlcs" in source
+    assert "giveaways" in source
