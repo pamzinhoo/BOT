@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
+import discord
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from api.routes.admin.security import require_local_admin
@@ -125,8 +126,84 @@ def _unit_for(field: SettingsField) -> str | None:
     return None
 
 
-def _setting_definition(category_key: str, category_title: str, field: SettingsField) -> dict[str, Any]:
+def _model_name(field: SettingsField) -> str | None:
+    model = getattr(field, "model", object)
+    if model is object:
+        return None
+    return getattr(model, "__name__", None)
+
+
+def _reference_state(guild: discord.Guild, field: SettingsField, raw: Any) -> dict[str, Any]:
+    if raw in (None, "", []):
+        return {"status": "ok", "message": "Nao definido; usa padrao do bot quando existir."}
+    if field.kind == FieldKind.CHANNEL:
+        channel = guild.get_channel(int(raw))
+        if channel is None:
+            return {
+                "status": "error",
+                "message": "Canal salvo nao existe mais neste servidor. Escolha outro antes de depender desta config.",
+                "missing_reference": True,
+            }
+        allowed = field.channel_types or []
+        if allowed and getattr(channel, "type", None) not in allowed:
+            return {
+                "status": "warning",
+                "message": "Canal existe, mas o tipo nao corresponde ao esperado para este campo.",
+                "missing_reference": False,
+            }
+        return {"status": "ok", "message": f"Canal encontrado: #{getattr(channel, 'name', raw)}."}
+    if field.kind == FieldKind.ROLE:
+        role = guild.get_role(int(raw))
+        if role is None:
+            return {
+                "status": "error",
+                "message": "Cargo salvo nao existe mais neste servidor. Escolha outro antes de depender desta config.",
+                "missing_reference": True,
+            }
+        if role.is_default():
+            return {
+                "status": "warning",
+                "message": "O cargo @everyone nao deve ser usado como cargo operacional.",
+                "missing_reference": False,
+            }
+        return {"status": "ok", "message": f"Cargo encontrado: {role.name}."}
+    if field.kind == FieldKind.ROLE_MULTI:
+        ids = [int(item) for item in (raw or [])]
+        missing = [str(role_id) for role_id in ids if guild.get_role(role_id) is None]
+        if missing:
+            return {
+                "status": "error",
+                "message": f"{len(missing)} cargo(s) salvo(s) nao existem mais neste servidor.",
+                "missing_reference": True,
+            }
+        return {"status": "ok", "message": "Todos os cargos foram encontrados." if ids else "Lista vazia; usa padrao do bot."}
+    return {"status": "ok", "message": "Valor pronto para uso pelo bot."}
+
+
+def _validate_reference(guild: discord.Guild, field: SettingsField, value: Any) -> None:
+    if value in (None, "", []):
+        return
+    if field.kind == FieldKind.CHANNEL:
+        channel = guild.get_channel(int(value))
+        if channel is None:
+            raise ValueError("Canal nao encontrado neste servidor.")
+        allowed = field.channel_types or []
+        if allowed and getattr(channel, "type", None) not in allowed:
+            raise ValueError("Tipo de canal invalido para esta configuracao.")
+    elif field.kind == FieldKind.ROLE:
+        role = guild.get_role(int(value))
+        if role is None or role.is_default():
+            raise ValueError("Cargo nao encontrado ou invalido neste servidor.")
+    elif field.kind == FieldKind.ROLE_MULTI:
+        role_ids = [int(item) for item in value]
+        invalid = [role_id for role_id in role_ids if guild.get_role(role_id) is None]
+        if invalid:
+            raise ValueError("Um ou mais cargos nao existem neste servidor.")
+
+
+def _setting_definition(category_key: str, category_title: str, field: SettingsField, raw_value: Any, guild: discord.Guild) -> dict[str, Any]:
     unit = _unit_for(field)
+    reference = _reference_state(guild, field, raw_value)
     definition: dict[str, Any] = {
         "key": f"{category_key}.{field.attr}",
         "attr": field.attr,
@@ -135,12 +212,16 @@ def _setting_definition(category_key: str, category_title: str, field: SettingsF
         "type": _field_type(field),
         "section": category_key,
         "section_title": category_title,
+        "source_model": _model_name(field),
         "options": [
             {"value": str(value), "label": _clean_label(label)}
             for value, label in (field.choices or [])
         ],
         "required": field.kind == FieldKind.NUMBER and not field.allow_clear,
         "allow_clear": field.allow_clear,
+        "status": reference["status"],
+        "status_message": reference["message"],
+        "missing_reference": reference.get("missing_reference", False),
     }
     if unit is not None:
         definition["unit"] = unit
@@ -200,23 +281,27 @@ def _coerce_duration_payload(field: SettingsField, value: Any) -> int | None:
     return int(round(amount * _DURATION_UNITS[storage_unit][raw_unit]))
 
 
-def _coerce_value(field: SettingsField, value: Any) -> Any:
+def _coerce_value(field: SettingsField, value: Any, guild: discord.Guild) -> Any:
     if value == "":
         value = None
     if field.kind in {FieldKind.CHANNEL, FieldKind.ROLE}:
         if value is None:
             return None
         try:
-            return int(value)
+            coerced = int(value)
         except (TypeError, ValueError) as exc:
             raise ValueError("ID invalido.") from exc
+        _validate_reference(guild, field, coerced)
+        return coerced
     if field.kind == FieldKind.ROLE_MULTI:
         if not isinstance(value, list):
             raise ValueError("Lista de cargos invalida.")
         try:
-            return [int(item) for item in value]
+            coerced = [int(item) for item in value]
         except (TypeError, ValueError) as exc:
             raise ValueError("Lista de cargos contem ID invalido.") from exc
+        _validate_reference(guild, field, coerced)
+        return coerced
     if field.kind == FieldKind.NUMBER:
         return _coerce_duration_payload(field, value)
     if field.kind == FieldKind.BOOL:
@@ -243,7 +328,7 @@ def _resolve_legacy_key(raw_key: str, updaters: dict[str, _UpdaterEntry]) -> str
     return None
 
 
-async def _settings_bundle(bot: Any, guild_id: int) -> tuple[list[dict[str, Any]], dict[str, Any], dict[str, _UpdaterEntry]]:
+async def _settings_bundle(bot: Any, guild_id: int, guild: discord.Guild) -> tuple[list[dict[str, Any]], dict[str, Any], dict[str, _UpdaterEntry]]:
     sections: list[dict[str, Any]] = []
     values: dict[str, Any] = {}
     updaters: dict[str, _UpdaterEntry] = {}
@@ -258,8 +343,9 @@ async def _settings_bundle(bot: Any, guild_id: int) -> tuple[list[dict[str, Any]
             if namespaced_key in seen:
                 raise RuntimeError(f"Configuracao duplicada no dashboard: {namespaced_key}")
             seen.add(namespaced_key)
-            definitions.append(_setting_definition(category_key, section_title, field))
-            values[namespaced_key] = _serialize_value(getattr(settings, field.attr))
+            raw_value = getattr(settings, field.attr)
+            definitions.append(_setting_definition(category_key, section_title, field, raw_value, guild))
+            values[namespaced_key] = _serialize_value(raw_value)
             updaters[namespaced_key] = _UpdaterEntry(category_key, section_title, field, update_settings)
         sections.append(
             {
@@ -285,22 +371,24 @@ def _guild(bot: Any, guild_id: int | None = None):
 @router.get("/guild/{guild_id}/settings")
 async def get_settings(request: Request, guild_id: int) -> dict[str, Any]:
     bot = _bot(request)
-    if _guild(bot, guild_id) is None:
+    guild = _guild(bot, guild_id)
+    if guild is None:
         raise HTTPException(status_code=404, detail={"error": {"code": "GUILD_NOT_FOUND", "message": "Servidor nao encontrado."}})
-    sections, values, _ = await _settings_bundle(bot, guild_id)
+    sections, values, _ = await _settings_bundle(bot, guild_id, guild)
     return {"guild_id": str(guild_id), "sections": sections, "values": values}
 
 
 @router.patch("/guild/{guild_id}/settings")
 async def update_settings(request: Request, guild_id: int, payload: dict[str, Any]) -> dict[str, Any]:
     bot = _bot(request)
-    if _guild(bot, guild_id) is None:
+    guild = _guild(bot, guild_id)
+    if guild is None:
         raise HTTPException(status_code=404, detail={"error": {"code": "GUILD_NOT_FOUND", "message": "Servidor nao encontrado."}})
     raw_values = payload.get("values")
     if not isinstance(raw_values, dict):
         raise HTTPException(status_code=422, detail={"error": {"code": "INVALID_PAYLOAD", "message": "Envie um objeto values."}})
 
-    _, before, updaters = await _settings_bundle(bot, guild_id)
+    _, before, updaters = await _settings_bundle(bot, guild_id, guild)
     grouped: dict[Any, dict[str, Any]] = {}
     changes: list[tuple[str, str, Any, Any]] = []
 
@@ -313,7 +401,7 @@ async def update_settings(request: Request, guild_id: int, payload: dict[str, An
             )
         entry = updaters[key]
         try:
-            value = _coerce_value(entry.field, raw_value)
+            value = _coerce_value(entry.field, raw_value, guild)
         except ValueError as exc:
             raise HTTPException(
                 status_code=422,
@@ -337,5 +425,5 @@ async def update_settings(request: Request, guild_id: int, payload: dict[str, An
             new_value=str(new),
         )
 
-    sections, values, _ = await _settings_bundle(bot, guild_id)
+    sections, values, _ = await _settings_bundle(bot, guild_id, guild)
     return {"guild_id": str(guild_id), "sections": sections, "values": values}
