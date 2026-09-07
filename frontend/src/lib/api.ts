@@ -25,12 +25,16 @@ export type SettingDefinition = {
   type: "channel" | "role" | "role_multi" | "number" | "bool" | "choice" | "text";
   section: string;
   section_title?: string;
+  source_model?: string | null;
   options: SettingOption[];
   required: boolean;
   allow_clear?: boolean;
   unit?: "seconds" | "minutes";
   unit_label?: string;
   display_units?: SettingOption[];
+  status?: "ok" | "warning" | "error";
+  status_message?: string;
+  missing_reference?: boolean;
 };
 
 export type SettingsPayload = {
