@@ -4,6 +4,9 @@ import {
   Bot,
   ClipboardList,
   FileText,
+  Gift,
+  Handshake,
+  Heart,
   LayoutDashboard,
   PanelLeftClose,
   PanelLeftOpen,
@@ -11,6 +14,8 @@ import {
   Shield,
   Star,
   Ticket,
+  Trophy,
+  UserCheck,
   Users,
 } from "lucide-react";
 import { createContext, useContext, useMemo, useState } from "react";
@@ -36,27 +41,36 @@ const nav = [
     items: [
       { label: "Tickets", to: "/tickets", icon: Ticket },
       { label: "Staff", to: "/staff", icon: Users },
+      { label: "Painéis", to: "/panels", icon: FileText },
+      { label: "Sorteios", to: "/settings/alertas", icon: Gift },
+    ],
+  },
+  {
+    label: "Comunidade",
+    items: [
       { label: "Avaliações", to: "/settings/avaliacoes", icon: Star },
       { label: "Ranking", to: "/settings/ranking", icon: BarChart3 },
+      { label: "Verificação", to: "/settings/verificacao", icon: UserCheck },
+      { label: "Parcerias", to: "/settings/parcerias", icon: Handshake },
+      { label: "Boost", to: "/settings/boost", icon: Heart },
     ],
   },
   {
     label: "Servidor",
     items: [
-      { label: "Cargos e permissões", to: "/settings/permissoes", icon: Shield },
+      { label: "Cargos", to: "/settings/cargos", icon: Shield },
+      { label: "Permissões", to: "/settings/permissoes", icon: Shield },
       { label: "Anti-Spam", to: "/settings/antispam", icon: Activity },
+      { label: "Moderação", to: "/settings/moderacao", icon: Trophy },
       { label: "Auditoria", to: "/audit", icon: ClipboardList },
     ],
-  },
-  {
-    label: "Conteúdo",
-    items: [{ label: "Painéis", to: "/panels", icon: FileText }],
   },
   {
     label: "Sistema",
     items: [
       { label: "Bot", to: "/system", icon: Bot },
-      { label: "Configurações", to: "/settings/tickets", icon: Settings },
+      { label: "Dashboard", to: "/settings/dashboard", icon: Settings },
+      { label: "Tickets config", to: "/settings/tickets", icon: Settings },
     ],
   },
 ];
