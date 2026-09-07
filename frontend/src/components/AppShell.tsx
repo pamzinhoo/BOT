@@ -18,9 +18,9 @@ import {
   UserCheck,
   Users,
 } from "lucide-react";
-import { createContext, useContext, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { NavLink } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, Guild, Readiness } from "../lib/api";
 
 type ShellContextValue = { guild?: Guild; readiness?: Readiness; guildsError?: Error | null };
@@ -75,8 +75,24 @@ const nav = [
   },
 ];
 
+const EVENT_QUERY_KEYS = [
+  "ready",
+  "guilds",
+  "overview",
+  "settings",
+  "discord-options",
+  "panels",
+  "tickets",
+  "staff",
+  "audit",
+  "system",
+  "giveaways",
+  "dlcs",
+];
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
+  const queryClient = useQueryClient();
   const readyQuery = useQuery({
     queryKey: ["ready"],
     queryFn: () => api<Readiness>("/ready"),
@@ -94,6 +110,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     ? guild?.name || "Nenhum servidor disponível"
     : "Conectando ao Discord...";
   const botLabel = readiness?.ready ? "Bot conectado" : "Bot inicializando";
+
+  useEffect(() => {
+    if (!readiness?.ready || !guild?.id) return undefined;
+    const source = new EventSource(`/admin/api/events?guild_id=${guild.id}`);
+    const invalidate = () => {
+      EVENT_QUERY_KEYS.forEach((key) => {
+        queryClient.invalidateQueries({ queryKey: [key] });
+        queryClient.invalidateQueries({ queryKey: [key, guild.id] });
+      });
+    };
+    source.addEventListener("dashboard.invalidate", invalidate);
+    source.onerror = () => {
+      source.close();
+    };
+    return () => source.close();
+  }, [guild?.id, queryClient, readiness?.ready]);
 
   return (
     <ShellContext.Provider value={{ guild, readiness, guildsError: guildsQuery.error as Error | null }}>
