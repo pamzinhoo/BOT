@@ -5,7 +5,7 @@ import { useParams } from "react-router-dom";
 import { useShell } from "../components/AppShell";
 import { SearchInput, SettingControl } from "../components/SettingsControls";
 import { EmptyState, ErrorState, LoadingState, PageHeader, Section } from "../components/Ui";
-import { api, DiscordOptions, SettingsPayload } from "../lib/api";
+import { api, DiscordOptions, SettingDefinition, SettingsPayload } from "../lib/api";
 
 export function SettingsPage() {
   const { section = "tickets" } = useParams();
@@ -43,6 +43,7 @@ export function SettingsPage() {
     return haystack.includes(search.toLowerCase());
   });
   const grouped = groupFields(section, fields || []);
+  const brokenRefs = active?.fields.filter((field) => field.status === "error").length || 0;
 
   if (guildsError) return <ErrorState message={guildsError.message} />;
   if (!readiness?.discord_ready) return <LoadingState message="Conectando ao Discord..." />;
@@ -55,14 +56,20 @@ export function SettingsPage() {
   return (
     <>
       <PageHeader title={active.title} description={active.description} action={<SearchInput value={search} onChange={setSearch} />} />
+      {brokenRefs > 0 && (
+        <div className="config-warning">
+          {brokenRefs} configuração{brokenRefs === 1 ? "" : "ões"} apontando para canal/cargo que não existe mais no Discord. Corrija antes de depender desse fluxo.
+        </div>
+      )}
       {grouped.map((group) => (
         <Section title={group.title} description={group.description} key={group.title}>
           <div className="settings-list">
             {group.fields.map((field) => (
-              <div className="setting-row" key={field.key}>
+              <div className={`setting-row ${field.status === "error" ? "has-error" : field.status === "warning" ? "has-warning" : ""}`} key={field.key}>
                 <div>
                   <strong>{displayLabel(field.label)}</strong>
                   <p>{field.description || fallbackDescription(field.type)}</p>
+                  <FieldStatus field={field} />
                 </div>
                 <SettingControl field={field} value={values[field.key]} options={options.data} onChange={(value) => setDraft((current) => ({ ...current, [field.key]: value }))} />
               </div>
@@ -80,6 +87,11 @@ export function SettingsPage() {
       )}
     </>
   );
+}
+
+function FieldStatus({ field }: { field: SettingDefinition }) {
+  if (!field.status_message || field.status === "ok") return null;
+  return <small className={`field-status ${field.status}`}>{field.status_message}</small>;
 }
 
 function fallbackDescription(type: string) {
