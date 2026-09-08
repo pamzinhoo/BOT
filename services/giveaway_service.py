@@ -66,7 +66,7 @@ class GiveawayService:
     """Regras de negocio do sistema de Sorteios. Cog/painel nunca falam
     direto com os repositorios, mesmo padrao de PollService/VerificationService."""
 
-    def __init__(self, database: Database, bot: "LimerenceBot") -> None:
+    def __init__(self, database: Database, bot: LimerenceBot) -> None:
         self._database = database
         self._bot = bot
 
@@ -196,13 +196,7 @@ class GiveawayService:
 
         return giveaway, winners
 
-    async def cancel_giveaway(self, giveaway_id: uuid.UUID) -> Giveaway | None:
-        """Cancela um sorteio aberto sem sortear nem entregar premio.
-
-        Mantem historico/participantes no banco para auditoria, mas impede a
-        varredura automatica e os botoes de participacao de tratarem o sorteio
-        como ativo.
-        """
+    async def cancel(self, giveaway_id: uuid.UUID) -> Giveaway | None:
         async with self._database.session() as session:
             repo = GiveawayRepository(session)
             giveaway = await repo.get_by_id_locked(giveaway_id)
