@@ -35,9 +35,11 @@ def test_dashboard_events_router_is_registered_before_legacy_router() -> None:
 
     assert "events_router" in source
     assert "settings_router" in source
+    assert "giveaways_router" in source
     assert "legacy_router" in source
     assert source.index("router.include_router(settings_router)") < source.index("router.include_router(events_router)")
-    assert source.index("router.include_router(events_router)") < source.index("router.include_router(legacy_router)")
+    assert source.index("router.include_router(events_router)") < source.index("router.include_router(giveaways_router)")
+    assert source.index("router.include_router(giveaways_router)") < source.index("router.include_router(legacy_router)")
 
 
 def test_dashboard_events_router_pushes_invalidation_events() -> None:
@@ -49,3 +51,19 @@ def test_dashboard_events_router_pushes_invalidation_events() -> None:
     assert "discord-options" in source
     assert "dlcs" in source
     assert "giveaways" in source
+
+
+def test_dashboard_giveaways_use_existing_service_and_discord_view() -> None:
+    source = Path("api/routes/admin/giveaways_router.py").read_text(encoding="utf-8")
+    service = Path("services/giveaway_service.py").read_text(encoding="utf-8")
+    app = Path("frontend/src/App.tsx").read_text(encoding="utf-8")
+    shell = Path("frontend/src/components/AppShell.tsx").read_text(encoding="utf-8")
+
+    assert "bot.giveaway_service.create_giveaway" in source
+    assert "GiveawayOpenView" in source
+    assert "close_and_announce" in source
+    assert "cancel_giveaway" in source
+    assert "SORTEIO_CRIADO_DASHBOARD" in source
+    assert "async def cancel_giveaway" in service
+    assert '<Route path="/giveaways" element={<GiveawaysPage />} />' in app
+    assert '{ label: "Sorteios", to: "/giveaways"' in shell
