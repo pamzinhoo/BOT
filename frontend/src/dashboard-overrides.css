@@ -217,6 +217,39 @@
   color: #fecaca;
 }
 
+.staff-profile-drawer .compact-grid {
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+
+.staff-metric-card {
+  min-height: 104px;
+}
+
+.staff-mini-list {
+  display: grid;
+  gap: 10px;
+}
+
+.staff-mini-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.staff-mini-item div {
+  display: grid;
+  gap: 2px;
+}
+
+.staff-mini-item small {
+  color: var(--muted-2);
+}
+
 @media (max-width: 720px) {
   .duration-control {
     max-width: none;
@@ -224,7 +257,8 @@
   }
 
   .form-row,
-  .compact-grid {
+  .compact-grid,
+  .staff-mini-item {
     grid-template-columns: 1fr;
   }
 }
