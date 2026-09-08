@@ -9,6 +9,7 @@ import {
   Handshake,
   Heart,
   LayoutDashboard,
+  Package,
   PanelLeftClose,
   PanelLeftOpen,
   Settings,
@@ -44,6 +45,7 @@ const nav = [
       { label: "Staff", to: "/staff", icon: Users },
       { label: "Painéis", to: "/panels", icon: FileText },
       { label: "Sorteios", to: "/giveaways", icon: Gift },
+      { label: "DLCs", to: "/dlcs", icon: Package },
     ],
   },
   {
