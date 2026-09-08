@@ -83,6 +83,38 @@ export type GiveawayMutationResponse = {
   item: GiveawayItem;
 };
 
+export type DlcItem = {
+  id: string;
+  slug: string;
+  name: string;
+  description?: string | null;
+  kind: "free" | "paid" | string;
+  is_active: boolean;
+  deleted: boolean;
+  price_amount?: number | null;
+  price_label: string;
+  currency: string;
+  position: number;
+  role_id?: string | null;
+  role_name?: string | null;
+  role_missing?: boolean;
+  guild_id?: string | null;
+  plan_id?: string | null;
+  plan_active?: boolean | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  deleted_at?: string | null;
+};
+
+export type DlcsPayload = {
+  guild_id: string;
+  items: DlcItem[];
+};
+
+export type DlcMutationResponse = {
+  item: DlcItem;
+};
+
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`/admin/api${path}`, {
     ...init,
