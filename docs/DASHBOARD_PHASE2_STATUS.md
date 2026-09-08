@@ -21,6 +21,9 @@ Phase A is implemented, Phase A.1 is implemented, Phase A.2 fixed boolean persis
 - The frontend subscribes to the SSE stream and invalidates dashboard queries, so settings changed through Discord `/config` are refreshed without needing manual F5.
 - The dashboard now has `/giveaways` as a real page, not a fake sidebar link.
 - Giveaways can be listed, created/published, closed, canceled and rerolled through API routes that call the existing giveaway service/cog flow.
+- The giveaway creation form now uses checkbox cards for allowed roles instead of native multi-select.
+- Giveaway duration now supports minutes, hours and days in the web form/API.
+- New giveaway audit logs created by the dashboard are attributed to `Painel web` instead of mentioning `<@0>`.
 
 ## Giveaway phase details
 
@@ -53,6 +56,7 @@ The new router makes dashboard keys explicit and namespaced. This prevents a web
 - `api/routes/admin/giveaways_router.py`
 - `api/routes/admin/__init__.py`
 - `services/giveaway_service.py`
+- `views/embeds.py`
 - `frontend/src/lib/api.ts`
 - `frontend/src/components/SettingsControls.tsx`
 - `frontend/src/components/AppShell.tsx`
@@ -100,6 +104,8 @@ npm run build
 8. Reroll from the dashboard after closed.
 9. Create another giveaway and cancel it from the dashboard.
 10. Confirm canceled giveaways cannot be joined.
+11. Create a giveaway restricted to one role and confirm only that role can join.
+12. Confirm the audit log says `Executor: Painel web` for dashboard-created giveaways.
 
 ## Next phases
 
