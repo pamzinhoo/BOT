@@ -20,6 +20,15 @@ router = APIRouter(
     dependencies=[Depends(require_local_admin)],
 )
 
+_DASHBOARD_ACTOR = "Painel web"
+_DURATION_SECONDS = {
+    "seconds": 1,
+    "minutes": 60,
+    "hours": 3600,
+    "days": 86400,
+}
+_MAX_DURATION_SECONDS = 60 * 60 * 24 * 30
+
 
 def _bot(request: Request):
     return request.app.state.bot
@@ -81,6 +90,27 @@ def _positive_int(raw: Any, field: str, *, minimum: int = 1, maximum: int | None
     if maximum is not None and value > maximum:
         raise _payload_error(f"Use um valor menor ou igual a {maximum}.", field)
     return value
+
+
+def _duration(payload: dict[str, Any]) -> timedelta:
+    # Compatibilidade com o primeiro frontend de sorteios, que enviava apenas minutos.
+    if "duration_amount" not in payload and "duration_unit" not in payload:
+        minutes = _positive_int(
+            payload.get("duration_minutes"),
+            "duration_minutes",
+            minimum=1,
+            maximum=_MAX_DURATION_SECONDS // 60,
+        )
+        return timedelta(minutes=minutes)
+
+    amount = _positive_int(payload.get("duration_amount"), "duration_amount", minimum=1)
+    unit = str(payload.get("duration_unit") or "minutes")
+    if unit not in _DURATION_SECONDS:
+        raise _payload_error("Unidade de duracao invalida.", "duration_unit")
+    total_seconds = amount * _DURATION_SECONDS[unit]
+    if total_seconds > _MAX_DURATION_SECONDS:
+        raise _payload_error("Duracao maxima permitida: 30 dias.", "duration_amount")
+    return timedelta(seconds=total_seconds)
 
 
 def _clean_text(raw: Any, field: str, *, required: bool, max_len: int) -> str | None:
@@ -153,7 +183,7 @@ async def create_giveaway(request: Request, guild_id: int, payload: dict[str, An
     title = _clean_text(payload.get("title"), "title", required=True, max_len=256)
     description = _clean_text(payload.get("description"), "description", required=False, max_len=500)
     winners_count = _positive_int(payload.get("winners_count", 1), "winners_count", minimum=1, maximum=50)
-    duration_minutes = _positive_int(payload.get("duration_minutes"), "duration_minutes", minimum=1, maximum=60 * 24 * 30)
+    duration = _duration(payload)
     allowed_role_ids = _role_ids(guild, payload.get("allowed_role_ids", []), "allowed_role_ids")
     raw_prize_type = str(payload.get("prize_type") or "CUSTOM").upper()
     if raw_prize_type not in {GiveawayPrizeType.CUSTOM.value, GiveawayPrizeType.ROLE.value}:
@@ -173,7 +203,7 @@ async def create_giveaway(request: Request, guild_id: int, payload: dict[str, An
         channel_id=channel.id,
         title=title or "Sorteio",
         description=description,
-        duration=timedelta(minutes=duration_minutes),
+        duration=duration,
         winners_count=winners_count,
         allowed_role_ids=allowed_role_ids,
         prize_type=prize_type,
@@ -184,7 +214,7 @@ async def create_giveaway(request: Request, guild_id: int, payload: dict[str, An
         message = await channel.send(embed=giveaway_panel_embed(giveaway, 0), view=GiveawayOpenView(giveaway.id))
         await bot.giveaway_service.set_message_id(giveaway.id, message.id)
         with contextlib.suppress(discord.HTTPException):
-            await message.pin(reason="Painel fixo de sorteio criado pelo dashboard")
+            await message.pin(reason="Painel fixo de sorteio criado pelo painel web")
     except discord.Forbidden as exc:
         raise HTTPException(
             status_code=403,
@@ -199,9 +229,8 @@ async def create_giveaway(request: Request, guild_id: int, payload: dict[str, An
     await bot.audit_log_service.record(
         guild_id=guild_id,
         category=AuditLogCategory.GIVEAWAY,
-        action="SORTEIO_CRIADO_DASHBOARD",
-        executor_id=0,
-        executor_name="Dashboard local",
+        action="SORTEIO_CRIADO_PAINEL_WEB",
+        executor_name=_DASHBOARD_ACTOR,
         details={"giveaway_id": str(giveaway.id), "title": giveaway.title, "channel_id": channel.id},
     )
     fresh = await bot.giveaway_service.get_giveaway(giveaway.id) or giveaway
@@ -235,9 +264,8 @@ async def reroll_giveaway(request: Request, guild_id: int, giveaway_id: uuid.UUI
     await bot.audit_log_service.record(
         guild_id=guild_id,
         category=AuditLogCategory.GIVEAWAY,
-        action="SORTEIO_REROLL_DASHBOARD",
-        executor_id=0,
-        executor_name="Dashboard local",
+        action="SORTEIO_REROLL_PAINEL_WEB",
+        executor_name=_DASHBOARD_ACTOR,
         details={"giveaway_id": str(giveaway.id), "title": giveaway.title, "winners": winners},
     )
     return {"item": await _serialize_giveaway(bot, guild, giveaway)}
@@ -257,13 +285,12 @@ async def cancel_giveaway(request: Request, guild_id: int, giveaway_id: uuid.UUI
     if giveaway.message_id is not None and isinstance(channel, discord.TextChannel):
         with contextlib.suppress(discord.HTTPException):
             message = await channel.fetch_message(giveaway.message_id)
-            await message.edit(content="Sorteio cancelado pelo Dashboard local.", view=None)
+            await message.edit(content="Sorteio cancelado pelo painel web.", view=None)
     await bot.audit_log_service.record(
         guild_id=guild_id,
         category=AuditLogCategory.GIVEAWAY,
-        action="SORTEIO_CANCELADO_DASHBOARD",
-        executor_id=0,
-        executor_name="Dashboard local",
+        action="SORTEIO_CANCELADO_PAINEL_WEB",
+        executor_name=_DASHBOARD_ACTOR,
         details={"giveaway_id": str(giveaway.id), "title": giveaway.title},
     )
     return {"item": await _serialize_giveaway(bot, guild, giveaway)}
