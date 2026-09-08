@@ -38,7 +38,21 @@ def test_dashboard_settings_router_renders_empty_choices_as_text() -> None:
     assert "return \"text\"" in source
     assert "Alguns campos antigos foram marcados como CHOICE" in source
     assert "if (!field.options.length)" in controls
-    assert "emoji-input" in controls
+    assert "isEmojiField(field)" in controls
+    assert "field.type === \"choice\"" in controls
+    assert controls.index("isEmojiField(field)") < controls.index('field.type === "choice"')
+
+
+def test_dashboard_emoji_override_is_registered_before_generic_settings() -> None:
+    init_source = Path("api/routes/admin/__init__.py").read_text(encoding="utf-8")
+    emoji_source = Path("api/routes/admin/settings_emoji_router.py").read_text(encoding="utf-8")
+
+    assert "settings_emoji_router" in init_source
+    assert init_source.index("router.include_router(settings_emoji_router)") < init_source.index("router.include_router(settings_router)")
+    assert "_force_emoji_as_text" in emoji_source
+    assert "avaliacoes.star_emoji" in emoji_source
+    assert "update_evaluation_settings" in emoji_source
+    assert "Painel web" in emoji_source
 
 
 def test_dashboard_events_router_is_registered_before_legacy_router() -> None:
