@@ -244,7 +244,8 @@
 
 .staff-metric-card span,
 .staff-metric-card strong,
-.staff-metric-card small {
+.staff-metric-card small,
+.staff-metric-card em {
   display: block;
   margin: 0;
   min-width: 0;
@@ -264,10 +265,17 @@
   overflow-wrap: anywhere;
 }
 
-.staff-metric-card small {
+.staff-metric-card small,
+.staff-metric-card em {
   color: var(--muted-2);
   font-size: 12px;
   line-height: 1.35;
+}
+
+.staff-metric-card em {
+  font-style: normal;
+  opacity: .75;
+  font-size: 10px;
 }
 
 .staff-mini-list {
@@ -293,6 +301,42 @@
 
 .staff-mini-item small {
   color: var(--muted-2);
+}
+
+.analytics-grid,
+.source-note-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.analytics-card,
+.source-note {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px;
+  background: var(--surface);
+}
+
+.analytics-card {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+
+.analytics-card span,
+.source-note {
+  color: var(--muted-2);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.analytics-card strong {
+  font-size: 20px;
+}
+
+.monetization-table td {
+  vertical-align: top;
 }
 
 .security-note-box,
