@@ -81,11 +81,13 @@ def test_dashboard_events_router_is_registered_before_legacy_router() -> None:
     assert "settings_router" in source
     assert "giveaways_router" in source
     assert "dlcs_router" in source
+    assert "panels_router" in source
     assert "legacy_router" in source
     assert source.index("router.include_router(settings_router)") < source.index("router.include_router(events_router)")
     assert source.index("router.include_router(events_router)") < source.index("router.include_router(giveaways_router)")
     assert source.index("router.include_router(giveaways_router)") < source.index("router.include_router(dlcs_router)")
-    assert source.index("router.include_router(dlcs_router)") < source.index("router.include_router(legacy_router)")
+    assert source.index("router.include_router(dlcs_router)") < source.index("router.include_router(panels_router)")
+    assert source.index("router.include_router(panels_router)") < source.index("router.include_router(legacy_router)")
 
 
 def test_dashboard_events_router_pushes_invalidation_events() -> None:
@@ -179,3 +181,29 @@ def test_license_reconciliation_is_non_destructive_for_existing_roles() -> None:
     assert "Reconciliacao nao destrutiva bloqueou remocao" in source
     assert "await member.remove_roles" not in source
     assert "await member.remove_roles" in role_sync
+
+
+def test_dashboard_panels_use_real_services_and_safe_publish_flow() -> None:
+    source = Path("api/routes/admin/panels_router.py").read_text(encoding="utf-8")
+    init_source = Path("api/routes/admin/__init__.py").read_text(encoding="utf-8")
+    page = Path("frontend/src/pages/PanelsPage.tsx").read_text(encoding="utf-8")
+    api = Path("frontend/src/lib/api.ts").read_text(encoding="utf-8")
+    css = Path("frontend/src/dashboard-overrides.css").read_text(encoding="utf-8")
+
+    assert "panels_router" in init_source
+    assert "bot.ticket_panel_service.publish_panel" in source
+    assert "bot.ticket_panel_service.refresh_panel" in source
+    assert "bot.ticket_panel_service.unpublish_panel" in source
+    assert "bot.ticket_panel_service.publish_group" in source
+    assert "bot.ticket_panel_service.refresh_group" in source
+    assert "bot.painel_service.publish_ranking" in source
+    assert "bot.painel_service.publish_shop_panel" in source
+    assert "bot.painel_service.refresh_shop_panel" in source
+    assert "_delete_saved_message" in source
+    assert "executor_name=_DASHBOARD_ACTOR" in source
+    assert "PAINEL_TICKET_PUBLICADO_WEB" in source
+    assert "PAINEL_LOJA_PUBLICADO_WEB" in source
+    assert "Painéis do Discord" in page
+    assert "Atualizar edita a mensagem existente" in page
+    assert "PanelStatus" in api
+    assert "panel-grid" in css
