@@ -41,6 +41,10 @@ function bestUnit(seconds: number): DisplayUnit {
   return "seconds";
 }
 
+function isEmojiField(field: SettingDefinition) {
+  return field.attr?.includes("emoji") || field.key.includes("emoji");
+}
+
 function DurationControl({ field, value, onChange }: Props) {
   const raw = value == null || value === "" ? null : Number(value);
   const seconds = raw == null || Number.isNaN(raw) ? 0 : storageToSeconds(field, raw);
@@ -78,6 +82,10 @@ function DurationControl({ field, value, onChange }: Props) {
 }
 
 export function SettingControl({ field, value, onChange, options }: Props) {
+  if (isEmojiField(field)) {
+    return <input className="emoji-input" value={String(value ?? "")} onChange={(event) => onChange(event.target.value)} placeholder="Ex: ⭐, 🌟 ou <:nome:id>" />;
+  }
+
   if (field.type === "bool") {
     return (
       <button className={`toggle ${value ? "on" : ""}`} onClick={() => onChange(!value)} type="button" aria-pressed={Boolean(value)}>
@@ -161,10 +169,6 @@ export function SettingControl({ field, value, onChange, options }: Props) {
         onChange={(event) => onChange(event.target.value === "" ? null : Number(event.target.value))}
       />
     );
-  }
-
-  if (field.attr?.includes("emoji") || field.key.includes("emoji")) {
-    return <input className="emoji-input" value={String(value ?? "")} onChange={(event) => onChange(event.target.value)} placeholder="Ex: ⭐, 🌟 ou <:nome:id>" />;
   }
 
   return <textarea value={String(value ?? "")} onChange={(event) => onChange(event.target.value)} rows={3} />;
