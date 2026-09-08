@@ -151,7 +151,7 @@ async def _delete_free_dlc_announcements(bot: Any, guild_id: int, product: Produ
 
 
 async def _publish_free_dlc_announcement(bot: Any, guild_id: int, product: Product) -> None:
-    """Reanuncia DLC gratis quando ela volta a ficar ativa.
+    """Reanuncia DLC gratis quando ela volta a ficar ativa ou quando o texto muda.
 
     Antes de postar, limpa anuncio antigo para evitar duplicidade. Mantem o
     comportamento da DLC paga separado: paga atualiza painel da loja via Plan.
@@ -252,9 +252,10 @@ async def update_dlc(request: Request, guild_id: int, product_id: uuid.UUID, pay
     if product is None:
         raise HTTPException(status_code=404, detail={"error": {"code": "DLC_NOT_FOUND", "message": "DLC nao encontrada."}})
     is_free = bot.dlc_service.is_free(product)
+    text_changed = "name" in payload or "description" in payload
 
     try:
-        if "name" in payload or "description" in payload:
+        if text_changed:
             name = _clean_text(payload.get("name", product.name), "name", required=True, max_len=150) if "name" in payload else None
             description = _clean_text(payload.get("description"), "description", required=False, max_len=1000) if "description" in payload else None
             product = await bot.dlc_service.update_info(
@@ -288,6 +289,8 @@ async def update_dlc(request: Request, guild_id: int, product_id: uuid.UUID, pay
                 await _publish_free_dlc_announcement(bot, guild_id, product)
             else:
                 await _delete_free_dlc_announcements(bot, guild_id, product)
+        elif text_changed and is_free and product.is_active:
+            await _publish_free_dlc_announcement(bot, guild_id, product)
     except DlcError as exc:
         raise _payload_error(str(exc)) from exc
 
