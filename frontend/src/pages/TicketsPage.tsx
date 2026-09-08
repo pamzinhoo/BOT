@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Search, SlidersHorizontal } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -27,6 +27,8 @@ type TicketList = { items: TicketRow[]; page: number; page_size: number; total: 
 type StaffRow = { id: string; display_name: string };
 type ClaimItem = { staff_id: string; staff_name?: string | null; claimed_at: string; unclaimed_at?: string | null };
 type EvaluationItem = { rating: number; comment?: string | null; rated_by_id: string; rated_by_name?: string | null; created_at: string };
+type TicketAction = "claim" | "unclaim" | "close" | "reopen" | "cancel" | "delete";
+type TicketActionResult = { ok: boolean; message: string; status: string };
 type TicketDetail = TicketRow & {
   first_response_at?: string | null;
   closed_by_id?: string | null;
@@ -65,7 +67,7 @@ function cleanCategory(value: string) {
 }
 
 function userLabel(name?: string | null, id?: string | null) {
-  return name || (id ? `Usuário desconhecido` : "Sem dados");
+  return name || (id ? "Usuário desconhecido" : "Sem dados");
 }
 
 function idHint(id?: string | null) {
@@ -85,10 +87,23 @@ function DetailRow({ label, value, hint }: { label: string; value?: React.ReactN
   );
 }
 
+function canRunAction(ticket: TicketDetail, action: TicketAction) {
+  if (action === "claim") return ticket.status === "open";
+  if (action === "unclaim") return ticket.status === "claimed";
+  if (action === "close") return ticket.status === "claimed";
+  if (action === "reopen") return ticket.status === "closed" || ticket.status === "cancelled";
+  if (action === "cancel") return ticket.status === "open" || ticket.status === "claimed";
+  if (action === "delete") return Boolean(ticket.channel_id);
+  return false;
+}
+
 export function TicketsPage() {
   const { guild, readiness, guildsError } = useShell();
+  const queryClient = useQueryClient();
   const [params, setParams] = useSearchParams();
   const [selected, setSelected] = useState<string | null>(null);
+  const [selectedStaffId, setSelectedStaffId] = useState("");
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
   const page = Number(params.get("page") || "1");
   const status = params.get("status") || "active";
   const search = params.get("search") || "";
@@ -129,12 +144,45 @@ export function TicketsPage() {
     enabled: Boolean(guild && selected),
   });
 
+  const action = useMutation({
+    mutationFn: async ({ actionName, staffId }: { actionName: TicketAction; staffId?: string }) => {
+      if (!guild || !selected) throw new Error("Ticket não selecionado.");
+      const init: RequestInit = { method: "POST" };
+      if (actionName === "claim") {
+        init.body = JSON.stringify({ staff_id: staffId });
+      }
+      return api<TicketActionResult>(`/guild/${guild.id}/tickets/${selected}/${actionName}`, init);
+    },
+    onSuccess: async (result) => {
+      setActionMessage(result.message);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["tickets"] }),
+        queryClient.invalidateQueries({ queryKey: ["ticket-detail", guild?.id, selected] }),
+        queryClient.invalidateQueries({ queryKey: ["overview"] }),
+        queryClient.invalidateQueries({ queryKey: ["staff"] }),
+      ]);
+    },
+    onError: (error) => setActionMessage((error as Error).message),
+  });
+
   const updateParam = (key: string, value: string) => {
     const next = new URLSearchParams(params);
     if (value) next.set(key, value);
     else next.delete(key);
     if (key !== "page") next.set("page", "1");
     setParams(next);
+  };
+
+  const runAction = (actionName: TicketAction) => {
+    if (actionName === "claim" && !selectedStaffId) {
+      setActionMessage("Escolha quem vai assumir o ticket.");
+      return;
+    }
+    if (actionName === "delete" && !confirm("Excluir o canal deste ticket? Esta ação é explícita e não é automática.")) {
+      return;
+    }
+    setActionMessage(null);
+    action.mutate({ actionName, staffId: selectedStaffId });
   };
 
   if (guildsError) return <ErrorState message={guildsError.message} />;
@@ -147,7 +195,7 @@ export function TicketsPage() {
   const data = list.data;
   return (
     <>
-      <PageHeader title="Tickets" description="Investigue atendimento, responsáveis e avaliações registradas." />
+      <PageHeader title="Tickets" description="Investigue atendimento, responsáveis, avaliações e execute ações reais de suporte." />
       <Section title={`Tickets (${data?.total ?? 0})`} description="Filtros e paginação são processados pela API local.">
         <div className="filters-bar">
           <label className="search-input">
@@ -209,7 +257,7 @@ export function TicketsPage() {
               <thead><tr><th>Ticket</th><th>Usuário</th><th>Categoria</th><th>Status</th><th>Responsável</th><th>Criado em</th><th>Última atividade</th></tr></thead>
               <tbody>
                 {data?.items.map((ticket) => (
-                  <tr key={ticket.id} onClick={() => setSelected(ticket.id)}>
+                  <tr key={ticket.id} onClick={() => { setSelected(ticket.id); setActionMessage(null); }}>
                     <td><strong>{ticket.label}</strong><small>{ticket.id.slice(0, 8)}</small></td>
                     <td>{userLabel(ticket.user_name, ticket.user_id)}{!ticket.user_name && idHint(ticket.user_id)}</td>
                     <td>{cleanCategory(ticket.category)}</td>
@@ -235,6 +283,27 @@ export function TicketsPage() {
         {detail.error && <ErrorState message={(detail.error as Error).message} />}
         {detail.data && (
           <div className="detail-stack">
+            <section>
+              <h3>Ações do atendimento</h3>
+              <div className="ticket-actions-panel">
+                <label>
+                  <span>Staff para assumir</span>
+                  <select value={selectedStaffId || detail.data.staff_id || ""} onChange={(event) => setSelectedStaffId(event.target.value)} disabled={action.isPending || !canRunAction(detail.data, "claim")}>
+                    <option value="">Escolha um staff</option>
+                    {staff.data?.map((row) => <option value={row.id} key={row.id}>{row.display_name}</option>)}
+                  </select>
+                </label>
+                <div className="ticket-action-buttons">
+                  <button className="button" disabled={action.isPending || !canRunAction(detail.data, "claim")} onClick={() => runAction("claim")}>Assumir</button>
+                  <button className="button ghost" disabled={action.isPending || !canRunAction(detail.data, "unclaim")} onClick={() => runAction("unclaim")}>Liberar</button>
+                  <button className="button" disabled={action.isPending || !canRunAction(detail.data, "close")} onClick={() => runAction("close")}>Fechar</button>
+                  <button className="button ghost" disabled={action.isPending || !canRunAction(detail.data, "reopen")} onClick={() => runAction("reopen")}>Reabrir</button>
+                  <button className="button ghost" disabled={action.isPending || !canRunAction(detail.data, "cancel")} onClick={() => runAction("cancel")}>Cancelar</button>
+                  <button className="button danger" disabled={action.isPending || !canRunAction(detail.data, "delete")} onClick={() => runAction("delete")}>Excluir canal</button>
+                </div>
+                {actionMessage && <p className="muted-text">{actionMessage}</p>}
+              </div>
+            </section>
             <section>
               <h3>Visão geral</h3>
               <DetailRow label="Usuário" value={userLabel(detail.data.user_name, detail.data.user_id)} hint={idHint(detail.data.user_id)} />
