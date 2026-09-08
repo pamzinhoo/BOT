@@ -145,7 +145,7 @@ export function DlcsPage() {
                 busy={updateMutation.isPending || disableMutation.isPending}
                 onEdit={(patch) => setEditing((current) => ({ ...current, [item.id]: { ...(current[item.id] || seedEdit(item)), ...patch } }))}
                 onCancel={() => setEditing((current) => { const next = { ...current }; delete next[item.id]; return next; })}
-                onSave={() => updateMutation.mutate({ id: item.id, payload: editing[item.id] || {} })}
+                onSave={() => updateMutation.mutate({ id: item.id, payload: buildUpdatePayload(item, editing[item.id]) })}
                 onToggle={() => updateMutation.mutate({ id: item.id, payload: { is_active: !item.is_active } })}
                 onDisable={() => disableMutation.mutate(item.id)}
               />
@@ -190,7 +190,7 @@ function DlcCard({ item, roles, draft, busy, onEdit, onCancel, onSave, onToggle,
         <div className="dashboard-form compact-edit-form">
           <label>Nome<input value={String(edit.name ?? "")} onChange={(event) => onEdit({ name: event.target.value })} maxLength={150} /></label>
           <label>Descrição<textarea value={String(edit.description ?? "")} onChange={(event) => onEdit({ description: event.target.value })} rows={3} maxLength={1000} /></label>
-          {item.kind === "paid" && (
+          {item.kind === "paid" ? (
             <div className="form-row">
               <label>Preço em reais<input value={String(edit.price_reais ?? "")} onChange={(event) => onEdit({ price_reais: event.target.value })} /></label>
               <label>Cargo<select value={String(edit.role_id ?? "")} onChange={(event) => onEdit({ role_id: event.target.value })}>
@@ -198,6 +198,8 @@ function DlcCard({ item, roles, draft, busy, onEdit, onCancel, onSave, onToggle,
                 {roles.map((role) => <option value={role.id} key={role.id}>{role.name}</option>)}
               </select></label>
             </div>
+          ) : (
+            <p className="inline-warning"><ShieldAlert size={14} /> DLC grátis só edita nome/descrição/status. Preço e cargo exclusivo são apenas para DLC paga.</p>
           )}
         </div>
       )}
@@ -224,6 +226,22 @@ function seedEdit(item: DlcItem): Partial<DlcItem & { price_reais: string }> {
     role_id: item.role_id || "",
     price_reais: item.price_amount ? String((item.price_amount / 100).toFixed(2)).replace(".", ",") : "",
   };
+}
+
+function buildUpdatePayload(item: DlcItem, draft?: Partial<DlcItem & { price_reais: string }>): Record<string, unknown> {
+  const edit = draft || seedEdit(item);
+  const payload: Record<string, unknown> = {
+    name: String(edit.name ?? ""),
+    description: String(edit.description ?? ""),
+  };
+  if (item.kind !== "paid") {
+    return payload;
+  }
+  const price = String(edit.price_reais ?? "").trim();
+  if (price) payload.price_reais = price;
+  const roleId = String(edit.role_id ?? "").trim();
+  if (roleId) payload.role_id = roleId;
+  return payload;
 }
 
 function slugify(value: string) {
