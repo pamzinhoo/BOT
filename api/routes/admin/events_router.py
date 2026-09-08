@@ -46,9 +46,8 @@ def _event_payload(guild_id: int | None) -> str:
 async def _event_stream(request: Request, guild_id: int | None) -> AsyncIterator[str]:
     yield _event_payload(guild_id)
     while not await request.is_disconnected():
-        # Atualiza rapido o suficiente para tickets novos aparecerem sem o
-        # usuario precisar trocar de aba, mas sem ficar batendo na API a cada
-        # segundo. O painel e local, entao 5s e seguro e responsivo.
+        # Atualiza rapido o suficiente para tickets novos aparecerem sem o usuario precisar trocar de aba.
+        # O painel e local, entao 5s e seguro e responsivo sem ficar batendo na API a cada segundo.
         await asyncio.sleep(5)
         yield _event_payload(guild_id)
 
