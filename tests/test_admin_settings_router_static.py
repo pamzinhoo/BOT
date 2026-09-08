@@ -58,12 +58,20 @@ def test_dashboard_giveaways_use_existing_service_and_discord_view() -> None:
     service = Path("services/giveaway_service.py").read_text(encoding="utf-8")
     app = Path("frontend/src/App.tsx").read_text(encoding="utf-8")
     shell = Path("frontend/src/components/AppShell.tsx").read_text(encoding="utf-8")
+    page = Path("frontend/src/pages/GiveawaysPage.tsx").read_text(encoding="utf-8")
+    css = Path("frontend/src/dashboard-overrides.css").read_text(encoding="utf-8")
 
     assert "bot.giveaway_service.create_giveaway" in source
     assert "GiveawayOpenView" in source
     assert "close_and_announce" in source
     assert "cancel_giveaway" in source
-    assert "SORTEIO_CRIADO_DASHBOARD" in source
+    assert "SORTEIO_CRIADO_PAINEL_WEB" in source
+    assert "executor_name=_DASHBOARD_ACTOR" in source
+    assert "duration_amount" in source
+    assert "duration_unit" in source
     assert "async def cancel_giveaway" in service
     assert '<Route path="/giveaways" element={<GiveawaysPage />} />' in app
     assert '{ label: "Sorteios", to: "/giveaways"' in shell
+    assert "role-checkbox" in page
+    assert "toggleAllowedRole" in page
+    assert "role-checkbox-grid" in css
