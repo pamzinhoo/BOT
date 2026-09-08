@@ -68,6 +68,19 @@
   font-size: 13px;
 }
 
+.checkbox-label {
+  display: flex !important;
+  grid-template-columns: none !important;
+  align-items: center;
+  gap: 8px !important;
+  color: var(--text) !important;
+}
+
+.checkbox-label input {
+  width: auto;
+  accent-color: var(--accent);
+}
+
 .dashboard-form small {
   color: var(--muted-2);
 }
@@ -76,6 +89,14 @@
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
+}
+
+.plan-create-form {
+  margin-bottom: 18px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .role-picker-actions {
@@ -147,13 +168,15 @@
 
 .giveaway-grid,
 .dlc-grid,
-.panel-grid {
+.panel-grid,
+.plan-manage-grid {
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
 }
 
 .giveaway-card,
 .dlc-card,
-.panel-card {
+.panel-card,
+.plan-manage-card {
   align-items: stretch;
 }
 
@@ -171,9 +194,14 @@
 
 .giveaway-card p,
 .dlc-card p,
-.panel-card p {
+.panel-card p,
+.plan-manage-card p {
   margin: 0;
   color: var(--muted);
+}
+
+.plan-manage-card small {
+  color: var(--muted-2);
 }
 
 .mono {
