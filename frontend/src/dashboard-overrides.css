@@ -221,7 +221,8 @@
   min-width: 0;
 }
 
-.staff-profile-drawer .metric-grid {
+.staff-profile-drawer .metric-grid,
+.monetization-metric-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 12px;
@@ -294,6 +295,48 @@
   color: var(--muted-2);
 }
 
+.security-note-box,
+.alert-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px 14px;
+  background: var(--surface);
+}
+
+.security-note-box {
+  grid-template-columns: auto minmax(0, 1fr);
+  margin-bottom: 12px;
+}
+
+.security-note-box strong,
+.alert-row strong {
+  display: block;
+  font-size: 13px;
+}
+
+.security-note-box p,
+.alert-row span {
+  display: block;
+  margin: 3px 0 0;
+  color: var(--muted-2);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.alert-list,
+.security-check-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.security-check-grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
 @media (max-width: 720px) {
   .duration-control {
     max-width: none;
@@ -302,11 +345,13 @@
 
   .form-row,
   .compact-grid,
-  .staff-mini-item {
+  .staff-mini-item,
+  .alert-row {
     grid-template-columns: 1fr;
   }
 
-  .staff-profile-drawer .metric-grid {
+  .staff-profile-drawer .metric-grid,
+  .monetization-metric-grid {
     grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
   }
 }
