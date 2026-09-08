@@ -157,3 +157,15 @@ def test_dashboard_free_dlc_removal_cleans_announcement_message() -> None:
     assert "message.delete" in source
     assert "DLC gratis era enviada" in source
     assert "await _delete_free_dlc_announcements(bot, guild_id, product)" in source
+
+
+def test_license_reconciliation_is_non_destructive_for_existing_roles() -> None:
+    source = Path("services/reconciliation_service.py").read_text(encoding="utf-8")
+    role_sync = Path("services/role_sync_service.py").read_text(encoding="utf-8")
+
+    assert "propositalmente nao destrutiva" in source
+    assert "nao remove cargos que alguem" in source
+    assert "startup causou perda em massa" in source
+    assert "Reconciliacao nao destrutiva bloqueou remocao" in source
+    assert "await member.remove_roles" not in source
+    assert "await member.remove_roles" in role_sync
