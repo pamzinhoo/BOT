@@ -8,8 +8,11 @@ from typing import Any
 
 import discord
 from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy import select
 
 from api.routes.admin.security import require_local_admin
+from database.models.license import License, LicenseStatus
+from database.models.player import Player
 from database.models.product import Product
 from services.dlc_service import DlcError
 
@@ -110,6 +113,11 @@ def _money_label(cents: int | None, currency: str) -> str:
     if not cents:
         return "Gratis"
     return f"{currency} {cents / 100:.2f}".replace(".", ",")
+
+
+def _member_name(guild: discord.Guild, discord_id: int) -> str | None:
+    member = guild.get_member(discord_id)
+    return member.display_name if member is not None else None
 
 
 def _free_dlc_embed(product: Product) -> discord.Embed:
@@ -266,6 +274,96 @@ async def list_dlcs(request: Request, guild_id: int) -> dict[str, Any]:
     return {
         "guild_id": str(guild_id),
         "items": [await _serialize_dlc(bot, guild, product) for product in dlcs],
+    }
+
+
+@router.get("/guild/{guild_id}/dlcs/{product_id}/access")
+async def dlc_access(request: Request, guild_id: int, product_id: uuid.UUID) -> dict[str, Any]:
+    """Lista somente leitura de quem tem acesso/registro na DLC.
+
+    Varredura de seguranca:
+    - nao altera License, Player, Plan, Product nem cargos;
+    - nao retorna external_reference nem dados sensiveis;
+    - nomes do Discord aparecem so quando o membro esta no cache da guild;
+    - inclui titulares por License e usuarios que possuem o cargo vinculado.
+    """
+    bot = _bot(request)
+    guild = _guild(bot, guild_id)
+    product = await bot.dlc_service.get(product_id)
+    if product is None:
+        raise HTTPException(status_code=404, detail={"error": {"code": "DLC_NOT_FOUND", "message": "DLC nao encontrada."}})
+
+    plan = await bot.dlc_service.get_purchase_plan(product.id)
+    is_free = bot.dlc_service.is_free(product)
+    role_id = product.required_role_id if is_free else (plan.role_id if plan is not None else None)
+    role = guild.get_role(role_id) if role_id is not None else None
+
+    access_by_discord_id: dict[int, dict[str, Any]] = {}
+    async with bot.database.session() as session:
+        rows = (
+            await session.execute(
+                select(License, Player)
+                .join(Player, Player.id == License.player_id)
+                .where(License.product_id == product_id)
+                .order_by(License.activated_at.desc().nullslast(), License.created_at.desc())
+                .limit(200)
+            )
+        ).all()
+
+    for license_row, player in rows:
+        discord_id = int(player.discord_id)
+        access_by_discord_id[discord_id] = {
+            "discord_id": str(discord_id),
+            "discord_name": _member_name(guild, discord_id) or player.discord_username,
+            "player_id": str(player.id),
+            "source": license_row.purchase_source,
+            "status": license_row.status.value,
+            "active": license_row.status == LicenseStatus.ACTIVE,
+            "has_role_now": False,
+            "activated_at": license_row.activated_at.isoformat() if license_row.activated_at else None,
+            "expires_at": license_row.expires_at.isoformat() if license_row.expires_at else None,
+            "revoked_at": license_row.revoked_at.isoformat() if license_row.revoked_at else None,
+        }
+
+    if role is not None:
+        for member in role.members:
+            current = access_by_discord_id.setdefault(
+                int(member.id),
+                {
+                    "discord_id": str(member.id),
+                    "discord_name": member.display_name,
+                    "player_id": None,
+                    "source": "discord_role",
+                    "status": "role_only",
+                    "active": True,
+                    "has_role_now": True,
+                    "activated_at": None,
+                    "expires_at": None,
+                    "revoked_at": None,
+                },
+            )
+            current["has_role_now"] = True
+            current["discord_name"] = member.display_name
+            if current["status"] != LicenseStatus.ACTIVE.value and current["source"] != "discord_role":
+                current["source"] = f"{current['source']} + discord_role"
+
+    holders = sorted(
+        access_by_discord_id.values(),
+        key=lambda item: (not item["active"], str(item.get("discord_name") or item["discord_id"]).casefold()),
+    )
+    return {
+        "guild_id": str(guild_id),
+        "product": await _serialize_dlc(bot, guild, product),
+        "role_id": str(role_id) if role_id is not None else None,
+        "role_name": role.name if role is not None else None,
+        "role_missing": role_id is not None and role is None,
+        "total": len(holders),
+        "items": holders,
+        "security_notes": [
+            "Somente leitura: nao altera licencas, cargos, produtos, planos ou pagamentos.",
+            "Nao retorna external_reference de License nem dados sensiveis do Player.",
+            "Nome do Discord so aparece quando o bot consegue resolver pelo cache da guild ou pelo username salvo no Player.",
+        ],
     }
 
 
