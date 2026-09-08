@@ -4,6 +4,7 @@ import {
   Bell,
   Bot,
   ClipboardList,
+  DollarSign,
   FileText,
   Gift,
   Handshake,
@@ -46,6 +47,7 @@ const nav = [
       { label: "Painéis", to: "/panels", icon: FileText },
       { label: "Sorteios", to: "/giveaways", icon: Gift },
       { label: "DLCs", to: "/dlcs", icon: Package },
+      { label: "Monetização", to: "/monetization", icon: DollarSign },
     ],
   },
   {
@@ -92,6 +94,7 @@ const EVENT_QUERY_KEYS = [
   "system",
   "giveaways",
   "dlcs",
+  "monetization",
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
