@@ -150,6 +150,21 @@ async def _delete_free_dlc_announcements(bot: Any, guild_id: int, product: Produ
         return
 
 
+async def _publish_free_dlc_announcement(bot: Any, guild_id: int, product: Product) -> None:
+    """Reanuncia DLC gratis quando ela volta a ficar ativa.
+
+    Antes de postar, limpa anuncio antigo para evitar duplicidade. Mantem o
+    comportamento da DLC paga separado: paga atualiza painel da loja via Plan.
+    """
+    if product.price_amount or product.deleted_at is not None or not product.is_active:
+        return
+    await _delete_free_dlc_announcements(bot, guild_id, product)
+    announce = getattr(bot.dlc_service, "_announce_free_dlc", None)
+    if announce is None:
+        return
+    await announce(guild_id, product)
+
+
 async def _serialize_dlc(bot: Any, guild: discord.Guild, product: Product) -> dict[str, Any]:
     plan = await bot.dlc_service.get_purchase_plan(product.id)
     is_free = bot.dlc_service.is_free(product)
@@ -236,6 +251,7 @@ async def update_dlc(request: Request, guild_id: int, product_id: uuid.UUID, pay
     product = await bot.dlc_service.get(product_id)
     if product is None:
         raise HTTPException(status_code=404, detail={"error": {"code": "DLC_NOT_FOUND", "message": "DLC nao encontrada."}})
+    is_free = bot.dlc_service.is_free(product)
 
     try:
         if "name" in payload or "description" in payload:
@@ -247,13 +263,13 @@ async def update_dlc(request: Request, guild_id: int, product_id: uuid.UUID, pay
                 description=description,
                 executor=_DASHBOARD_EXECUTOR,
             )
-        if "price_amount" in payload or "price_reais" in payload:
+        if ("price_amount" in payload or "price_reais" in payload) and not is_free:
             product = await bot.dlc_service.update_price(
                 product_id,
                 price_amount=_price_cents(payload),
                 executor=_DASHBOARD_EXECUTOR,
             )
-        if "role_id" in payload and payload.get("role_id") not in (None, ""):
+        if "role_id" in payload and payload.get("role_id") not in (None, "") and not is_free:
             product = await bot.dlc_service.update_role(
                 product_id,
                 role_id=_role_id(guild, payload.get("role_id"), "role_id"),
@@ -268,7 +284,9 @@ async def update_dlc(request: Request, guild_id: int, product_id: uuid.UUID, pay
                 is_active=payload["is_active"],
                 executor=_DASHBOARD_EXECUTOR,
             )
-            if not payload["is_active"]:
+            if payload["is_active"]:
+                await _publish_free_dlc_announcement(bot, guild_id, product)
+            else:
                 await _delete_free_dlc_announcements(bot, guild_id, product)
     except DlcError as exc:
         raise _payload_error(str(exc)) from exc
