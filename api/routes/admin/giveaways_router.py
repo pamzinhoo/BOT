@@ -247,9 +247,12 @@ async def reroll_giveaway(request: Request, guild_id: int, giveaway_id: uuid.UUI
 async def cancel_giveaway(request: Request, guild_id: int, giveaway_id: uuid.UUID) -> dict[str, Any]:
     bot = _bot(request)
     guild = _guild(bot, guild_id)
+    existing = await bot.giveaway_service.get_giveaway(giveaway_id)
+    if existing is None or existing.guild_id != guild_id:
+        raise HTTPException(status_code=404, detail={"error": {"code": "GIVEAWAY_NOT_FOUND", "message": "Sorteio nao encontrado."}})
     giveaway = await bot.giveaway_service.cancel_giveaway(giveaway_id)
-    if giveaway is None or giveaway.guild_id != guild_id:
-        raise HTTPException(status_code=404, detail={"error": {"code": "GIVEAWAY_NOT_FOUND", "message": "Sorteio aberto nao encontrado."}})
+    if giveaway is None:
+        raise HTTPException(status_code=409, detail={"error": {"code": "GIVEAWAY_NOT_OPEN", "message": "So e possivel cancelar sorteio aberto."}})
     channel = guild.get_channel(giveaway.channel_id)
     if giveaway.message_id is not None and isinstance(channel, discord.TextChannel):
         with contextlib.suppress(discord.HTTPException):
