@@ -231,7 +231,7 @@ function DlcCard({ item, roles, draft, busy, accessSelected, onCardAccess, onSho
   const isEditing = Boolean(draft);
   const edit = draft || seedEdit(item);
   const cardClickable = item.kind === "paid" && !item.deleted && !isEditing;
-  const stop = (event: React.MouseEvent) => event.stopPropagation();
+  const stop = (event: { stopPropagation: () => void }) => event.stopPropagation();
   return (
     <div
       className={`entity dlc-card ${cardClickable ? "is-clickable" : ""}`}
