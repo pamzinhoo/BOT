@@ -188,6 +188,50 @@ class StaffRow(BaseModel):
     last_activity_at: str | None = None
 
 
+class StaffTicketItem(BaseModel):
+    id: str
+    label: str
+    channel_id: str
+    channel_name: str | None = None
+    user_id: str
+    user_name: str | None = None
+    category: str
+    status: str
+    created_at: str
+    closed_at: str | None = None
+    first_response_at: str | None = None
+
+
+class StaffEvaluationItem(BaseModel):
+    ticket_id: str
+    rating: int
+    comment: str | None = None
+    rated_by_id: str
+    rated_by_name: str | None = None
+    created_at: str
+
+
+class StaffActivityItem(BaseModel):
+    id: str
+    action: str
+    created_at: str
+    ticket_id: str | None = None
+    ticket_label: str | None = None
+    detail: str | None = None
+
+
+class StaffDetail(BaseModel):
+    id: str
+    discord_user_id: str
+    display_name: str
+    active: bool
+    metrics: dict[str, int | float | str | None]
+    current_tickets: list[StaffTicketItem] = Field(default_factory=list)
+    recent_tickets: list[StaffTicketItem] = Field(default_factory=list)
+    evaluations: list[StaffEvaluationItem] = Field(default_factory=list)
+    history: list[StaffActivityItem] = Field(default_factory=list)
+
+
 class RankingRow(BaseModel):
     staff_id: str
     name: str
