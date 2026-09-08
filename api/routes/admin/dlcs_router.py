@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import re
 import uuid
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
@@ -109,6 +110,44 @@ def _money_label(cents: int | None, currency: str) -> str:
     if not cents:
         return "Gratis"
     return f"{currency} {cents / 100:.2f}".replace(".", ",")
+
+
+async def _delete_free_dlc_announcements(bot: Any, guild_id: int, product: Product) -> None:
+    """Remove anuncios soltos de DLC gratuita quando ela sai do catalogo.
+
+    DLC paga atualiza o painel da loja porque tem Plan. DLC gratis era enviada
+    como mensagem avulsa no canal de anuncio e nao tinha message_id persistido;
+    por isso fazemos uma limpeza conservadora nas ultimas mensagens do bot,
+    procurando pelo nome/slug da DLC removida.
+    """
+    if product.price_amount:
+        return
+    try:
+        settings = await bot.subscription_service.get_settings(guild_id)
+        channel_id = settings.dlc_announcement_channel_id
+        if channel_id is None:
+            return
+        channel = bot.get_channel(channel_id)
+        history = getattr(channel, "history", None)
+        if history is None:
+            return
+        bot_user_id = getattr(getattr(bot, "user", None), "id", None)
+        name = product.name.casefold()
+        slug = product.slug.casefold()
+        async for message in history(limit=100):
+            if bot_user_id is not None and message.author.id != bot_user_id:
+                continue
+            parts = [message.content]
+            for embed in message.embeds:
+                parts.extend([embed.title or "", embed.description or ""])
+            haystack = "\n".join(parts).casefold()
+            if name not in haystack and slug not in haystack:
+                continue
+            with contextlib.suppress(discord.Forbidden, discord.HTTPException):
+                await message.delete()
+    except Exception:
+        # Limpeza de anuncio nao pode impedir a remocao/desativacao da DLC.
+        return
 
 
 async def _serialize_dlc(bot: Any, guild: discord.Guild, product: Product) -> dict[str, Any]:
@@ -229,6 +268,8 @@ async def update_dlc(request: Request, guild_id: int, product_id: uuid.UUID, pay
                 is_active=payload["is_active"],
                 executor=_DASHBOARD_EXECUTOR,
             )
+            if not payload["is_active"]:
+                await _delete_free_dlc_announcements(bot, guild_id, product)
     except DlcError as exc:
         raise _payload_error(str(exc)) from exc
 
@@ -245,4 +286,5 @@ async def disable_dlc(request: Request, guild_id: int, product_id: uuid.UUID) ->
         raise _payload_error(str(exc)) from exc
     if product is None:
         raise HTTPException(status_code=404, detail={"error": {"code": "DLC_NOT_FOUND", "message": "DLC nao encontrada."}})
+    await _delete_free_dlc_announcements(bot, guild_id, product)
     return {"item": await _serialize_dlc(bot, guild, product)}
