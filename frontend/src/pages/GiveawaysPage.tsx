@@ -151,7 +151,7 @@ function GiveawayCard({ item, busy, onAction }: { item: GiveawayItem; busy: bool
     <div className="entity giveaway-card">
       <div className="entity-title-row">
         <strong>{item.title}</strong>
-        <StatusBadge state={isOpen ? "online" : item.status === "CANCELED" ? "offline" : "warning"}>{statusLabel(item.status)}</StatusBadge>
+        <StatusBadge state={isOpen ? "online" : item.status === "CANCELED" ? "offline" : "degraded"}>{statusLabel(item.status)}</StatusBadge>
       </div>
       {item.description && <p>{item.description}</p>}
       <span>Canal: {item.channel_missing ? "canal removido" : `#${item.channel_name || item.channel_id}`}</span>
