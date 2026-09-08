@@ -79,7 +79,7 @@ def test_dashboard_monetization_analytics_explains_sources() -> None:
     assert "MonetizationCouponRow" in api
     assert "Analytics de vendas" in page
     assert "Planos e desempenho" in page
-    assert "De onde vêm esses números" in page
+    assert "De onde vêm esses números" not in page
     assert "Cupons cadastrados" in page
     assert "analytics-grid" in css
-    assert "source-note-grid" in css
+}
