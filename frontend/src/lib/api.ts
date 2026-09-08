@@ -106,6 +106,30 @@ export type DlcItem = {
   deleted_at?: string | null;
 };
 
+export type DlcAccessItem = {
+  discord_id: string;
+  discord_name?: string | null;
+  player_id?: string | null;
+  source: string;
+  status: string;
+  active: boolean;
+  has_role_now: boolean;
+  activated_at?: string | null;
+  expires_at?: string | null;
+  revoked_at?: string | null;
+};
+
+export type DlcAccessPayload = {
+  guild_id: string;
+  product: DlcItem;
+  role_id?: string | null;
+  role_name?: string | null;
+  role_missing: boolean;
+  total: number;
+  items: DlcAccessItem[];
+  security_notes: string[];
+};
+
 export type DlcsPayload = {
   guild_id: string;
   items: DlcItem[];
