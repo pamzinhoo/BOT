@@ -136,7 +136,7 @@ def _serialize_plan(guild: discord.Guild, plan: Plan) -> MonetizationPlanManageR
 def _security_notes() -> list[str]:
     return [
         "Fase 3.2: usa PlanService para criar/editar planos.",
-        "Nao altera PaymentHistory, Subscription, License, Product ou cargos do Discord.",
+        "Nao altera cobrancas, assinaturas, licencas, produtos ou cargos do Discord.",
         "Nao apaga plano fisicamente; ativar/desativar preserva historico financeiro.",
         "Cargo e precos sao validados antes de salvar.",
     ]
@@ -231,7 +231,7 @@ async def create_plan(request: Request, guild_id: int, payload: MonetizationPlan
 
 @router.patch("/guild/{guild_id}/monetization/plans/{plan_id}", response_model=MonetizationPlanMutationResponse)
 async def update_plan(request: Request, guild_id: int, plan_id: uuid.UUID, payload: MonetizationPlanMutationRequest) -> MonetizationPlanMutationResponse:
-    """Edita plano existente sem tocar em pagamentos, assinaturas ou licencas."""
+    """Edita plano existente sem tocar em cobrancas, assinaturas ou licencas."""
     bot = _bot(request)
     guild = _guild(bot, guild_id)
     existing = await _get_owned_plan(bot, guild_id, plan_id)
