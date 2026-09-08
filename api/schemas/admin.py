@@ -298,6 +298,34 @@ class MonetizationCouponRow(BaseModel):
     source_note: str
 
 
+class MonetizationPlanAccessItem(BaseModel):
+    discord_id: str
+    discord_name: str | None = None
+    source: str
+    has_role_now: bool = False
+    subscription_status: str | None = None
+    billing_cycle: str | None = None
+    provider: str | None = None
+    approved_payments: int = 0
+    pending_payments: int = 0
+    failed_payments: int = 0
+    approved_revenue_label: str
+    last_payment_at: str | None = None
+    started_at: str | None = None
+    current_period_end: str | None = None
+
+
+class MonetizationPlanAccessResponse(BaseModel):
+    guild_id: str
+    plan: MonetizationPlanRow
+    role_id: str | None = None
+    role_name: str | None = None
+    role_missing: bool = False
+    total: int
+    items: list[MonetizationPlanAccessItem] = Field(default_factory=list)
+    security_notes: list[str] = Field(default_factory=list)
+
+
 class MonetizationSummaryResponse(BaseModel):
     guild_id: str
     generated_at: str
