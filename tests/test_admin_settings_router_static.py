@@ -80,10 +80,12 @@ def test_dashboard_events_router_is_registered_before_legacy_router() -> None:
     assert "events_router" in source
     assert "settings_router" in source
     assert "giveaways_router" in source
+    assert "dlcs_router" in source
     assert "legacy_router" in source
     assert source.index("router.include_router(settings_router)") < source.index("router.include_router(events_router)")
     assert source.index("router.include_router(events_router)") < source.index("router.include_router(giveaways_router)")
-    assert source.index("router.include_router(giveaways_router)") < source.index("router.include_router(legacy_router)")
+    assert source.index("router.include_router(giveaways_router)") < source.index("router.include_router(dlcs_router)")
+    assert source.index("router.include_router(dlcs_router)") < source.index("router.include_router(legacy_router)")
 
 
 def test_dashboard_events_router_pushes_invalidation_events() -> None:
@@ -119,3 +121,28 @@ def test_dashboard_giveaways_use_existing_service_and_discord_view() -> None:
     assert "role-checkbox" in page
     assert "toggleAllowedRole" in page
     assert "role-checkbox-grid" in css
+
+
+def test_dashboard_dlcs_use_existing_service_and_safe_actor() -> None:
+    source = Path("api/routes/admin/dlcs_router.py").read_text(encoding="utf-8")
+    app = Path("frontend/src/App.tsx").read_text(encoding="utf-8")
+    shell = Path("frontend/src/components/AppShell.tsx").read_text(encoding="utf-8")
+    page = Path("frontend/src/pages/DlcsPage.tsx").read_text(encoding="utf-8")
+    css = Path("frontend/src/dashboard-overrides.css").read_text(encoding="utf-8")
+
+    assert "bot.dlc_service.create_free" in source
+    assert "bot.dlc_service.create_paid" in source
+    assert "bot.dlc_service.update_info" in source
+    assert "bot.dlc_service.update_price" in source
+    assert "bot.dlc_service.update_role" in source
+    assert "bot.dlc_service.toggle_active" in source
+    assert "bot.dlc_service.disable" in source
+    assert "_DASHBOARD_EXECUTOR" in source
+    assert "id = 0" in source
+    assert "Painel web" in source
+    assert "_price_cents" in source
+    assert "role_missing" in source
+    assert '<Route path="/dlcs" element={<DlcsPage />} />' in app
+    assert '{ label: "DLCs", to: "/dlcs"' in shell
+    assert "DLC grátis usa o cargo Verificado" in page
+    assert "dlc-grid" in css
