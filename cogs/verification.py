@@ -8,6 +8,7 @@ from discord.ext import commands, tasks
 
 from core.bot import LimerenceBot
 from core.logger import get_logger
+from database.models.audit_log import AuditLogCategory
 from utils.checks import is_staff
 from views.verification_view import send_verification_prompt
 
@@ -48,8 +49,53 @@ class VerificationCog(commands.Cog):
                 )
                 return
             if prompt is None:
+                await self._grant_verified_role_when_disabled(member)
                 return
             await send_verification_prompt(self.bot, member, prompt)
+
+    async def _grant_verified_role_when_disabled(self, member: discord.Member) -> None:
+        """Fallback do join quando o CAPTCHA esta desligado.
+
+        start_verification devolve None tanto quando a verificacao esta off
+        quanto quando nao deve iniciar sessao. Antes esse None encerrava o
+        fluxo e o membro ficava sem cargo. Se a verificacao estiver desativada,
+        aplicamos somente o cargo de verificado configurado, sem criar sessao,
+        sem DM e sem remover/adicionar outros cargos.
+        """
+        settings = await self.bot.verification_service.get_settings(member.guild.id)
+        if settings.enabled or settings.verified_role_id is None:
+            return
+
+        role = member.guild.get_role(settings.verified_role_id)
+        if role is None:
+            logger.warning(
+                "Cargo de verificado configurado nao existe na guild %s: %s.",
+                member.guild.id,
+                settings.verified_role_id,
+            )
+            return
+        if role in member.roles:
+            return
+
+        try:
+            await member.add_roles(role, reason="Verificação desativada: cargo automático de entrada")
+        except discord.HTTPException:
+            logger.warning(
+                "Falha ao aplicar cargo automatico de verificado na guild %s.", member.guild.id
+            )
+            return
+
+        try:
+            await self.bot.audit_log_service.record(
+                guild_id=member.guild.id,
+                category=AuditLogCategory.VERIFICATION,
+                action="Cargo de verificado aplicado automaticamente",
+                target_id=member.id,
+                target_name=str(member),
+                details={"motivo": "verificacao_desativada"},
+            )
+        except Exception:
+            logger.exception("Falha ao auditar cargo automatico de verificado.")
 
     @tasks.loop(minutes=_SWEEP_INTERVAL_MINUTES)
     async def sweep_expired_verifications(self) -> None:
