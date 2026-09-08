@@ -236,6 +236,19 @@ def test_dashboard_ticket_actions_use_existing_ticket_services() -> None:
     assert "ticket-actions-panel" in css
 
 
+def test_dashboard_ticket_actions_refresh_discord_ticket_embed() -> None:
+    source = Path("api/routes/admin/ticket_actions_router.py").read_text(encoding="utf-8")
+
+    assert "def _has_ticket_controls" in source
+    assert "async def _refresh_ticket_message" in source
+    assert "ticket_embed" in source
+    assert "TicketActionsView" in source
+    assert "channel.history(limit=25)" in source
+    assert "message.edit(embed=embed, view=view)" in source
+    assert "Assumido por" in source
+    assert "await _refresh_ticket_message(bot, guild, channel, updated)" in source
+
+
 def test_dashboard_tickets_refresh_without_tab_switching() -> None:
     events = Path("api/routes/admin/events_router.py").read_text(encoding="utf-8")
     shell = Path("frontend/src/components/AppShell.tsx").read_text(encoding="utf-8")
