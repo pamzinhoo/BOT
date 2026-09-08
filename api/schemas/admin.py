@@ -236,6 +236,7 @@ class MonetizationMetric(BaseModel):
     label: str
     value: int | float | str
     hint: str | None = None
+    source: str | None = None
 
 
 class MonetizationAlert(BaseModel):
@@ -251,10 +252,50 @@ class MonetizationRecentPayment(BaseModel):
     plan_name: str | None = None
     provider: str
     amount_label: str
+    amount_cents: int
     status: str
     created_at: str
     paid_at: str | None = None
     expires_at: str | None = None
+
+
+class MonetizationPlanRow(BaseModel):
+    id: str
+    name: str
+    active: bool
+    role_id: str | None = None
+    role_name: str | None = None
+    role_missing: bool = False
+    price_monthly_label: str | None = None
+    price_yearly_label: str | None = None
+    price_one_time_label: str | None = None
+    approved_sales: int = 0
+    approved_revenue_label: str
+    approved_revenue_cents: int = 0
+    pending_payments: int = 0
+    failed_payments: int = 0
+    active_subscriptions: int = 0
+    average_ticket_label: str
+    last_payment_at: str | None = None
+    source_note: str
+
+
+class MonetizationStatusBreakdown(BaseModel):
+    status: str
+    count: int
+    amount_label: str
+    amount_cents: int
+
+
+class MonetizationCouponRow(BaseModel):
+    id: str
+    code: str
+    active: bool
+    deleted: bool
+    discount: str
+    starts_at: str | None = None
+    expires_at: str | None = None
+    source_note: str
 
 
 class MonetizationSummaryResponse(BaseModel):
@@ -264,6 +305,11 @@ class MonetizationSummaryResponse(BaseModel):
     metrics: list[MonetizationMetric] = Field(default_factory=list)
     alerts: list[MonetizationAlert] = Field(default_factory=list)
     recent_payments: list[MonetizationRecentPayment] = Field(default_factory=list)
+    plans: list[MonetizationPlanRow] = Field(default_factory=list)
+    payment_status_breakdown: list[MonetizationStatusBreakdown] = Field(default_factory=list)
+    coupons: list[MonetizationCouponRow] = Field(default_factory=list)
+    analytics: dict[str, Any] = Field(default_factory=dict)
+    source_notes: list[str] = Field(default_factory=list)
     security_notes: list[str] = Field(default_factory=list)
 
 
