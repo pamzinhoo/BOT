@@ -21,12 +21,16 @@ logger = get_logger("role_sync_service")
 
 
 class RoleSyncService:
-    """Reage a eventos de License (via EventBus) concedendo/removendo cargo
-    Discord — a metade "bot" do fluxo da Fase 5: "Backend cria licenca ->
-    Evento interno -> Bot concede cargo". Nunca decide posse por conta
-    propria (isso e sempre LicenseService); so traduz o que o backend ja
-    decidiu em uma acao no Discord, em TODOS os servidores onde algum Plano
-    vincula esse Product a um cargo (PlanRepository.list_by_product)."""
+    """Reage a eventos de License (via EventBus) concedendo cargo Discord.
+
+    IMPORTANTE: este servico ficou propositalmente nao destrutivo tambem. O
+    problema real visto em producao foi cargo manual/comunitario ("Dublador")
+    sendo reutilizado por plano/DLC e removido em massa quando eventos de
+    licenca revogada/expirada eram reprocessados no boot/sincronizacao. Por
+    seguranca, evento de revoke/expire agora NAO remove cargo automaticamente.
+    A remocao de cargos de planos deve ser uma acao explicita e auditavel,
+    feita por uma tela/comando proprio, nao por rotina automatica.
+    """
 
     def __init__(self, database: Database, bot: LimerenceBot) -> None:
         self._database = database
@@ -38,6 +42,18 @@ class RoleSyncService:
 
     async def handle_license_event(self, payload: LicenseEventPayload) -> None:
         grant = payload.event_type in LICENSE_GRANT_EVENTS
+        if not grant:
+            logger.warning(
+                "RoleSync nao destrutivo bloqueou evento %s da license %s "
+                "(product_id=%s, player_id=%s). Nenhum cargo sera removido "
+                "automaticamente; remocao deve ser acao explicita.",
+                payload.event_type,
+                payload.license_id,
+                payload.product_id,
+                payload.player_id,
+            )
+            return
+
         async with self._database.session() as session:
             player = await PlayerRepository(session).get_by_id(payload.player_id)
             plans = await PlanRepository(session).list_by_product(payload.product_id)
@@ -46,10 +62,7 @@ class RoleSyncService:
 
         for plan in plans:
             try:
-                if grant:
-                    await self._grant(plan, player.discord_id)
-                else:
-                    await self._revoke(plan, player.discord_id)
+                await self._grant(plan, player.discord_id)
             except Exception:
                 logger.exception(
                     "Falha ao sincronizar cargo do plano %s (guild %s) para discord_id %s.",
@@ -62,16 +75,10 @@ class RoleSyncService:
         """Login com Discord concluido no launcher -> concede o cargo de
         verificado (GuildSettings.verified_role_id) em toda guild onde esse
         discord_id ja for membro e o cargo estiver configurado (/config ->
-        Cargos). Se o membro ainda nao estiver na guild, simplesmente nao
-        concede nada agora — nao ha reconciliacao periodica pra isso (ao
-        contrario de licenca), entao so funciona se o dono do Discord ja
-        tiver entrado no servidor antes ou depois de logar.
+        Cargos).
 
-        IMPORTANTE: este metodo so CONCEDE, nunca revoga. A checagem de "esse
-        cargo ainda esta ativo" e' feita ao vivo por `is_currently_verified`
-        (ver backend GET /player/verified), nao por reconciliacao — de
-        proposito, porque License nao e' a fonte de verdade pra este cargo
-        especifico (ver docstring de is_currently_verified)."""
+        IMPORTANTE: este metodo so CONCEDE, nunca revoga.
+        """
         async with self._database.session() as session:
             guild_settings_list = await GuildSettingsRepository(session).list_with_verified_role()
 
@@ -104,23 +111,8 @@ class RoleSyncService:
     async def is_currently_verified(self, discord_id: int) -> bool:
         """Checagem AO VIVO (sem cache, sem banco intermediario) se
         `discord_id` tem, agora mesmo, o cargo de verificado em QUALQUER
-        guild configurada. Chamada por
-        backend/providers/internal_events_client.py::check_player_verified,
-        que o backend expoe como GET /player/verified pro jogo consultar.
-
-        Por que nao usar License/reconciliacao aqui (ao contrario do resto
-        deste arquivo): "Verificado" nunca foi vendido/concedido como
-        entitlement — e' so uma confirmacao de "esta pessoa logou com
-        Discord e tem esse cargo". Se modelassemos como License permanente,
-        a reconciliacao (fonte de verdade = License) devolveria o cargo
-        sozinha sempre que alguem o removesse manualmente — exatamente o
-        oposto do que faz sentido aqui. Por isso a fonte de verdade pra este
-        caso especifico e' o proprio Discord, consultado na hora, sem
-        estado intermediario pra ficar dessincronizado.
-
-        Retorna False (nao True) se: a guild nao estiver em cache do bot, o
-        cargo nao existir mais, ou o membro nao for encontrado — fail-closed,
-        igual ao restante do sistema de autorizacao deste projeto."""
+        guild configurada.
+        """
         async with self._database.session() as session:
             guild_settings_list = await GuildSettingsRepository(session).list_with_verified_role()
 
@@ -131,14 +123,7 @@ class RoleSyncService:
             role = guild.get_role(guild_settings.verified_role_id)
             if role is None:
                 continue
-            member = guild.get_member(discord_id)  # so cache local, de proposito:
-            # esta rota pode ser chamada com frequencia pelo jogo (toda vez
-            # que a tela de selecao de genero abre) — um fetch_member (chamada
-            # de API) por consulta escalaria mal e esbarraria em rate limit
-            # do Discord. O cache de membros do discord.py e' atualizado em
-            # tempo real por eventos de gateway (on_member_update ja mantem
-            # isso quente), entao `get_member` aqui reflete remocao de cargo
-            # em questao de segundos, nao precisa de fetch sincrono.
+            member = guild.get_member(discord_id)
             if member is not None and role in member.roles:
                 return True
         return False
@@ -168,17 +153,19 @@ class RoleSyncService:
         await self._audit(plan, discord_id, action="Cargo concedido (evento de licenca)")
 
     async def _revoke(self, plan: Plan, discord_id: int) -> None:
-        guild = self._bot.get_guild(plan.guild_id)
-        if guild is None or plan.role_id is None:
-            return
-        role = guild.get_role(plan.role_id)
-        if role is None:
-            return
-        member = await self._get_member(guild, discord_id)
-        if member is None or role not in member.roles:
-            return
-        await member.remove_roles(role, reason="Sincronizacao de licenca (backend)")
-        await self._audit(plan, discord_id, action="Cargo removido (evento de licenca)")
+        """Bloqueio defensivo para chamadas antigas/diretas.
+
+        Mesmo que algum ponto legado chame `_revoke` diretamente, este metodo
+        nao remove cargos. Isso evita nova perda em massa de cargos manuais
+        enquanto nao existir uma tela/comando explicito de revogacao segura.
+        """
+        logger.warning(
+            "RoleSync nao destrutivo ignorou remocao direta do cargo do plano %s "
+            "para discord_id %s na guild %s.",
+            plan.id,
+            discord_id,
+            plan.guild_id,
+        )
 
     async def _audit(self, plan: Plan, discord_id: int, *, action: str) -> None:
         await self._bot.audit_log_service.record(
