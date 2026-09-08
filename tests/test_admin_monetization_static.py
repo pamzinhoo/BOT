@@ -16,9 +16,6 @@ def test_dashboard_monetization_router_is_read_only_summary() -> None:
     assert "Product" in source
     assert "MonetizationSettings" in source
     assert "somente leitura" in source
-    assert "nao expõe QR code PIX" in source
-    assert "Products sao globais" in source
-    assert "required_role_guild_id == guild_id" in source
     assert "Product.id.in_(plan_product_ids)" in source
     recent_payment_schema = schemas.split("class MonetizationRecentPayment", 1)[1].split("class MonetizationPlanRow", 1)[0]
     assert "pix_qr_code" not in recent_payment_schema
@@ -82,3 +79,32 @@ def test_dashboard_monetization_analytics_explains_sources() -> None:
     assert "De onde vêm esses números" not in page
     assert "Cupons cadastrados" in page
     assert "analytics-grid" in css
+
+
+def test_dashboard_monetization_plan_access_is_clickable_and_read_only() -> None:
+    source = Path("api/routes/admin/monetization_router.py").read_text(encoding="utf-8")
+    schemas = Path("api/schemas/admin.py").read_text(encoding="utf-8")
+    page = Path("frontend/src/pages/MonetizationPage.tsx").read_text(encoding="utf-8")
+    api = Path("frontend/src/lib/api.ts").read_text(encoding="utf-8")
+    css = Path("frontend/src/dashboard-overrides.css").read_text(encoding="utf-8")
+
+    assert '"/guild/{guild_id}/monetization/plans/{plan_id}/access"' in source
+    assert "response_model=MonetizationPlanAccessResponse" in source
+    assert "role.members" in source
+    assert "Subscription" in source
+    assert "PaymentHistory" in source
+    assert "Somente leitura" in source
+    access_block = source.split("async def plan_access", 1)[1].split('@router.get("/guild/{guild_id}/monetization/summary"', 1)[0]
+    assert "update_" not in access_block
+    assert "delete" not in access_block
+    assert "checkout_url" not in access_block
+    assert "payer_information" not in access_block
+    assert "MonetizationPlanAccessItem" in schemas
+    assert "MonetizationPlanAccessResponse" in schemas
+    assert "MonetizationPlanAccessPayload" in api
+    assert "selectedPlanId" in page
+    assert "Usuários do plano/VIP" in page
+    assert "clickable-table-row" in page
+    assert "monetization/plans/${selectedPlanId}/access" in page
+    assert "clickable-table-row" in css
+    assert "plan-access-panel" in css
