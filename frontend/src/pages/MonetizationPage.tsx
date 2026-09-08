@@ -178,7 +178,8 @@ export function MonetizationPage() {
         <div className="analytics-grid"><div className="analytics-card"><BarChart3 size={18} /><span>Plano que mais vendeu</span><strong>{analyticsText(data.analytics.top_seller_plan)}</strong></div><div className="analytics-card"><BarChart3 size={18} /><span>Plano que mais faturou</span><strong>{analyticsText(data.analytics.top_revenue_plan)}</strong></div><div className="analytics-card"><BarChart3 size={18} /><span>Vendas aprovadas</span><strong>{String(data.analytics.approved_sales_total ?? 0)}</strong></div></div>
       </Section>
 
-      <Section title="Gerenciar planos" description="Crie, edite, ative ou desative planos usando o PlanService. Não apaga histórico financeiro." action={<button className="button primary" onClick={() => setCreatePlanOpen((value) => !value)}><Plus size={16} />Novo plano</button>}>
+      <Section title="Gerenciar planos" description="Crie, edite, ative ou desative planos usando o PlanService. Não apaga histórico financeiro.">
+        <div className="form-actions"><button className="button primary" onClick={() => setCreatePlanOpen((value) => !value)}><Plus size={16} />Novo plano</button></div>
         {createPlanOpen && <PlanForm draft={newPlan} roles={options.data?.roles || []} submitLabel="Criar plano" busy={busy} onChange={(patch) => setNewPlan((current) => ({ ...current, ...patch }))} onCancel={() => { setNewPlan(EMPTY_PLAN_DRAFT); setCreatePlanOpen(false); }} onSubmit={() => createPlan.mutate()} />}
         {planManage.isLoading ? <LoadingState message="Carregando planos..." /> : planManage.error ? <ErrorState message={(planManage.error as Error).message} /> : planManage.data?.items.length ? (
           <div className="entity-grid plan-manage-grid">{planManage.data.items.map((plan) => {
