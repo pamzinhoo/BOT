@@ -1,8 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, BarChart3, ShieldCheck } from "lucide-react";
+import { AlertTriangle, BarChart3, ShieldCheck, Users } from "lucide-react";
+import { useState } from "react";
 import { useShell } from "../components/AppShell";
 import { EmptyState, ErrorState, LoadingState, PageHeader, Section, StatusBadge } from "../components/Ui";
-import { api, MonetizationSummary } from "../lib/api";
+import { api, MonetizationPlanAccessPayload, MonetizationSummary } from "../lib/api";
 
 function fmtDate(value?: string | null) {
   return value ? new Date(value).toLocaleString("pt-BR") : "Sem dados";
@@ -21,10 +22,43 @@ function paymentStatusLabel(value: string) {
   }[value] || value;
 }
 
+function subscriptionStatusLabel(value?: string | null) {
+  if (!value) return "Sem assinatura";
+  return {
+    pending: "Pendente",
+    active: "Ativa",
+    canceled: "Cancelada",
+    expired: "Expirada",
+  }[value] || value;
+}
+
+function cycleLabel(value?: string | null) {
+  if (!value) return "—";
+  return {
+    monthly: "Mensal",
+    yearly: "Anual",
+    one_time: "Único",
+  }[value] || value;
+}
+
+function accessSourceLabel(value: string) {
+  return value
+    .replace("assinatura", "Assinatura")
+    .replace("pagamento", "Pagamento")
+    .replace("cargo_atual", "Cargo atual")
+    .replace("registro", "Registro");
+}
+
 function paymentState(value: string) {
   if (value === "approved") return "online";
   if (value === "pending" || value === "processing") return "degraded";
   return "offline";
+}
+
+function subState(value?: string | null) {
+  if (value === "active") return "online";
+  if (value === "pending") return "degraded";
+  return "neutral";
 }
 
 function alertState(value: string) {
@@ -47,10 +81,17 @@ function analyticsText(value: unknown) {
 
 export function MonetizationPage() {
   const { guild, readiness, guildsError } = useShell();
+  const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const { data, isLoading, error } = useQuery({
     queryKey: ["monetization", guild?.id],
     queryFn: () => api<MonetizationSummary>(`/guild/${guild!.id}/monetization/summary`),
     enabled: Boolean(guild),
+  });
+  const planAccess = useQuery({
+    queryKey: ["monetization-plan-access", guild?.id, selectedPlanId],
+    queryFn: () => api<MonetizationPlanAccessPayload>(`/guild/${guild!.id}/monetization/plans/${selectedPlanId}/access`),
+    enabled: Boolean(guild && selectedPlanId),
+    refetchInterval: 20_000,
   });
 
   if (guildsError) return <ErrorState message={guildsError.message} />;
@@ -101,13 +142,18 @@ export function MonetizationPage() {
         </div>
       </Section>
 
-      <Section title="Planos e desempenho" description="Vendas, receita, assinatura ativa e pendência por plano.">
+      <Section title="Planos e desempenho" description="Clique em um plano para ver quais usuários têm o VIP/cargo, assinatura ou pagamento registrado.">
         {data.plans.length === 0 ? <EmptyState message="Nenhum plano cadastrado." /> : (
           <table className="data-table monetization-table">
             <thead><tr><th>Plano</th><th>Preço</th><th>Status</th><th>Vendas</th><th>Receita</th><th>Ticket médio</th><th>Assinaturas</th><th>Pendentes</th><th>Falhas</th></tr></thead>
             <tbody>
               {data.plans.map((plan) => (
-                <tr key={plan.id} title={plan.source_note}>
+                <tr
+                  key={plan.id}
+                  title="Clique para ver usuários deste plano/VIP"
+                  className={`clickable-table-row ${selectedPlanId === plan.id ? "is-selected" : ""}`}
+                  onClick={() => setSelectedPlanId((current) => current === plan.id ? null : plan.id)}
+                >
                   <td>
                     <strong>{plan.name}</strong>
                     <small>{plan.role_name ? `Cargo: ${plan.role_name}` : plan.role_id ? "Cargo ausente" : "Sem cargo"}</small>
@@ -126,6 +172,45 @@ export function MonetizationPage() {
           </table>
         )}
       </Section>
+
+      {selectedPlanId && (
+        <Section title="Usuários do plano/VIP" description="Somente leitura: cruza assinatura, pagamento registrado e cargo atual no Discord.">
+          {planAccess.isLoading ? <LoadingState message="Carregando usuários do plano..." /> : planAccess.error ? <ErrorState message={(planAccess.error as Error).message} /> : planAccess.data ? (
+            <div className="plan-access-panel">
+              <div className="entity-title-row">
+                <div>
+                  <strong>{planAccess.data.plan.name}</strong>
+                  <small>{planAccess.data.total} usuário(s) encontrado(s) · Cargo: {planAccess.data.role_name || planAccess.data.role_id || "sem cargo vinculado"}</small>
+                </div>
+                {planAccess.data.role_missing && <StatusBadge state="offline">Cargo ausente</StatusBadge>}
+              </div>
+              {planAccess.data.items.length === 0 ? <EmptyState message="Nenhum usuário com assinatura, pagamento ou cargo deste plano." /> : (
+                <table className="data-table">
+                  <thead><tr><th>Usuário</th><th>ID Discord</th><th>Origem</th><th>Assinatura</th><th>Ciclo</th><th>Cargo agora</th><th>Aprovados</th><th>Receita</th><th>Último pagamento</th></tr></thead>
+                  <tbody>
+                    {planAccess.data.items.map((user) => (
+                      <tr key={user.discord_id}>
+                        <td><strong>{user.discord_name || "Nome não resolvido"}</strong><small>{user.provider || "Sem provider"}</small></td>
+                        <td className="mono">{user.discord_id}</td>
+                        <td>{accessSourceLabel(user.source)}</td>
+                        <td><StatusBadge state={subState(user.subscription_status)}>{subscriptionStatusLabel(user.subscription_status)}</StatusBadge></td>
+                        <td>{cycleLabel(user.billing_cycle)}</td>
+                        <td>{user.has_role_now ? "Sim" : "Não"}</td>
+                        <td>{user.approved_payments}</td>
+                        <td>{user.approved_revenue_label}</td>
+                        <td>{fmtDate(user.last_payment_at)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+              <div className="security-check-grid">
+                {planAccess.data.security_notes.map((note) => <span className="role-chip" key={note}>{note}</span>)}
+              </div>
+            </div>
+          ) : <EmptyState message="Selecione um plano para ver os usuários." />}
+        </Section>
+      )}
 
       <Section title="Pagamentos por status" description="Distribuição dos registros em payment_history.">
         {data.payment_status_breakdown.length === 0 ? <EmptyState message="Nenhum pagamento registrado." /> : (
