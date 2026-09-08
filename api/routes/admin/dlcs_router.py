@@ -283,7 +283,7 @@ async def dlc_access(request: Request, guild_id: int, product_id: uuid.UUID) -> 
 
     Varredura de seguranca:
     - nao altera License, Player, Plan, Product nem cargos;
-    - nao retorna external_reference nem dados sensiveis;
+    - nao retorna dados internos sensiveis;
     - nomes do Discord aparecem so quando o membro esta no cache da guild;
     - inclui titulares por License e usuarios que possuem o cargo vinculado.
     """
@@ -361,7 +361,7 @@ async def dlc_access(request: Request, guild_id: int, product_id: uuid.UUID) -> 
         "items": holders,
         "security_notes": [
             "Somente leitura: nao altera licencas, cargos, produtos, planos ou pagamentos.",
-            "Nao retorna external_reference de License nem dados sensiveis do Player.",
+            "Nao retorna dados internos de License nem informacoes sensiveis do Player.",
             "Nome do Discord so aparece quando o bot consegue resolver pelo cache da guild ou pelo username salvo no Player.",
         ],
     }
