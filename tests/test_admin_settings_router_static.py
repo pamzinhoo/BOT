@@ -280,10 +280,12 @@ def test_dashboard_staff_profile_uses_panel_as_ticket_reason() -> None:
     assert "TicketPanel" in source
     assert "_ticket_category_label" in source
     assert "category=\"outro\"" in source
-    assert "quem explica o motivo para a staff e o painel" in source
+    assert "motivo real vem do" in source
+    assert "Sem motivo vinculado" in source
+    assert "_clean_panel_reason" in source
     assert "TicketPanel.name" in source
     assert "outerjoin(TicketPanel" in source
-    assert "panel_name or ticket.category.value" in source
+    assert "return _clean_panel_reason(panel_name)" in source
 
 
 def test_dashboard_tickets_refresh_without_tab_switching() -> None:
