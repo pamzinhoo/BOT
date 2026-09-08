@@ -5,11 +5,14 @@ import { useShell } from "../components/AppShell";
 import { EmptyState, ErrorState, LoadingState, PageHeader, Section, StatusBadge } from "../components/Ui";
 import { api, DiscordOptions, GiveawayItem, GiveawayMutationResponse, GiveawaysPayload } from "../lib/api";
 
+type DurationUnit = "minutes" | "hours" | "days";
+
 type Draft = {
   title: string;
   description: string;
   channel_id: string;
-  duration_minutes: number;
+  duration_amount: number;
+  duration_unit: DurationUnit;
   winners_count: number;
   allowed_role_ids: string[];
   prize_type: "CUSTOM" | "ROLE";
@@ -21,7 +24,8 @@ const DEFAULT_DRAFT: Draft = {
   title: "",
   description: "",
   channel_id: "",
-  duration_minutes: 60,
+  duration_amount: 1,
+  duration_unit: "hours",
   winners_count: 1,
   allowed_role_ids: [],
   prize_type: "CUSTOM",
@@ -46,6 +50,15 @@ export function GiveawaysPage() {
     enabled: Boolean(guild),
     refetchInterval: 60_000,
   });
+  const roles = options.data?.roles || [];
+  const toggleAllowedRole = (roleId: string) => {
+    setDraft((current) => ({
+      ...current,
+      allowed_role_ids: current.allowed_role_ids.includes(roleId)
+        ? current.allowed_role_ids.filter((id) => id !== roleId)
+        : [...current.allowed_role_ids, roleId],
+    }));
+  };
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["giveaways", guild?.id] });
     queryClient.invalidateQueries({ queryKey: ["audit", guild?.id] });
@@ -89,7 +102,7 @@ export function GiveawaysPage() {
         <Metric title="Cancelados" value={summary.canceled} />
       </div>
       {createOpen && (
-        <Section title="Criar sorteio" description="O painel vai publicar a mensagem no Discord e registrar auditoria como Dashboard local.">
+        <Section title="Criar sorteio" description="O painel vai publicar a mensagem no Discord e registrar auditoria como Painel web.">
           <div className="dashboard-form">
             <label>Título<input value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} maxLength={256} /></label>
             <label>Descrição<textarea value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} rows={3} maxLength={500} /></label>
@@ -100,13 +113,29 @@ export function GiveawaysPage() {
               ))}
             </select></label>
             <div className="form-row">
-              <label>Duração<input type="number" min="1" value={draft.duration_minutes} onChange={(event) => setDraft({ ...draft, duration_minutes: Number(event.target.value) })} /></label>
-              <label>Unidade<select value="minutes" disabled><option value="minutes">minutos</option></select></label>
+              <label>Duração<input type="number" min="1" value={draft.duration_amount} onChange={(event) => setDraft({ ...draft, duration_amount: Number(event.target.value) })} /></label>
+              <label>Unidade<select value={draft.duration_unit} onChange={(event) => setDraft({ ...draft, duration_unit: event.target.value as DurationUnit })}>
+                <option value="minutes">minutos</option>
+                <option value="hours">horas</option>
+                <option value="days">dias</option>
+              </select></label>
               <label>Vencedores<input type="number" min="1" max="50" value={draft.winners_count} onChange={(event) => setDraft({ ...draft, winners_count: Number(event.target.value) })} /></label>
             </div>
-            <label>Cargos permitidos<select multiple value={draft.allowed_role_ids} onChange={(event) => setDraft({ ...draft, allowed_role_ids: Array.from(event.target.selectedOptions).map((option) => option.value) })}>
-              {options.data?.roles.map((role) => <option value={role.id} key={role.id}>{role.name}</option>)}
-            </select><small>Vazio = todo mundo pode participar.</small></label>
+            <div className="role-picker-field">
+              <div className="field-label">Cargos permitidos</div>
+              <div className="role-picker-actions">
+                <button type="button" className="button ghost" onClick={() => setDraft({ ...draft, allowed_role_ids: [] })}>Todo mundo</button>
+                <small>{draft.allowed_role_ids.length === 0 ? "Sem restrição de cargo." : `${draft.allowed_role_ids.length} cargo(s) selecionado(s).`}</small>
+              </div>
+              <div className="role-checkbox-grid">
+                {roles.map((role) => (
+                  <label className="role-checkbox" key={role.id}>
+                    <input type="checkbox" checked={draft.allowed_role_ids.includes(role.id)} onChange={() => toggleAllowedRole(role.id)} />
+                    <span>{role.name}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
             <label>Tipo de prêmio<select value={draft.prize_type} onChange={(event) => setDraft({ ...draft, prize_type: event.target.value as Draft["prize_type"] })}>
               <option value="CUSTOM">Texto personalizado</option>
               <option value="ROLE">Cargo</option>
@@ -114,7 +143,7 @@ export function GiveawaysPage() {
             {draft.prize_type === "ROLE" ? (
               <label>Cargo-prêmio<select value={draft.prize_role_id} onChange={(event) => setDraft({ ...draft, prize_role_id: event.target.value })}>
                 <option value="">Escolha o cargo</option>
-                {options.data?.roles.map((role) => <option value={role.id} key={role.id}>{role.name}</option>)}
+                {roles.map((role) => <option value={role.id} key={role.id}>{role.name}</option>)}
               </select></label>
             ) : (
               <label>Prêmio<input value={draft.prize_text} onChange={(event) => setDraft({ ...draft, prize_text: event.target.value })} maxLength={500} placeholder="Ex: 1 mês de VIP" /></label>
