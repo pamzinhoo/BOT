@@ -101,7 +101,7 @@ export function MonetizationPage() {
         </div>
       </Section>
 
-      <Section title="Planos e desempenho" description="De onde vem cada venda, receita, assinatura ativa e pendência por plano.">
+      <Section title="Planos e desempenho" description="Vendas, receita, assinatura ativa e pendência por plano.">
         {data.plans.length === 0 ? <EmptyState message="Nenhum plano cadastrado." /> : (
           <table className="data-table monetization-table">
             <thead><tr><th>Plano</th><th>Preço</th><th>Status</th><th>Vendas</th><th>Receita</th><th>Ticket médio</th><th>Assinaturas</th><th>Pendentes</th><th>Falhas</th></tr></thead>
@@ -127,12 +127,6 @@ export function MonetizationPage() {
         )}
       </Section>
 
-      <Section title="De onde vêm esses números" description="Transparência para diferenciar venda real, teste, aprovação manual e registro antigo.">
-        <div className="source-note-grid">
-          {data.source_notes.map((note) => <div className="source-note" key={note}>{note}</div>)}
-        </div>
-      </Section>
-
       <Section title="Pagamentos por status" description="Distribuição dos registros em payment_history.">
         {data.payment_status_breakdown.length === 0 ? <EmptyState message="Nenhum pagamento registrado." /> : (
           <table className="data-table">
@@ -150,7 +144,7 @@ export function MonetizationPage() {
         )}
       </Section>
 
-      <Section title="Cupons cadastrados" description="Lista o total que explica 'cupons ativos' e 'cupons no total'.">
+      <Section title="Cupons cadastrados" description="Mostra apenas cupons não deletados logicamente.">
         {data.coupons.length === 0 ? <EmptyState message="Nenhum cupom cadastrado." /> : (
           <table className="data-table">
             <thead><tr><th>Código</th><th>Desconto</th><th>Status</th><th>Início</th><th>Expira</th></tr></thead>
