@@ -14,6 +14,7 @@ from database.models.evaluation import Evaluation
 from database.models.staff import Staff
 from database.models.staff_stats import StaffStats
 from database.models.ticket import Ticket, TicketStatus
+from database.models.ticket_panel import TicketPanel
 
 router = APIRouter(
     prefix="/admin/api",
@@ -59,7 +60,20 @@ def _ticket_label(bot: Any, ticket: Ticket) -> str:
     return f"#{channel_name}" if channel_name else f"Ticket {str(ticket.id)[:8]}"
 
 
-def _ticket_item(bot: Any, guild: discord.Guild, ticket: Ticket) -> StaffTicketItem:
+def _ticket_category_label(ticket: Ticket, panel_name: str | None) -> str:
+    """No painel de staff, o motivo util e o painel real que abriu o ticket.
+
+    Muitos tickets antigos ficaram com category="outro" porque a categoria
+    tecnica do banco e generica; quem explica o motivo para a staff e o painel
+    de origem, ex.: "Painel Duvida", "Bug", "Parceria". So cai para category
+    quando o ticket nao tem painel vinculado.
+    """
+    return panel_name or ticket.category.value
+
+
+def _ticket_item(
+    bot: Any, guild: discord.Guild, ticket: Ticket, panel_name: str | None = None
+) -> StaffTicketItem:
     return StaffTicketItem(
         id=str(ticket.id),
         label=_ticket_label(bot, ticket),
@@ -67,7 +81,7 @@ def _ticket_item(bot: Any, guild: discord.Guild, ticket: Ticket) -> StaffTicketI
         channel_name=_channel_name(bot, ticket.channel_id),
         user_id=str(ticket.opened_by_discord_id),
         user_name=_discord_name(guild, ticket.opened_by_discord_id),
-        category=ticket.category.value,
+        category=_ticket_category_label(ticket, panel_name),
         status=ticket.status.value,
         created_at=_iso(ticket.created_at) or "",
         closed_at=_iso(ticket.closed_at),
@@ -96,7 +110,8 @@ async def staff_detail(request: Request, guild_id: int, staff_id: uuid.UUID) -> 
 
         stats = await session.scalar(select(StaffStats).where(StaffStats.staff_id == staff_id))
         current_result = await session.execute(
-            select(Ticket)
+            select(Ticket, TicketPanel.name)
+            .outerjoin(TicketPanel, TicketPanel.id == Ticket.panel_id)
             .where(
                 Ticket.guild_id == guild_id,
                 Ticket.claimed_by_staff_id == staff_id,
@@ -106,7 +121,8 @@ async def staff_detail(request: Request, guild_id: int, staff_id: uuid.UUID) -> 
             .limit(10)
         )
         recent_result = await session.execute(
-            select(Ticket)
+            select(Ticket, TicketPanel.name)
+            .outerjoin(TicketPanel, TicketPanel.id == Ticket.panel_id)
             .where(Ticket.guild_id == guild_id, Ticket.claimed_by_staff_id == staff_id)
             .order_by(Ticket.created_at.desc())
             .limit(12)
@@ -118,15 +134,16 @@ async def staff_detail(request: Request, guild_id: int, staff_id: uuid.UUID) -> 
             .limit(10)
         )
         claim_result = await session.execute(
-            select(Claim, Ticket)
+            select(Claim, Ticket, TicketPanel.name)
             .join(Ticket, Ticket.id == Claim.ticket_id)
+            .outerjoin(TicketPanel, TicketPanel.id == Ticket.panel_id)
             .where(Ticket.guild_id == guild_id, Claim.staff_id == staff_id)
             .order_by(Claim.claimed_at.desc())
             .limit(12)
         )
 
-        current_tickets = list(current_result.scalars().all())
-        recent_tickets = list(recent_result.scalars().all())
+        current_tickets = current_result.all()
+        recent_tickets = recent_result.all()
         evaluations = list(evaluation_result.scalars().all())
         claims = claim_result.all()
 
@@ -157,8 +174,12 @@ async def staff_detail(request: Request, guild_id: int, staff_id: uuid.UUID) -> 
         display_name=staff_row.display_name,
         active=staff_row.active,
         metrics=metrics,
-        current_tickets=[_ticket_item(bot, guild, ticket) for ticket in current_tickets],
-        recent_tickets=[_ticket_item(bot, guild, ticket) for ticket in recent_tickets],
+        current_tickets=[
+            _ticket_item(bot, guild, ticket, panel_name) for ticket, panel_name in current_tickets
+        ],
+        recent_tickets=[
+            _ticket_item(bot, guild, ticket, panel_name) for ticket, panel_name in recent_tickets
+        ],
         evaluations=[
             StaffEvaluationItem(
                 ticket_id=str(item.ticket_id),
@@ -177,8 +198,8 @@ async def staff_detail(request: Request, guild_id: int, staff_id: uuid.UUID) -> 
                 created_at=_iso(claim.claimed_at) or "",
                 ticket_id=str(ticket.id),
                 ticket_label=_ticket_label(bot, ticket),
-                detail=_iso(claim.unclaimed_at),
+                detail=_ticket_category_label(ticket, panel_name),
             )
-            for claim, ticket in claims
+            for claim, ticket, panel_name in claims
         ],
     )
