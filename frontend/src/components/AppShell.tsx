@@ -126,7 +126,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     };
     source.addEventListener("dashboard.invalidate", invalidate);
     source.onerror = () => {
-      source.close();
+      // Nao fechar aqui: EventSource tenta reconectar sozinho. Antes a tela
+      // parava de receber invalidacoes e o usuario precisava trocar de aba
+      // para a lista de tickets buscar de novo.
+      queryClient.invalidateQueries({ queryKey: ["ready"] });
     };
     return () => source.close();
   }, [guild?.id, queryClient, readiness?.ready]);
