@@ -115,6 +115,53 @@ export type DlcMutationResponse = {
   item: DlcItem;
 };
 
+export type PanelStatus = "not_published" | "ok" | "missing_channel" | "missing_message" | "error";
+
+export type TicketPanelItem = {
+  id: string;
+  kind: "ticket_panel";
+  name: string;
+  key: string;
+  enabled: boolean;
+  published: boolean;
+  channel_id?: string | null;
+  channel_name?: string | null;
+  message_id?: string | null;
+  status: PanelStatus;
+  show_button: boolean;
+};
+
+export type TicketPanelGroupItem = {
+  id: string;
+  kind: "ticket_group";
+  name: string;
+  panel_count: number;
+  published: boolean;
+  channel_id?: string | null;
+  channel_name?: string | null;
+  message_id?: string | null;
+  status: PanelStatus;
+};
+
+export type FixedPanelItem = {
+  id: "ranking" | "shop";
+  kind: "ranking" | "shop";
+  name: string;
+  description: string;
+  published: boolean;
+  channel_id?: string | null;
+  channel_name?: string | null;
+  message_id?: string | null;
+  status: PanelStatus;
+};
+
+export type PanelsPayload = {
+  guild_id: string;
+  ticket_panels: TicketPanelItem[];
+  groups: TicketPanelGroupItem[];
+  fixed: FixedPanelItem[];
+};
+
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`/admin/api${path}`, {
     ...init,
