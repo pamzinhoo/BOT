@@ -272,19 +272,23 @@ async def _start_purchase(
     comprador ve uma tela "Possui um cupom?" onde pode simplesmente seguir sem
     cupom. Nenhuma cobranca e gerada antes do cupom ser validado.
 
-    A etapa de "quem vai pagar" (Modal) so aparece quando o provider resolvido
-    pra guild e o ManualProvider (PIX manual) — gateways automaticos tem seu
-    proprio checkout, ninguem precisa identificar quem fez o PIX."""
+    A etapa de "quem vai pagar" usa um botao intermediario no provider manual.
+    Antes ela tentava abrir o modal depois de consultar o banco/provider; quando
+    essa consulta passava de 3s, o Discord expirava a interacao e o select
+    mostrava "Aether nao respondeu a tempo" (Unknown interaction)."""
     bot: LimerenceBot = interaction.client  # type: ignore[assignment]
     member = member if member is not None else interaction.user  # type: ignore[assignment]
     if not isinstance(member, discord.Member):
         return
 
-    if coupon_code is None and not skip_coupon_prompt and not interaction.response.is_done():
+    if not interaction.response.is_done():
+        await interaction.response.defer(ephemeral=interaction.guild is not None)
+
+    if coupon_code is None and not skip_coupon_prompt:
         coupons = await bot.coupon_service.list_coupons(member.guild.id, only_active=True)
         if coupons:
             price = _price_for(plan, cycle)
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 f"Você possui um cupom de desconto para **{plan.name}**"
                 + (f" ({_cents_to_display(price, plan.currency)})?" if price is not None else "?"),
                 view=_CouponPromptView(plan, cycle, member=member, renewal=renewal),
@@ -292,16 +296,18 @@ async def _start_purchase(
             )
             return
 
-    if payer_information is None and not skip_payer_prompt and not interaction.response.is_done():
+    if payer_information is None and not skip_payer_prompt:
         provider = await bot.payment_service.resolve_provider(member.guild.id)
         if isinstance(provider, ManualProvider):
-            await interaction.response.send_modal(
-                _PayerInfoModal(plan, cycle, member=member, renewal=renewal, coupon_code=coupon_code)
+            await interaction.followup.send(
+                "Antes de gerar o pedido, informe quem fará o pagamento. "
+                "Isso ajuda a staff a identificar o PIX/depósito depois.",
+                view=_PayerInfoPromptView(
+                    plan, cycle, member=member, renewal=renewal, coupon_code=coupon_code
+                ),
+                ephemeral=True,
             )
             return
-
-    if not interaction.response.is_done():
-        await interaction.response.defer(ephemeral=interaction.guild is not None)
 
     try:
         subscription, payment, result = await bot.subscription_service.start_purchase(
@@ -390,6 +396,44 @@ class _CouponPromptView(SafeView):
             member=self.member,
             renewal=self.renewal,
             skip_coupon_prompt=True,
+        )
+
+
+class _PayerInfoPromptView(SafeView):
+    """Mostra um botao que abre o modal de pagador imediatamente.
+
+    O modal precisa ser a primeira resposta da interacao do botao. Por isso a
+    loja nao tenta mais abrir modal depois de consultas ao banco/provider; ela
+    responde rapido com este botao e o callback abaixo abre o modal sem await
+    pesado antes.
+    """
+
+    def __init__(
+        self,
+        plan: Plan,
+        cycle: BillingCycle,
+        *,
+        member: discord.Member,
+        renewal: bool,
+        coupon_code: str | None,
+    ) -> None:
+        super().__init__(timeout=180)
+        self.plan = plan
+        self.cycle = cycle
+        self.member = member
+        self.renewal = renewal
+        self.coupon_code = coupon_code
+
+    @discord.ui.button(label="Informar pagador", emoji="📝", style=discord.ButtonStyle.primary)
+    async def open_modal(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await interaction.response.send_modal(
+            _PayerInfoModal(
+                self.plan,
+                self.cycle,
+                member=self.member,
+                renewal=self.renewal,
+                coupon_code=self.coupon_code,
+            )
         )
 
 
