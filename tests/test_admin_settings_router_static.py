@@ -82,13 +82,15 @@ def test_dashboard_events_router_is_registered_before_legacy_router() -> None:
     assert "giveaways_router" in source
     assert "dlcs_router" in source
     assert "panels_router" in source
+    assert "staff_router" in source
     assert "ticket_actions_router" in source
     assert "legacy_router" in source
     assert source.index("router.include_router(settings_router)") < source.index("router.include_router(events_router)")
     assert source.index("router.include_router(events_router)") < source.index("router.include_router(giveaways_router)")
     assert source.index("router.include_router(giveaways_router)") < source.index("router.include_router(dlcs_router)")
     assert source.index("router.include_router(dlcs_router)") < source.index("router.include_router(panels_router)")
-    assert source.index("router.include_router(panels_router)") < source.index("router.include_router(ticket_actions_router)")
+    assert source.index("router.include_router(panels_router)") < source.index("router.include_router(staff_router)")
+    assert source.index("router.include_router(staff_router)") < source.index("router.include_router(ticket_actions_router)")
     assert source.index("router.include_router(ticket_actions_router)") < source.index("router.include_router(legacy_router)")
 
 
@@ -247,6 +249,29 @@ def test_dashboard_ticket_actions_refresh_discord_ticket_embed() -> None:
     assert "message.edit(embed=embed, view=view)" in source
     assert "Assumido por" in source
     assert "await _refresh_ticket_message(bot, guild, channel, updated)" in source
+
+
+def test_dashboard_staff_profile_uses_real_staff_tables() -> None:
+    source = Path("api/routes/admin/staff_router.py").read_text(encoding="utf-8")
+    schemas = Path("api/schemas/admin.py").read_text(encoding="utf-8")
+    page = Path("frontend/src/pages/StaffPage.tsx").read_text(encoding="utf-8")
+    css = Path("frontend/src/dashboard-overrides.css").read_text(encoding="utf-8")
+    init_source = Path("api/routes/admin/__init__.py").read_text(encoding="utf-8")
+
+    assert "staff_router" in init_source
+    assert "response_model=StaffDetail" in source
+    assert "StaffStats" in source
+    assert "Claim" in source
+    assert "Evaluation" in source
+    assert "current_tickets" in source
+    assert "recent_tickets" in source
+    assert "avaliacao_media" in source
+    assert "StaffDetail" in schemas
+    assert "StaffTicketItem" in schemas
+    assert "Perfil completo" in page
+    assert "Tickets atuais" in page
+    assert "Avaliações recebidas" in page
+    assert "staff-profile-drawer" in css
 
 
 def test_dashboard_tickets_refresh_without_tab_switching() -> None:
