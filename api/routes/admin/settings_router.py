@@ -105,6 +105,11 @@ def _clean_label(value: str) -> str:
 
 
 def _field_type(field: SettingsField) -> str:
+    if field.kind == FieldKind.CHOICE and not field.choices:
+        # Alguns campos antigos foram marcados como CHOICE, mas nao possuem
+        # opcoes fixas. No dashboard eles precisam virar texto livre; senao a UI
+        # mostra um select vazio, como acontecia com avaliacoes.star_emoji.
+        return "text"
     return {
         FieldKind.CHANNEL: "channel",
         FieldKind.ROLE: "role",
@@ -317,8 +322,10 @@ def _coerce_value(field: SettingsField, value: Any, guild: discord.Guild) -> Any
             raise ValueError("Use verdadeiro ou falso.")
         return value
     if field.kind == FieldKind.CHOICE:
+        if not field.choices:
+            return str(value or "").strip() or None
         raw = str(value)
-        allowed = {str(option) for option, _ in (field.choices or [])}
+        allowed = {str(option) for option, _ in field.choices}
         if raw not in allowed:
             raise ValueError("Opcao invalida.")
         return raw
@@ -426,7 +433,7 @@ async def update_settings(request: Request, guild_id: int, payload: dict[str, An
         await bot.audit_log_service.record_config_change(
             guild_id=guild_id,
             actor_id=0,
-            actor_name="Dashboard local",
+            actor_name="Painel web",
             config_category=section,
             config_name=_clean_label(label),
             old_value=str(old),
