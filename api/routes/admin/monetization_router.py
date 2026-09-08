@@ -99,7 +99,9 @@ async def monetization_summary(request: Request, guild_id: int) -> MonetizationS
     - nao expõe QR code PIX, checkout_url, payer_information, external_id ou secrets;
     - toda consulta multi-tenant fica limitada ao guild_id recebido;
     - Products sao globais, entao entram apenas quando vinculados a um Plan da guild
-      ou quando o required_role_guild_id aponta para esta guild.
+      ou quando o required_role_guild_id aponta para esta guild;
+    - itens de teste/inativos sem historico financeiro ficam ocultos do analytics
+      para nao parecerem produtos reais.
     """
     bot = _bot(request)
     guild = _guild(bot, guild_id)
@@ -218,6 +220,7 @@ async def monetization_summary(request: Request, guild_id: int) -> MonetizationS
 
     active_plans = [plan for plan in plans if plan.is_active]
     active_coupons = [coupon for coupon in coupons if coupon.active and coupon.deleted_at is None]
+    visible_coupons = [coupon for coupon in coupons if coupon.deleted_at is None]
     dlc_products = [product for product in products if product.product_type == ProductType.DLC]
     providers = sorted({provider for provider, _, _ in provider_rows if provider})
 
@@ -243,12 +246,25 @@ async def monetization_summary(request: Request, guild_id: int) -> MonetizationS
     pending_payments = sum(int(stats["pending"]) for stats in payment_stats.values())
     average_ticket = round(approved_revenue_total / approved_sales_total) if approved_sales_total else 0
 
-    plan_rows: list[MonetizationPlanRow] = []
+    visible_plan_rows: list[MonetizationPlanRow] = []
+    hidden_empty_inactive_plans = 0
     for plan in plans:
         stats = payment_stats.get(plan.id, {"approved_sales": 0, "approved_revenue": 0, "pending": 0, "failed": 0, "last_payment_at": None})
         approved_sales = int(stats["approved_sales"])
         approved_revenue = int(stats["approved_revenue"])
-        plan_rows.append(
+        pending = int(stats["pending"])
+        failed = int(stats["failed"])
+        active_subs = active_subscriptions_by_plan.get(plan.id, 0)
+        has_financial_history = any([approved_sales, approved_revenue, pending, failed, active_subs])
+
+        # Nao mostrar plano de teste/inativo zerado no dashboard principal.
+        # Se um plano inativo tiver pagamento/assinatura, ele continua visivel
+        # porque e historico financeiro real.
+        if not plan.is_active and not has_financial_history:
+            hidden_empty_inactive_plans += 1
+            continue
+
+        visible_plan_rows.append(
             MonetizationPlanRow(
                 id=str(plan.id),
                 name=plan.name,
@@ -262,18 +278,18 @@ async def monetization_summary(request: Request, guild_id: int) -> MonetizationS
                 approved_sales=approved_sales,
                 approved_revenue_label=_format_brl(approved_revenue),
                 approved_revenue_cents=approved_revenue,
-                pending_payments=int(stats["pending"]),
-                failed_payments=int(stats["failed"]),
-                active_subscriptions=active_subscriptions_by_plan.get(plan.id, 0),
+                pending_payments=pending,
+                failed_payments=failed,
+                active_subscriptions=active_subs,
                 average_ticket_label=_format_brl(round(approved_revenue / approved_sales) if approved_sales else 0),
                 last_payment_at=_iso(stats["last_payment_at"]),
                 source_note="payments: payment_history filtrado por guild_id e plan_id; assinaturas: subscriptions ACTIVE.",
             )
         )
-    plan_rows.sort(key=lambda item: (item.approved_revenue_cents, item.approved_sales), reverse=True)
+    visible_plan_rows.sort(key=lambda item: (item.approved_revenue_cents, item.approved_sales), reverse=True)
 
-    top_seller = max(plan_rows, key=lambda item: item.approved_sales, default=None)
-    top_revenue = max(plan_rows, key=lambda item: item.approved_revenue_cents, default=None)
+    top_seller = max(visible_plan_rows, key=lambda item: item.approved_sales, default=None)
+    top_revenue = max(visible_plan_rows, key=lambda item: item.approved_revenue_cents, default=None)
 
     alerts: list[MonetizationAlert] = []
     if settings is None:
@@ -299,6 +315,11 @@ async def monetization_summary(request: Request, guild_id: int) -> MonetizationS
         if plan.role_id is not None and _role_missing(guild, plan.role_id):
             alerts.append(_alert("error", f"Cargo ausente no plano: {plan.name}", f"O cargo salvo ({plan.role_id}) nao existe mais no servidor."))
 
+    deleted_coupons_count = len([coupon for coupon in coupons if coupon.deleted_at is not None])
+    if hidden_empty_inactive_plans:
+        alerts.append(_alert("info", "Planos inativos ocultos", f"{hidden_empty_inactive_plans} plano(s) inativo(s) sem historico financeiro foram ocultados do analytics."))
+    if deleted_coupons_count:
+        alerts.append(_alert("info", "Cupons deletados ocultos", f"{deleted_coupons_count} cupom(ns) deletado(s) logico(s) foram ocultados da tabela principal."))
     if approved_revenue_total > 0 and not providers:
         alerts.append(_alert("info", "Receita sem provider visivel", "Existe valor aprovado no banco, mas sem provider recente para explicar a origem."))
     if approved_revenue_total > 0:
@@ -327,10 +348,10 @@ async def monetization_summary(request: Request, guild_id: int) -> MonetizationS
             _metric("Receita aprovada no mes", _format_brl(approved_revenue_month), "Pagamentos aprovados com paid_at neste mes", "payment_history.paid_at"),
             _metric("Vendas aprovadas", approved_sales_total, "Quantidade de registros APPROVED", "payment_history.status"),
             _metric("Ticket medio", _format_brl(average_ticket), "Receita aprovada / vendas aprovadas", "calculado a partir de payment_history"),
-            _metric("Planos ativos", len(active_plans), f"{len(plans)} plano(s) no total", "plans.is_active"),
+            _metric("Planos ativos", len(active_plans), f"{len(visible_plan_rows)} visiveis / {len(plans)} no banco", "plans.is_active"),
             _metric("Assinaturas ativas", active_subscriptions, "Status ACTIVE", "subscriptions.status"),
             _metric("Pagamentos pendentes", pending_payments, "PENDING/PROCESSING", "payment_history.status"),
-            _metric("Cupons ativos", len(active_coupons), f"{len(coupons)} cupom(ns) no total", "discount_coupons.active/deleted_at"),
+            _metric("Cupons ativos", len(active_coupons), f"{len(visible_coupons)} visiveis / {len(coupons)} no banco", "discount_coupons.active/deleted_at"),
             _metric("Produtos ativos", len(products), f"{len(dlc_products)} DLC(s) ativa(s)", "products ligados aos plans/cargos da guild"),
             _metric("Falhas 30d", failed_payments_30d, "Rejected/expired/canceled/chargeback", "payment_history.created_at/status"),
         ],
@@ -351,7 +372,7 @@ async def monetization_summary(request: Request, guild_id: int) -> MonetizationS
             )
             for payment, plan_name in recent_rows
         ],
-        plans=plan_rows,
+        plans=visible_plan_rows,
         payment_status_breakdown=[
             MonetizationStatusBreakdown(
                 status=status.value if hasattr(status, "value") else str(status),
@@ -370,9 +391,9 @@ async def monetization_summary(request: Request, guild_id: int) -> MonetizationS
                 discount=_format_discount(coupon),
                 starts_at=_iso(coupon.starts_at),
                 expires_at=_iso(coupon.expires_at),
-                source_note="discount_coupons da guild; 0 ativos e 1 total significa cupom inativo ou deletado logico.",
+                source_note="discount_coupons da guild; cupons deletados logicos ficam ocultos do dashboard principal.",
             )
-            for coupon in coupons
+            for coupon in visible_coupons
         ],
         analytics={
             "top_seller_plan": top_seller.name if top_seller and top_seller.approved_sales > 0 else None,
@@ -380,12 +401,14 @@ async def monetization_summary(request: Request, guild_id: int) -> MonetizationS
             "approved_sales_total": approved_sales_total,
             "approved_revenue_total_cents": approved_revenue_total,
             "average_ticket_cents": average_ticket,
+            "hidden_empty_inactive_plans": hidden_empty_inactive_plans,
+            "hidden_deleted_coupons": deleted_coupons_count,
             "read_only": True,
         },
         source_notes=[
-            "5 planos no total = todas as linhas da tabela plans para esta guild, incluindo inativos.",
+            "Planos visiveis = planos ativos ou planos inativos com historico financeiro; inativos zerados ficam ocultos.",
             "Receita aprovada registrada = soma de payment_history.amount com status approved; nao prova sozinha que foi venda real.",
-            "1 cupom no total = linha existente em discount_coupons; se ativos=0, ele esta inativo ou deletado logico.",
+            "Cupons visiveis = cupons nao deletados logicamente; deletados logicos ficam ocultos da tabela principal.",
             "Planos ativos = plans.is_active=True; assinaturas ativas = subscriptions.status=ACTIVE.",
             "O dashboard nao usa cargos atuais do Discord para inventar vendas; ele mostra apenas registros do banco.",
         ],
@@ -393,6 +416,7 @@ async def monetization_summary(request: Request, guild_id: int) -> MonetizationS
             "Fase 3.1/3.5 continua somente leitura.",
             "Nao retorna pix_qr_code, pix_qr_code_base64, checkout_url, payer_information, external_id nem secrets.",
             "Nao altera PaymentHistory, Subscription, Plan, Product, Coupon, License ou cargos do Discord.",
+            "Acoes de limpeza real do banco devem ter confirmacao forte e verificar dependencias antes de apagar fisicamente.",
             "Acoes de escrita ficam para 3.2+ e devem passar pelos services existentes.",
         ],
     )
