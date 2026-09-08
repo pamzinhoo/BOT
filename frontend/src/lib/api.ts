@@ -252,6 +252,34 @@ export type MonetizationCouponRow = {
   source_note: string;
 };
 
+export type MonetizationPlanAccessItem = {
+  discord_id: string;
+  discord_name?: string | null;
+  source: string;
+  has_role_now: boolean;
+  subscription_status?: string | null;
+  billing_cycle?: string | null;
+  provider?: string | null;
+  approved_payments: number;
+  pending_payments: number;
+  failed_payments: number;
+  approved_revenue_label: string;
+  last_payment_at?: string | null;
+  started_at?: string | null;
+  current_period_end?: string | null;
+};
+
+export type MonetizationPlanAccessPayload = {
+  guild_id: string;
+  plan: MonetizationPlanRow;
+  role_id?: string | null;
+  role_name?: string | null;
+  role_missing: boolean;
+  total: number;
+  items: MonetizationPlanAccessItem[];
+  security_notes: string[];
+};
+
 export type MonetizationSummary = {
   guild_id: string;
   generated_at: string;
