@@ -166,6 +166,7 @@ export type MonetizationMetric = {
   label: string;
   value: number | string;
   hint?: string | null;
+  source?: string | null;
 };
 
 export type MonetizationAlert = {
@@ -181,19 +182,64 @@ export type MonetizationRecentPayment = {
   plan_name?: string | null;
   provider: string;
   amount_label: string;
+  amount_cents: number;
   status: string;
   created_at: string;
   paid_at?: string | null;
   expires_at?: string | null;
 };
 
+export type MonetizationPlanRow = {
+  id: string;
+  name: string;
+  active: boolean;
+  role_id?: string | null;
+  role_name?: string | null;
+  role_missing: boolean;
+  price_monthly_label?: string | null;
+  price_yearly_label?: string | null;
+  price_one_time_label?: string | null;
+  approved_sales: number;
+  approved_revenue_label: string;
+  approved_revenue_cents: number;
+  pending_payments: number;
+  failed_payments: number;
+  active_subscriptions: number;
+  average_ticket_label: string;
+  last_payment_at?: string | null;
+  source_note: string;
+};
+
+export type MonetizationStatusBreakdown = {
+  status: string;
+  count: number;
+  amount_label: string;
+  amount_cents: number;
+};
+
+export type MonetizationCouponRow = {
+  id: string;
+  code: string;
+  active: boolean;
+  deleted: boolean;
+  discount: string;
+  starts_at?: string | null;
+  expires_at?: string | null;
+  source_note: string;
+};
+
 export type MonetizationSummary = {
   guild_id: string;
   generated_at: string;
-  gateway: { providers_seen?: string[]; mode?: string; read_only?: boolean };
+  gateway: { providers_seen?: string[]; mode?: string; read_only?: boolean; provider_breakdown?: { provider: string; count: number; amount_label: string }[] };
   metrics: MonetizationMetric[];
   alerts: MonetizationAlert[];
   recent_payments: MonetizationRecentPayment[];
+  plans: MonetizationPlanRow[];
+  payment_status_breakdown: MonetizationStatusBreakdown[];
+  coupons: MonetizationCouponRow[];
+  analytics: Record<string, unknown>;
+  source_notes: string[];
   security_notes: string[];
 };
 
