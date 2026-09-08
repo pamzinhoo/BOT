@@ -53,12 +53,14 @@ class ReconciliationReport:
 
 class ReconciliationService:
     """Reconciliacao periodica entre License (backend, fonte de verdade) e
-    cargo Discord (bot, reflexo) — a rede de seguranca da Fase 5: "Nunca
-    confiar apenas em eventos do Discord". Eventos (RoleSyncService) cobrem o
-    caminho feliz; isto cobre o resto — bot offline quando o evento disparou,
-    membro que saiu e voltou (Discord zera cargo sozinho), falha de rede
-    pontual, edicao manual de cargo por um staff. Corrige nas duas direcoes e
-    audita cada correcao (nunca corrige em silencio)."""
+    cargo Discord (bot, reflexo).
+
+    Esta rotina e' propositalmente nao destrutiva: ela pode CONCEDER cargos
+    faltantes quando existe License ACTIVE, mas nao remove cargos que alguem
+    tem no Discord sem License ativa. Isso evita que cargos dados manualmente,
+    reutilizados em staff/comunidade ou configurados por engano em um plano/DLC
+    sejam removidos em massa quando o bot/painel inicia.
+    """
 
     def __init__(
         self,
@@ -72,12 +74,6 @@ class ReconciliationService:
         self._bot = bot
         self._max_concurrency = max_concurrency
         self._guild_timeout_seconds = guild_timeout_seconds
-        # O ciclo periodico (LicenseReconciliationCog) e o endpoint sob
-        # demanda (/internal/reconcile) chamam o mesmo metodo — sem trava,
-        # dois disparos quase simultaneos rodariam duas reconciliacoes
-        # completas em paralelo (duplicando idas ao banco/Discord e linhas
-        # de auditoria). A trava so serializa: o segundo disparo espera o
-        # primeiro terminar em vez de correr junto.
         self._lock = asyncio.Lock()
 
     async def reconcile_all_guilds(self) -> ReconciliationReport:
@@ -85,12 +81,6 @@ class ReconciliationService:
             start = time.monotonic()
             report = ReconciliationReport(max_concurrency=self._max_concurrency)
             guilds = list(self._bot.guilds)
-            # Semaforo limita quantas guilds reconciliam ao mesmo tempo —
-            # sem isso, `gather` dispara todas de uma vez (N sessoes de DB +
-            # N rajadas de chamadas Discord concorrentes), competindo com o
-            # event loop que tambem serve comandos/eventos do bot em tempo
-            # real. `return_exceptions=True` continua garantindo que uma
-            # guild travada/com erro nao cancela as demais.
             semaphore = asyncio.Semaphore(self._max_concurrency)
             results = await asyncio.gather(
                 *(self._reconcile_guild_limited(guild, semaphore) for guild in guilds),
@@ -99,9 +89,7 @@ class ReconciliationService:
             for guild, result in zip(guilds, results, strict=True):
                 if isinstance(result, BaseException):
                     report.errors += 1
-                    logger.exception(
-                        "Falha ao reconciliar guild %s.", guild.id, exc_info=result
-                    )
+                    logger.exception("Falha ao reconciliar guild %s.", guild.id, exc_info=result)
                     continue
                 report.guilds_checked += 1
                 report.roles_granted += result.roles_granted
@@ -141,9 +129,7 @@ class ReconciliationService:
                     self._guild_timeout_seconds,
                 )
                 return GuildReconciliationResult(guild_id=guild.id, errors=1, timed_out=True)
-            logger.debug(
-                "Guild %s reconciliada em %.2fs.", guild.id, time.monotonic() - guild_start
-            )
+            logger.debug("Guild %s reconciliada em %.2fs.", guild.id, time.monotonic() - guild_start)
             return result
 
     async def reconcile_guild(self, guild: discord.Guild) -> GuildReconciliationResult:
@@ -158,7 +144,10 @@ class ReconciliationService:
             except Exception:
                 result.errors += 1
                 logger.exception(
-                    "Falha ao reconciliar plano %s (produto %s) na guild %s.", plan.id, plan.product_id, guild.id
+                    "Falha ao reconciliar plano %s (produto %s) na guild %s.",
+                    plan.id,
+                    plan.product_id,
+                    guild.id,
                 )
         return result
 
@@ -168,40 +157,15 @@ class ReconciliationService:
             return
         product_id: uuid.UUID = plan.product_id  # type: ignore[assignment]
 
-        role_members = list(role.members)
-
         async with self._database.session() as session:
-            player_repo = PlayerRepository(session)
             license_repo = LicenseRepository(session)
+            player_repo = PlayerRepository(session)
 
-            # direcao 1: tem cargo no Discord, mas License nao esta ACTIVE
-            # (revogada/expirada sem o evento ter sido processado, ou cargo
-            # dado manualmente por um staff sem compra correspondente).
-            # Batelado (2 queries no total, nao 2*N) pra evitar N+1: resolve
-            # todo Player dos membros do cargo de uma vez, depois toda
-            # License ativa desses players pro product de uma vez.
-            players_by_discord_id = {
-                p.discord_id: p for p in await player_repo.list_by_discord_ids([m.id for m in role_members])
-            }
-            player_ids_with_role = [p.id for p in players_by_discord_id.values()]
-            player_ids_with_active_license = {
-                license_row.player_id
-                for license_row in await license_repo.list_active_by_players_and_product(
-                    player_ids_with_role, product_id
-                )
-            }
-
-            for member in role_members:
-                player = players_by_discord_id.get(member.id)
-                has_license = player is not None and player.id in player_ids_with_active_license
-                if not has_license:
-                    await self._fix_divergence(
-                        member, role, plan, grant=False, reason="Divergencia: cargo sem License ativa"
-                    )
-                    result.roles_removed += 1
-
-            # direcao 2: License ACTIVE, mas falta o cargo (evento perdido,
+            # Direcao segura: License ACTIVE, mas falta o cargo (evento perdido,
             # bot offline no momento, membro reentrou e perdeu cargos).
+            # A direcao oposta NAO remove cargo aqui. Cargos podem ter sido dados
+            # manualmente ou reutilizados em staff/comunidade; remover em varredura
+            # de startup causou perda em massa de cargos como Dublador.
             active_licenses = await license_repo.list_active_by_product(product_id)
             players_by_id = {
                 p.id: p for p in await player_repo.list_by_ids([lic.player_id for lic in active_licenses])
@@ -213,7 +177,7 @@ class ReconciliationService:
                 continue
             member = guild.get_member(player.discord_id)
             if member is None:
-                continue  # nao fetcha por membro faltante — muito caro pra um catalogo grande, cobre so cache local
+                continue
             if role not in member.roles:
                 await self._fix_divergence(
                     member, role, plan, grant=True, reason="Divergencia: License ativa sem cargo"
@@ -223,16 +187,22 @@ class ReconciliationService:
     async def _fix_divergence(
         self, member: discord.Member, role: discord.Role, plan: Plan, *, grant: bool, reason: str
     ) -> None:
+        if not grant:
+            logger.warning(
+                "Reconciliacao nao destrutiva bloqueou remocao do cargo %s (%s) "
+                "do membro %s na guild %s.",
+                role.name,
+                role.id,
+                member.id,
+                plan.guild_id,
+            )
+            return
+
         for attempt in range(1, _ROLE_EDIT_MAX_ATTEMPTS + 1):
             try:
-                if grant:
-                    await member.add_roles(role, reason=reason)
-                else:
-                    await member.remove_roles(role, reason=reason)
+                await member.add_roles(role, reason=reason)
                 break
             except (discord.Forbidden, discord.NotFound) as exc:
-                # Permanente (sem permissao / cargo ou membro sumiu) — retry
-                # nao resolve, so tenta de novo no proximo ciclo.
                 logger.warning(
                     "Falha permanente ao corrigir cargo do plano %s na guild %s: %s.",
                     plan.id,
