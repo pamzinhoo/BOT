@@ -12,6 +12,7 @@ from database.models.log import LogAction
 from database.models.ticket import Ticket, TicketStatus
 from services.claim_service import ClaimError
 from services.ticket_service import TicketNotClaimedError, TicketNotFoundError
+from utils.ticket_lifecycle import schedule_channel_deletion
 
 router = APIRouter(
     prefix="/admin/api",
@@ -81,7 +82,13 @@ async def _staff_from_payload(bot: Any, guild_id: int, payload: dict[str, Any]) 
     return staff
 
 
-async def _audit(bot: Any, guild_id: int, action: str, ticket: Ticket, details: dict[str, object] | None = None) -> None:
+async def _audit(
+    bot: Any,
+    guild_id: int,
+    action: str,
+    ticket: Ticket,
+    details: dict[str, object] | None = None,
+) -> None:
     bot.audit_log_service.record_background(
         guild_id=guild_id,
         category=AuditLogCategory.TICKETS,
@@ -107,10 +114,14 @@ async def _after_ticket_change(bot: Any, guild_id: int) -> None:
 
 
 @router.post("/guild/{guild_id}/tickets/{ticket_id}/claim")
-async def claim_ticket(request: Request, guild_id: int, ticket_id: uuid.UUID, payload: dict[str, Any]) -> dict[str, Any]:
+async def claim_ticket(
+    request: Request, guild_id: int, ticket_id: uuid.UUID, payload: dict[str, Any]
+) -> dict[str, Any]:
     bot = _bot(request)
     guild = _guild(bot, guild_id)
     ticket = await _ticket_by_id(bot, guild_id, ticket_id)
+    if ticket.status not in (TicketStatus.OPEN, TicketStatus.CLAIMED):
+        raise _ticket_error("Este ticket nao pode ser assumido no status atual.")
     staff = await _staff_from_payload(bot, guild_id, payload)
 
     try:
@@ -119,7 +130,7 @@ async def claim_ticket(request: Request, guild_id: int, ticket_id: uuid.UUID, pa
         raise _ticket_error(str(exc)) from exc
 
     updated = await _ticket_by_id(bot, guild_id, ticket_id)
-    await _audit(bot, guild_id, "Ticket assumido pelo painel web", updated, {"staff": staff.display_name})
+    await _audit(bot, guild_id, "TICKET_ASSUMIDO_PAINEL_WEB", updated, {"staff": staff.display_name})
     bot.log_service.record_background(
         guild_id=guild_id,
         action=LogAction.CLAIM,
@@ -129,7 +140,9 @@ async def claim_ticket(request: Request, guild_id: int, ticket_id: uuid.UUID, pa
         category_snapshot=updated.category.value,
         message=f"Painel web atribuiu o ticket para {staff.display_name}.",
     )
-    await _notify_channel(_channel(guild, updated), f"🖐️ Ticket assumido por **{staff.display_name}** via painel web.")
+    await _notify_channel(
+        _channel(guild, updated), f"Ticket assumido por **{staff.display_name}** via painel web."
+    )
     await _after_ticket_change(bot, guild_id)
     return {"ok": True, "message": "Ticket assumido.", "status": _status_label(updated)}
 
@@ -151,7 +164,7 @@ async def unclaim_ticket(request: Request, guild_id: int, ticket_id: uuid.UUID) 
         raise _ticket_error(str(exc)) from exc
 
     updated = await _ticket_by_id(bot, guild_id, ticket_id)
-    await _audit(bot, guild_id, "Ticket liberado pelo painel web", updated, {"staff": staff.display_name})
+    await _audit(bot, guild_id, "TICKET_LIBERADO_PAINEL_WEB", updated, {"staff": staff.display_name})
     bot.log_service.record_background(
         guild_id=guild_id,
         action=LogAction.UNCLAIM,
@@ -161,7 +174,7 @@ async def unclaim_ticket(request: Request, guild_id: int, ticket_id: uuid.UUID) 
         category_snapshot=updated.category.value,
         message=f"Painel web liberou o ticket de {staff.display_name}.",
     )
-    await _notify_channel(_channel(guild, updated), f"🖐️ Ticket liberado por **Painel web**.")
+    await _notify_channel(_channel(guild, updated), "Ticket liberado pelo painel web.")
     await _after_ticket_change(bot, guild_id)
     return {"ok": True, "message": "Ticket liberado.", "status": _status_label(updated)}
 
@@ -174,15 +187,16 @@ async def close_ticket(request: Request, guild_id: int, ticket_id: uuid.UUID) ->
     if ticket.claimed_by_staff_id is None:
         raise _ticket_error("Assuma o ticket antes de fechar.")
     staff = await bot.staff_service.get_by_id(ticket.claimed_by_staff_id)
-    closed_by_discord_id = staff.discord_user_id if staff is not None else 0
+    if staff is None:
+        raise _ticket_error("Staff responsavel nao foi encontrado.")
 
     try:
-        result = await bot.ticket_service.close_ticket(ticket.channel_id, closed_by_discord_id)
+        result = await bot.ticket_service.close_ticket(ticket.channel_id, staff.discord_user_id)
     except (TicketNotFoundError, TicketNotClaimedError) as exc:
         raise _ticket_error(str(exc)) from exc
 
     updated = result.ticket
-    await _audit(bot, guild_id, "Ticket fechado pelo painel web", updated, {"staff": staff.display_name if staff else None})
+    await _audit(bot, guild_id, "TICKET_FECHADO_PAINEL_WEB", updated, {"staff": staff.display_name})
     bot.log_service.record_background(
         guild_id=guild_id,
         action=LogAction.FECHAMENTO,
@@ -191,7 +205,7 @@ async def close_ticket(request: Request, guild_id: int, ticket_id: uuid.UUID) ->
         category_snapshot=updated.category.value,
         message="Painel web fechou o ticket.",
     )
-    await _notify_channel(_channel(guild, updated), "🔒 Ticket fechado pelo painel web.")
+    await _notify_channel(_channel(guild, updated), "Ticket fechado pelo painel web.")
     await _after_ticket_change(bot, guild_id)
     return {"ok": True, "message": "Ticket fechado.", "status": _status_label(updated)}
 
@@ -206,8 +220,8 @@ async def reopen_ticket(request: Request, guild_id: int, ticket_id: uuid.UUID) -
     except TicketNotFoundError as exc:
         raise _ticket_error(str(exc), status_code=404) from exc
 
-    await _audit(bot, guild_id, "Ticket reaberto pelo painel web", updated)
-    await _notify_channel(_channel(guild, updated), "🔓 Ticket reaberto pelo painel web.")
+    await _audit(bot, guild_id, "TICKET_REABERTO_PAINEL_WEB", updated)
+    await _notify_channel(_channel(guild, updated), "Ticket reaberto pelo painel web.")
     await _after_ticket_change(bot, guild_id)
     return {"ok": True, "message": "Ticket reaberto.", "status": _status_label(updated)}
 
@@ -222,7 +236,37 @@ async def cancel_ticket(request: Request, guild_id: int, ticket_id: uuid.UUID) -
     except TicketNotFoundError as exc:
         raise _ticket_error(str(exc), status_code=404) from exc
 
-    await _audit(bot, guild_id, "Ticket cancelado pelo painel web", updated)
-    await _notify_channel(_channel(guild, updated), "🚫 Ticket cancelado pelo painel web.")
+    await _audit(bot, guild_id, "TICKET_CANCELADO_PAINEL_WEB", updated)
+    await _notify_channel(_channel(guild, updated), "Ticket cancelado pelo painel web.")
     await _after_ticket_change(bot, guild_id)
     return {"ok": True, "message": "Ticket cancelado.", "status": _status_label(updated)}
+
+
+@router.post("/guild/{guild_id}/tickets/{ticket_id}/delete")
+async def delete_ticket(request: Request, guild_id: int, ticket_id: uuid.UUID) -> dict[str, Any]:
+    bot = _bot(request)
+    guild = _guild(bot, guild_id)
+    ticket = await _ticket_by_id(bot, guild_id, ticket_id)
+    channel = _channel(guild, ticket)
+    if channel is None:
+        raise _ticket_error("Canal do ticket nao encontrado.", status_code=404)
+
+    if ticket.status != TicketStatus.CLOSED:
+        try:
+            ticket = await bot.ticket_service.cancel_ticket(ticket.channel_id)
+        except TicketNotFoundError as exc:
+            raise _ticket_error(str(exc), status_code=404) from exc
+
+    await _audit(bot, guild_id, "TICKET_EXCLUIDO_PAINEL_WEB", ticket)
+    bot.log_service.record_background(
+        guild_id=guild_id,
+        action=LogAction.EXCLUSAO,
+        actor_discord_id=None,
+        ticket_id=ticket.id,
+        category_snapshot=ticket.category.value,
+        message="Painel web solicitou a exclusao do canal do ticket.",
+    )
+    await _notify_channel(channel, "Canal do ticket sera excluido pelo painel web.")
+    schedule_channel_deletion(channel, "excluido pelo painel web", 3)
+    await _after_ticket_change(bot, guild_id)
+    return {"ok": True, "message": "Exclusao agendada.", "status": _status_label(ticket)}
