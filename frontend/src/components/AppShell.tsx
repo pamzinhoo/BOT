@@ -5,6 +5,7 @@ import {
   Bot,
   ClipboardList,
   FileText,
+  Gift,
   Handshake,
   Heart,
   LayoutDashboard,
@@ -42,6 +43,7 @@ const nav = [
       { label: "Tickets", to: "/tickets", icon: Ticket },
       { label: "Staff", to: "/staff", icon: Users },
       { label: "Painéis", to: "/panels", icon: FileText },
+      { label: "Sorteios", to: "/giveaways", icon: Gift },
     ],
   },
   {
