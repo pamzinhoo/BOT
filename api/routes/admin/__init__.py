@@ -10,6 +10,7 @@ from api.routes.admin.router import router as legacy_router
 from api.routes.admin.settings_emoji_router import router as settings_emoji_router
 from api.routes.admin.settings_patch_router import router as settings_patch_router
 from api.routes.admin.settings_router import router as settings_router
+from api.routes.admin.staff_router import router as staff_router
 from api.routes.admin.ticket_actions_router import router as ticket_actions_router
 
 router = APIRouter()
@@ -20,6 +21,7 @@ router.include_router(events_router)
 router.include_router(giveaways_router)
 router.include_router(dlcs_router)
 router.include_router(panels_router)
+router.include_router(staff_router)
 router.include_router(ticket_actions_router)
 router.include_router(legacy_router)
 
