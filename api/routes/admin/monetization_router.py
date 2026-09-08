@@ -5,7 +5,7 @@ from typing import Any
 
 import discord
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 
 from api.routes.admin.security import require_local_admin
 from api.schemas.admin import (
@@ -77,7 +77,9 @@ async def monetization_summary(request: Request, guild_id: int) -> MonetizationS
     - nao altera pagamento, plano, cupom, cargo ou licenca;
     - nao recalcula preco de compra/cupom fora dos services;
     - nao expõe QR code PIX, checkout_url, payer_information ou secrets;
-    - toda consulta fica limitada ao guild_id recebido.
+    - toda consulta multi-tenant fica limitada ao guild_id recebido;
+    - Products sao globais, entao entram apenas quando vinculados a um Plan da guild
+      ou quando o required_role_guild_id aponta para esta guild.
     """
     bot = _bot(request)
     guild = _guild(bot, guild_id)
@@ -103,10 +105,16 @@ async def monetization_summary(request: Request, guild_id: int) -> MonetizationS
                 )
             ).scalars().all()
         )
+        plan_product_ids = [plan.product_id for plan in plans if plan.product_id is not None]
+        product_filters = [Product.required_role_guild_id == guild_id]
+        if plan_product_ids:
+            product_filters.append(Product.id.in_(plan_product_ids))
         products = list(
             (
                 await session.execute(
-                    select(Product).where(Product.is_active.is_(True)).order_by(Product.position.asc())
+                    select(Product)
+                    .where(Product.is_active.is_(True), or_(*product_filters))
+                    .order_by(Product.position.asc())
                 )
             ).scalars().all()
         )
