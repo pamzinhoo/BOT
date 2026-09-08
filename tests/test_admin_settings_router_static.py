@@ -30,6 +30,17 @@ def test_dashboard_settings_router_validates_discord_references() -> None:
     assert '"missing_reference": True' in source
 
 
+def test_dashboard_settings_router_renders_empty_choices_as_text() -> None:
+    source = Path("api/routes/admin/settings_router.py").read_text(encoding="utf-8")
+    controls = Path("frontend/src/components/SettingsControls.tsx").read_text(encoding="utf-8")
+
+    assert "field.kind == FieldKind.CHOICE and not field.choices" in source
+    assert "return \"text\"" in source
+    assert "Alguns campos antigos foram marcados como CHOICE" in source
+    assert "if (!field.options.length)" in controls
+    assert "emoji-input" in controls
+
+
 def test_dashboard_events_router_is_registered_before_legacy_router() -> None:
     source = Path("api/routes/admin/__init__.py").read_text(encoding="utf-8")
 
