@@ -82,4 +82,3 @@ def test_dashboard_monetization_analytics_explains_sources() -> None:
     assert "De onde vêm esses números" not in page
     assert "Cupons cadastrados" in page
     assert "analytics-grid" in css
-}
