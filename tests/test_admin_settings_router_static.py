@@ -274,6 +274,18 @@ def test_dashboard_staff_profile_uses_real_staff_tables() -> None:
     assert "staff-profile-drawer" in css
 
 
+def test_dashboard_staff_profile_uses_panel_as_ticket_reason() -> None:
+    source = Path("api/routes/admin/staff_router.py").read_text(encoding="utf-8")
+
+    assert "TicketPanel" in source
+    assert "_ticket_category_label" in source
+    assert "category=\"outro\"" in source
+    assert "quem explica o motivo para a staff e o painel" in source
+    assert "TicketPanel.name" in source
+    assert "outerjoin(TicketPanel" in source
+    assert "panel_name or ticket.category.value" in source
+
+
 def test_dashboard_tickets_refresh_without_tab_switching() -> None:
     events = Path("api/routes/admin/events_router.py").read_text(encoding="utf-8")
     shell = Path("frontend/src/components/AppShell.tsx").read_text(encoding="utf-8")
