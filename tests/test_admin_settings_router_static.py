@@ -55,6 +55,17 @@ def test_dashboard_emoji_override_is_registered_before_generic_settings() -> Non
     assert "Painel web" in emoji_source
 
 
+def test_dashboard_settings_patch_actor_override_is_registered() -> None:
+    init_source = Path("api/routes/admin/__init__.py").read_text(encoding="utf-8")
+    patch_source = Path("api/routes/admin/settings_patch_router.py").read_text(encoding="utf-8")
+
+    assert "settings_patch_router" in init_source
+    assert init_source.index("router.include_router(settings_patch_router)") < init_source.index("router.include_router(settings_router)")
+    assert "actor_id=None" in patch_source
+    assert "actor_name=_DASHBOARD_ACTOR" in patch_source
+    assert "<@0>" in patch_source
+
+
 def test_dashboard_events_router_is_registered_before_legacy_router() -> None:
     source = Path("api/routes/admin/__init__.py").read_text(encoding="utf-8")
 
