@@ -155,8 +155,18 @@ def test_dashboard_free_dlc_removal_cleans_announcement_message() -> None:
     assert "dlc_announcement_channel_id" in source
     assert "history(limit=100)" in source
     assert "message.delete" in source
-    assert "DLC gratis era enviada" in source
-    assert "await _delete_free_dlc_announcements(bot, guild_id, product)" in source
+    assert "await _delete_free_dlc_announcements(bot, guild_id, product" in source
+
+
+def test_dashboard_free_dlc_edit_updates_existing_announcement() -> None:
+    source = Path("api/routes/admin/dlcs_router.py").read_text(encoding="utf-8")
+
+    assert "_sync_free_dlc_announcement" in source
+    assert "await first.edit" in source
+    assert "duplicates" in source
+    assert "old_match_terms" in source
+    assert "Se achar a mensagem antiga, edita a propria mensagem" in source
+    assert "elif text_changed and is_free and product.is_active" in source
 
 
 def test_license_reconciliation_is_non_destructive_for_existing_roles() -> None:
