@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import uuid
 from typing import Any
 
@@ -13,6 +14,8 @@ from database.models.ticket import Ticket, TicketStatus
 from services.claim_service import ClaimError
 from services.ticket_service import TicketNotClaimedError, TicketNotFoundError
 from utils.ticket_lifecycle import schedule_channel_deletion
+from views.embeds import ticket_embed
+from views.ticket_actions_view import TicketActionsView
 
 router = APIRouter(
     prefix="/admin/api",
@@ -100,6 +103,71 @@ async def _audit(
     )
 
 
+def _has_ticket_controls(message: discord.Message) -> bool:
+    for row in message.components:
+        for child in getattr(row, "children", []):
+            custom_id = getattr(child, "custom_id", "") or ""
+            if custom_id.startswith("limerence:ticket:"):
+                return True
+    return False
+
+
+async def _resolve_opener(
+    bot: Any, guild: discord.Guild, ticket: Ticket
+) -> discord.Member | discord.User | None:
+    opener = guild.get_member(ticket.opened_by_discord_id)
+    if opener is not None:
+        return opener
+    with contextlib.suppress(discord.HTTPException):
+        return await bot.fetch_user(ticket.opened_by_discord_id)
+    return None
+
+
+async def _refresh_ticket_message(
+    bot: Any,
+    guild: discord.Guild,
+    channel: discord.TextChannel | None,
+    ticket: Ticket,
+    *,
+    disabled: bool = False,
+) -> None:
+    """Reedita a mensagem principal do ticket no Discord apos acao via painel web.
+
+    A acao pelo dashboard muda o banco usando os servicos reais, mas nao existe
+    `interaction.message` como nos botoes do Discord. Por isso procuramos a
+    mensagem recente do proprio bot que tem botoes `limerence:ticket:*` e
+    re-renderizamos o mesmo embed usado no fluxo normal. Assim o campo
+    "Assumido por" muda na hora, sem precisar clicar em botao dentro do canal.
+    """
+    if channel is None or bot.user is None:
+        return
+    opener = await _resolve_opener(bot, guild, ticket)
+    if opener is None:
+        return
+    claimed_staff = (
+        await bot.staff_service.get_by_id(ticket.claimed_by_staff_id)
+        if ticket.claimed_by_staff_id is not None
+        else None
+    )
+    panel = await bot.ticket_panel_service.get_panel_for_ticket(ticket)
+    embed = ticket_embed(
+        ticket,
+        opener,
+        panel,
+        claimed_staff_name=claimed_staff.display_name if claimed_staff else None,
+    )
+    view = TicketActionsView(ticket)
+    if disabled:
+        for item in view.children:
+            item.disabled = True  # type: ignore[attr-defined]
+
+    with contextlib.suppress(discord.HTTPException):
+        async for message in channel.history(limit=25):
+            if message.author.id == bot.user.id and _has_ticket_controls(message):
+                await message.edit(embed=embed, view=view)
+                return
+
+
 async def _notify_channel(channel: discord.TextChannel | None, message: str) -> None:
     if channel is None:
         return
@@ -130,6 +198,8 @@ async def claim_ticket(
         raise _ticket_error(str(exc)) from exc
 
     updated = await _ticket_by_id(bot, guild_id, ticket_id)
+    channel = _channel(guild, updated)
+    await _refresh_ticket_message(bot, guild, channel, updated)
     await _audit(bot, guild_id, "TICKET_ASSUMIDO_PAINEL_WEB", updated, {"staff": staff.display_name})
     bot.log_service.record_background(
         guild_id=guild_id,
@@ -141,7 +211,7 @@ async def claim_ticket(
         message=f"Painel web atribuiu o ticket para {staff.display_name}.",
     )
     await _notify_channel(
-        _channel(guild, updated), f"Ticket assumido por **{staff.display_name}** via painel web."
+        channel, f"Ticket assumido por **{staff.display_name}** via painel web."
     )
     await _after_ticket_change(bot, guild_id)
     return {"ok": True, "message": "Ticket assumido.", "status": _status_label(updated)}
@@ -164,6 +234,8 @@ async def unclaim_ticket(request: Request, guild_id: int, ticket_id: uuid.UUID) 
         raise _ticket_error(str(exc)) from exc
 
     updated = await _ticket_by_id(bot, guild_id, ticket_id)
+    channel = _channel(guild, updated)
+    await _refresh_ticket_message(bot, guild, channel, updated)
     await _audit(bot, guild_id, "TICKET_LIBERADO_PAINEL_WEB", updated, {"staff": staff.display_name})
     bot.log_service.record_background(
         guild_id=guild_id,
@@ -174,7 +246,7 @@ async def unclaim_ticket(request: Request, guild_id: int, ticket_id: uuid.UUID) 
         category_snapshot=updated.category.value,
         message=f"Painel web liberou o ticket de {staff.display_name}.",
     )
-    await _notify_channel(_channel(guild, updated), "Ticket liberado pelo painel web.")
+    await _notify_channel(channel, "Ticket liberado pelo painel web.")
     await _after_ticket_change(bot, guild_id)
     return {"ok": True, "message": "Ticket liberado.", "status": _status_label(updated)}
 
@@ -196,6 +268,8 @@ async def close_ticket(request: Request, guild_id: int, ticket_id: uuid.UUID) ->
         raise _ticket_error(str(exc)) from exc
 
     updated = result.ticket
+    channel = _channel(guild, updated)
+    await _refresh_ticket_message(bot, guild, channel, updated, disabled=True)
     await _audit(bot, guild_id, "TICKET_FECHADO_PAINEL_WEB", updated, {"staff": staff.display_name})
     bot.log_service.record_background(
         guild_id=guild_id,
@@ -205,7 +279,7 @@ async def close_ticket(request: Request, guild_id: int, ticket_id: uuid.UUID) ->
         category_snapshot=updated.category.value,
         message="Painel web fechou o ticket.",
     )
-    await _notify_channel(_channel(guild, updated), "Ticket fechado pelo painel web.")
+    await _notify_channel(channel, "Ticket fechado pelo painel web.")
     await _after_ticket_change(bot, guild_id)
     return {"ok": True, "message": "Ticket fechado.", "status": _status_label(updated)}
 
@@ -220,8 +294,10 @@ async def reopen_ticket(request: Request, guild_id: int, ticket_id: uuid.UUID) -
     except TicketNotFoundError as exc:
         raise _ticket_error(str(exc), status_code=404) from exc
 
+    channel = _channel(guild, updated)
+    await _refresh_ticket_message(bot, guild, channel, updated)
     await _audit(bot, guild_id, "TICKET_REABERTO_PAINEL_WEB", updated)
-    await _notify_channel(_channel(guild, updated), "Ticket reaberto pelo painel web.")
+    await _notify_channel(channel, "Ticket reaberto pelo painel web.")
     await _after_ticket_change(bot, guild_id)
     return {"ok": True, "message": "Ticket reaberto.", "status": _status_label(updated)}
 
@@ -236,8 +312,10 @@ async def cancel_ticket(request: Request, guild_id: int, ticket_id: uuid.UUID) -
     except TicketNotFoundError as exc:
         raise _ticket_error(str(exc), status_code=404) from exc
 
+    channel = _channel(guild, updated)
+    await _refresh_ticket_message(bot, guild, channel, updated, disabled=True)
     await _audit(bot, guild_id, "TICKET_CANCELADO_PAINEL_WEB", updated)
-    await _notify_channel(_channel(guild, updated), "Ticket cancelado pelo painel web.")
+    await _notify_channel(channel, "Ticket cancelado pelo painel web.")
     await _after_ticket_change(bot, guild_id)
     return {"ok": True, "message": "Ticket cancelado.", "status": _status_label(updated)}
 
@@ -257,6 +335,7 @@ async def delete_ticket(request: Request, guild_id: int, ticket_id: uuid.UUID) -
         except TicketNotFoundError as exc:
             raise _ticket_error(str(exc), status_code=404) from exc
 
+    await _refresh_ticket_message(bot, guild, channel, ticket, disabled=True)
     await _audit(bot, guild_id, "TICKET_EXCLUIDO_PAINEL_WEB", ticket)
     bot.log_service.record_background(
         guild_id=guild_id,
