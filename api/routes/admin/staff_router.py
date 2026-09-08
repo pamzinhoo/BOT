@@ -197,8 +197,8 @@ async def staff_detail(request: Request, guild_id: int, staff_id: uuid.UUID) -> 
                 action="Assumiu ticket" if claim.unclaimed_at is None else "Assumiu e liberou ticket",
                 created_at=_iso(claim.claimed_at) or "",
                 ticket_id=str(ticket.id),
-                ticket_label=_ticket_label(bot, ticket),
-                detail=_ticket_category_label(ticket, panel_name),
+                ticket_label=f"{_ticket_label(bot, ticket)} · {_ticket_category_label(ticket, panel_name)}",
+                detail=_iso(claim.unclaimed_at),
             )
             for claim, ticket, panel_name in claims
         ],
