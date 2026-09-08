@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, BarChart3, ShieldCheck, Users } from "lucide-react";
+import { AlertTriangle, BarChart3, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { useShell } from "../components/AppShell";
 import { EmptyState, ErrorState, LoadingState, PageHeader, Section, StatusBadge } from "../components/Ui";
