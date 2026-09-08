@@ -1,9 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, EyeOff, Package, Pencil, Plus, ShieldAlert } from "lucide-react";
+import { Download, EyeOff, Package, Pencil, Plus, ShieldAlert, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useShell } from "../components/AppShell";
 import { EmptyState, ErrorState, LoadingState, PageHeader, Section, StatusBadge } from "../components/Ui";
-import { api, DiscordOptions, DlcItem, DlcMutationResponse, DlcsPayload } from "../lib/api";
+import { api, DiscordOptions, DlcAccessPayload, DlcItem, DlcMutationResponse, DlcsPayload } from "../lib/api";
 
 type Draft = {
   kind: "free" | "paid";
@@ -29,11 +29,18 @@ export function DlcsPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [draft, setDraft] = useState<Draft>(DEFAULT_DRAFT);
   const [editing, setEditing] = useState<Record<string, Partial<DlcItem & { price_reais: string }>>>({});
+  const [selectedAccessId, setSelectedAccessId] = useState<string | null>(null);
 
   const dlcs = useQuery({
     queryKey: ["dlcs", guild?.id],
     queryFn: () => api<DlcsPayload>(`/guild/${guild!.id}/dlcs`),
     enabled: Boolean(guild),
+    refetchInterval: 20_000,
+  });
+  const access = useQuery({
+    queryKey: ["dlc-access", guild?.id, selectedAccessId],
+    queryFn: () => api<DlcAccessPayload>(`/guild/${guild!.id}/dlcs/${selectedAccessId}/access`),
+    enabled: Boolean(guild && selectedAccessId),
     refetchInterval: 20_000,
   });
   const options = useQuery({
@@ -45,6 +52,7 @@ export function DlcsPage() {
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["dlcs", guild?.id] });
+    queryClient.invalidateQueries({ queryKey: ["dlc-access", guild?.id] });
     queryClient.invalidateQueries({ queryKey: ["audit", guild?.id] });
   };
 
@@ -143,6 +151,8 @@ export function DlcsPage() {
                 roles={options.data?.roles || []}
                 draft={editing[item.id]}
                 busy={updateMutation.isPending || disableMutation.isPending}
+                accessSelected={selectedAccessId === item.id}
+                onShowAccess={() => setSelectedAccessId((current) => current === item.id ? null : item.id)}
                 onEdit={(patch) => setEditing((current) => ({ ...current, [item.id]: { ...(current[item.id] || seedEdit(item)), ...patch } }))}
                 onCancel={() => setEditing((current) => { const next = { ...current }; delete next[item.id]; return next; })}
                 onSave={() => updateMutation.mutate({ id: item.id, payload: buildUpdatePayload(item, editing[item.id]) })}
@@ -154,6 +164,42 @@ export function DlcsPage() {
         )}
         {(updateMutation.error || disableMutation.error) && <p className="inline-warning">{((updateMutation.error || disableMutation.error) as Error).message}</p>}
       </Section>
+
+      {selectedAccessId && (
+        <Section title="Usuários com acesso à DLC" description="Somente leitura: mostra licença registrada e/ou cargo atual no Discord.">
+          {access.isLoading ? <LoadingState message="Carregando usuários da DLC..." /> : access.error ? <ErrorState message={(access.error as Error).message} /> : access.data ? (
+            <div className="dlc-access-panel">
+              <div className="entity-title-row">
+                <div>
+                  <strong>{access.data.product.name}</strong>
+                  <small>{access.data.total} usuário(s) encontrado(s) · Cargo: {access.data.role_name || access.data.role_id || "sem cargo vinculado"}</small>
+                </div>
+                {access.data.role_missing && <StatusBadge state="offline">Cargo ausente</StatusBadge>}
+              </div>
+              {access.data.items.length === 0 ? <EmptyState message="Nenhum usuário com licença ou cargo desta DLC." /> : (
+                <table className="data-table">
+                  <thead><tr><th>Usuário</th><th>ID Discord</th><th>Origem</th><th>Status</th><th>Cargo agora</th><th>Ativou em</th></tr></thead>
+                  <tbody>
+                    {access.data.items.map((holder) => (
+                      <tr key={holder.discord_id}>
+                        <td><strong>{holder.discord_name || "Nome não resolvido"}</strong><small>{holder.player_id ? `Player ${holder.player_id}` : "Sem player vinculado"}</small></td>
+                        <td className="mono">{holder.discord_id}</td>
+                        <td>{accessSourceLabel(holder.source)}</td>
+                        <td><StatusBadge state={holder.active ? "online" : "offline"}>{accessStatusLabel(holder.status)}</StatusBadge></td>
+                        <td>{holder.has_role_now ? "Sim" : "Não"}</td>
+                        <td>{fmtDate(holder.activated_at)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+              <div className="security-check-grid">
+                {access.data.security_notes.map((note) => <span className="role-chip" key={note}>{note}</span>)}
+              </div>
+            </div>
+          ) : <EmptyState message="Selecione uma DLC para ver os usuários." />}
+        </Section>
+      )}
     </>
   );
 }
@@ -162,11 +208,13 @@ function Metric({ title, value }: { title: string; value: number }) {
   return <div className="entity metric-card"><span>{title}</span><strong>{value}</strong></div>;
 }
 
-function DlcCard({ item, roles, draft, busy, onEdit, onCancel, onSave, onToggle, onDisable }: {
+function DlcCard({ item, roles, draft, busy, accessSelected, onShowAccess, onEdit, onCancel, onSave, onToggle, onDisable }: {
   item: DlcItem;
   roles: DiscordOptions["roles"];
   draft?: Partial<DlcItem & { price_reais: string }>;
   busy: boolean;
+  accessSelected: boolean;
+  onShowAccess: () => void;
   onEdit: (patch: Partial<DlcItem & { price_reais: string }>) => void;
   onCancel: () => void;
   onSave: () => void;
@@ -212,6 +260,7 @@ function DlcCard({ item, roles, draft, busy, onEdit, onCancel, onSave, onToggle,
         ) : (
           <button className="button ghost" disabled={busy || item.deleted} onClick={() => onEdit(seedEdit(item))}><Pencil size={15} />Editar</button>
         )}
+        <button className="button ghost" disabled={busy || item.deleted} onClick={onShowAccess}><Users size={15} />{accessSelected ? "Ocultar usuários" : "Ver usuários"}</button>
         <button className="button ghost" disabled={busy || item.deleted} onClick={onToggle}>{item.is_active ? <EyeOff size={15} /> : <Package size={15} />}{item.is_active ? "Desativar" : "Ativar"}</button>
         <button className="button danger" disabled={busy || item.deleted} onClick={onDisable}><Download size={15} />Remover do catálogo</button>
       </div>
@@ -242,6 +291,29 @@ function buildUpdatePayload(item: DlcItem, draft?: Partial<DlcItem & { price_rea
   const roleId = String(edit.role_id ?? "").trim();
   if (roleId) payload.role_id = roleId;
   return payload;
+}
+
+function fmtDate(value?: string | null) {
+  return value ? new Date(value).toLocaleString("pt-BR") : "Sem dados";
+}
+
+function accessStatusLabel(value: string) {
+  return {
+    active: "Ativa",
+    pending: "Pendente",
+    revoked: "Revogada",
+    expired: "Expirada",
+    role_only: "Só cargo",
+  }[value] || value;
+}
+
+function accessSourceLabel(value: string) {
+  return value
+    .replace("role_grant", "Cargo/licença")
+    .replace("discord_role", "Cargo atual")
+    .replace("purchase", "Compra")
+    .replace("payment", "Pagamento")
+    .replace("manual", "Manual");
 }
 
 function slugify(value: string) {
