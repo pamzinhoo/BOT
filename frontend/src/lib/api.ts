@@ -162,6 +162,41 @@ export type PanelsPayload = {
   fixed: FixedPanelItem[];
 };
 
+export type MonetizationMetric = {
+  label: string;
+  value: number | string;
+  hint?: string | null;
+};
+
+export type MonetizationAlert = {
+  severity: "info" | "warning" | "error";
+  title: string;
+  message: string;
+};
+
+export type MonetizationRecentPayment = {
+  id: string;
+  user_id: string;
+  plan_id: string;
+  plan_name?: string | null;
+  provider: string;
+  amount_label: string;
+  status: string;
+  created_at: string;
+  paid_at?: string | null;
+  expires_at?: string | null;
+};
+
+export type MonetizationSummary = {
+  guild_id: string;
+  generated_at: string;
+  gateway: { providers_seen?: string[]; mode?: string; read_only?: boolean };
+  metrics: MonetizationMetric[];
+  alerts: MonetizationAlert[];
+  recent_payments: MonetizationRecentPayment[];
+  security_notes: string[];
+};
+
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`/admin/api${path}`, {
     ...init,
