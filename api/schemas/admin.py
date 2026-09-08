@@ -232,6 +232,41 @@ class StaffDetail(BaseModel):
     history: list[StaffActivityItem] = Field(default_factory=list)
 
 
+class MonetizationMetric(BaseModel):
+    label: str
+    value: int | float | str
+    hint: str | None = None
+
+
+class MonetizationAlert(BaseModel):
+    severity: Literal["info", "warning", "error"]
+    title: str
+    message: str
+
+
+class MonetizationRecentPayment(BaseModel):
+    id: str
+    user_id: str
+    plan_id: str
+    plan_name: str | None = None
+    provider: str
+    amount_label: str
+    status: str
+    created_at: str
+    paid_at: str | None = None
+    expires_at: str | None = None
+
+
+class MonetizationSummaryResponse(BaseModel):
+    guild_id: str
+    generated_at: str
+    gateway: dict[str, Any]
+    metrics: list[MonetizationMetric] = Field(default_factory=list)
+    alerts: list[MonetizationAlert] = Field(default_factory=list)
+    recent_payments: list[MonetizationRecentPayment] = Field(default_factory=list)
+    security_notes: list[str] = Field(default_factory=list)
+
+
 class RankingRow(BaseModel):
     staff_id: str
     name: str
