@@ -56,6 +56,11 @@ export function DlcsPage() {
     queryClient.invalidateQueries({ queryKey: ["audit", guild?.id] });
   };
 
+  const toggleAccess = (item: DlcItem) => {
+    if (item.deleted) return;
+    setSelectedAccessId((current) => current === item.id ? null : item.id);
+  };
+
   const createMutation = useMutation({
     mutationFn: () => api<DlcMutationResponse>(`/guild/${guild!.id}/dlcs`, { method: "POST", body: JSON.stringify(draft) }),
     onSuccess: () => {
@@ -141,7 +146,7 @@ export function DlcsPage() {
           </div>
         </Section>
       )}
-      <Section title="DLCs cadastradas" description="Editar aqui altera o catálogo real. Desativar mantém histórico de compras/licenças.">
+      <Section title="DLCs cadastradas" description="Clique em uma DLC paga para ver usuários com acesso. Editar aqui altera o catálogo real; desativar mantém histórico.">
         {items.length === 0 ? <EmptyState message="Nenhuma DLC cadastrada ainda." /> : (
           <div className="entity-grid dlc-grid">
             {items.map((item) => (
@@ -152,7 +157,8 @@ export function DlcsPage() {
                 draft={editing[item.id]}
                 busy={updateMutation.isPending || disableMutation.isPending}
                 accessSelected={selectedAccessId === item.id}
-                onShowAccess={() => setSelectedAccessId((current) => current === item.id ? null : item.id)}
+                onCardAccess={() => item.kind === "paid" && toggleAccess(item)}
+                onShowAccess={() => toggleAccess(item)}
                 onEdit={(patch) => setEditing((current) => ({ ...current, [item.id]: { ...(current[item.id] || seedEdit(item)), ...patch } }))}
                 onCancel={() => setEditing((current) => { const next = { ...current }; delete next[item.id]; return next; })}
                 onSave={() => updateMutation.mutate({ id: item.id, payload: buildUpdatePayload(item, editing[item.id]) })}
@@ -208,12 +214,13 @@ function Metric({ title, value }: { title: string; value: number }) {
   return <div className="entity metric-card"><span>{title}</span><strong>{value}</strong></div>;
 }
 
-function DlcCard({ item, roles, draft, busy, accessSelected, onShowAccess, onEdit, onCancel, onSave, onToggle, onDisable }: {
+function DlcCard({ item, roles, draft, busy, accessSelected, onCardAccess, onShowAccess, onEdit, onCancel, onSave, onToggle, onDisable }: {
   item: DlcItem;
   roles: DiscordOptions["roles"];
   draft?: Partial<DlcItem & { price_reais: string }>;
   busy: boolean;
   accessSelected: boolean;
+  onCardAccess: () => void;
   onShowAccess: () => void;
   onEdit: (patch: Partial<DlcItem & { price_reais: string }>) => void;
   onCancel: () => void;
@@ -223,8 +230,22 @@ function DlcCard({ item, roles, draft, busy, accessSelected, onShowAccess, onEdi
 }) {
   const isEditing = Boolean(draft);
   const edit = draft || seedEdit(item);
+  const cardClickable = item.kind === "paid" && !item.deleted && !isEditing;
+  const stop = (event: React.MouseEvent) => event.stopPropagation();
   return (
-    <div className="entity dlc-card">
+    <div
+      className={`entity dlc-card ${cardClickable ? "is-clickable" : ""}`}
+      onClick={cardClickable ? onCardAccess : undefined}
+      role={cardClickable ? "button" : undefined}
+      tabIndex={cardClickable ? 0 : undefined}
+      title={cardClickable ? "Clique para ver usuários com acesso" : undefined}
+      onKeyDown={(event) => {
+        if (cardClickable && (event.key === "Enter" || event.key === " ")) {
+          event.preventDefault();
+          onCardAccess();
+        }
+      }}
+    >
       <div className="entity-title-row">
         <strong>{item.name}</strong>
         <StatusBadge state={item.deleted ? "offline" : item.is_active ? "online" : "degraded"}>{item.deleted ? "Removida" : item.is_active ? "Ativa" : "Inativa"}</StatusBadge>
@@ -235,7 +256,7 @@ function DlcCard({ item, roles, draft, busy, accessSelected, onShowAccess, onEdi
       {item.description && !isEditing && <p>{item.description}</p>}
       {item.role_missing && <p className="inline-warning"><ShieldAlert size={14} /> Cargo vinculado não existe mais no servidor.</p>}
       {isEditing && (
-        <div className="dashboard-form compact-edit-form">
+        <div className="dashboard-form compact-edit-form" onClick={stop}>
           <label>Nome<input value={String(edit.name ?? "")} onChange={(event) => onEdit({ name: event.target.value })} maxLength={150} /></label>
           <label>Descrição<textarea value={String(edit.description ?? "")} onChange={(event) => onEdit({ description: event.target.value })} rows={3} maxLength={1000} /></label>
           {item.kind === "paid" ? (
@@ -251,7 +272,7 @@ function DlcCard({ item, roles, draft, busy, accessSelected, onShowAccess, onEdi
           )}
         </div>
       )}
-      <div className="card-actions">
+      <div className="card-actions" onClick={stop}>
         {isEditing ? (
           <>
             <button className="button ghost" disabled={busy} onClick={onCancel}>Cancelar</button>
