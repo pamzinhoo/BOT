@@ -280,6 +280,54 @@ class MonetizationPlanRow(BaseModel):
     source_note: str
 
 
+class MonetizationPlanManageRow(BaseModel):
+    id: str
+    name: str
+    description: str | None = None
+    emoji: str | None = None
+    role_id: str | None = None
+    role_name: str | None = None
+    role_missing: bool = False
+    price_monthly_amount: int | None = None
+    price_yearly_amount: int | None = None
+    price_one_time_amount: int | None = None
+    price_monthly_label: str | None = None
+    price_yearly_label: str | None = None
+    price_one_time_label: str | None = None
+    currency: str = "BRL"
+    position: int = 0
+    is_recommended: bool = False
+    is_active: bool = True
+    product_id: str | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
+class MonetizationPlanListResponse(BaseModel):
+    guild_id: str
+    items: list[MonetizationPlanManageRow] = Field(default_factory=list)
+    security_notes: list[str] = Field(default_factory=list)
+
+
+class MonetizationPlanMutationRequest(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    emoji: str | None = None
+    role_id: str | None = None
+    price_monthly_reais: str | None = None
+    price_yearly_reais: str | None = None
+    price_one_time_reais: str | None = None
+    position: int | None = None
+    is_recommended: bool | None = None
+    is_active: bool | None = None
+
+
+class MonetizationPlanMutationResponse(BaseModel):
+    item: MonetizationPlanManageRow
+    shop_refresh_attempted: bool = False
+    security_notes: list[str] = Field(default_factory=list)
+
+
 class MonetizationStatusBreakdown(BaseModel):
     status: str
     count: int
