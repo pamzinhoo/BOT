@@ -48,6 +48,41 @@ export type DiscordOptions = {
   roles: { id: string; name: string; type: string; position?: number; color?: string }[];
 };
 
+export type GiveawayItem = {
+  id: string;
+  title: string;
+  description?: string | null;
+  status: "OPEN" | "CLOSED" | "CANCELED" | string;
+  channel_id: string;
+  channel_name?: string | null;
+  channel_missing?: boolean;
+  message_id?: string | null;
+  creator_id: string;
+  creator_name?: string | null;
+  winners_count: number;
+  entry_count: number;
+  winner_ids: string[];
+  winner_names: string[];
+  allowed_role_ids: string[];
+  missing_allowed_role_ids: string[];
+  prize_type: "ROLE" | "CUSTOM" | string;
+  prize_role_id?: string | null;
+  prize_role_name?: string | null;
+  prize_text?: string | null;
+  expires_at: string;
+  closed_at?: string | null;
+  created_at?: string | null;
+};
+
+export type GiveawaysPayload = {
+  guild_id: string;
+  items: GiveawayItem[];
+};
+
+export type GiveawayMutationResponse = {
+  item: GiveawayItem;
+};
+
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`/admin/api${path}`, {
     ...init,
