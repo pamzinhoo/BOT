@@ -70,8 +70,10 @@ def test_dashboard_monetization_analytics_explains_sources() -> None:
     assert "top_revenue_plan" in source
     assert "Receita aprovada registrada" in source
     assert "nao prova sozinha que foi venda real" in source
-    assert "5 planos no total" in source
-    assert "1 cupom no total" in source
+    assert "visible_plan_rows" in source
+    assert "hidden_empty_inactive_plans" in source
+    assert "visible_coupons" in source
+    assert "deletados logicos ficam ocultos" in source
     assert "MonetizationPlanRow" in api
     assert "MonetizationStatusBreakdown" in api
     assert "MonetizationCouponRow" in api
