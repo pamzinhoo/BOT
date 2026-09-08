@@ -146,3 +146,14 @@ def test_dashboard_dlcs_use_existing_service_and_safe_actor() -> None:
     assert '{ label: "DLCs", to: "/dlcs"' in shell
     assert "DLC grátis usa o cargo Verificado" in page
     assert "dlc-grid" in css
+
+
+def test_dashboard_free_dlc_removal_cleans_announcement_message() -> None:
+    source = Path("api/routes/admin/dlcs_router.py").read_text(encoding="utf-8")
+
+    assert "_delete_free_dlc_announcements" in source
+    assert "dlc_announcement_channel_id" in source
+    assert "history(limit=100)" in source
+    assert "message.delete" in source
+    assert "DLC gratis era enviada" in source
+    assert "await _delete_free_dlc_announcements(bot, guild_id, product)" in source
