@@ -99,6 +99,7 @@ def test_dashboard_events_router_pushes_invalidation_events() -> None:
     assert "dashboard.invalidate" in source
     assert "settings" in source
     assert "discord-options" in source
+    assert "tickets" in source
     assert "dlcs" in source
     assert "giveaways" in source
 
@@ -233,3 +234,17 @@ def test_dashboard_ticket_actions_use_existing_ticket_services() -> None:
     assert "Ações do atendimento" in page
     assert "Excluir canal" in page
     assert "ticket-actions-panel" in css
+
+
+def test_dashboard_tickets_refresh_without_tab_switching() -> None:
+    events = Path("api/routes/admin/events_router.py").read_text(encoding="utf-8")
+    shell = Path("frontend/src/components/AppShell.tsx").read_text(encoding="utf-8")
+
+    assert "tickets" in events
+    assert "await asyncio.sleep(5)" in events
+    assert "sem o usuario precisar trocar de aba" in events
+    assert "EventSource tenta reconectar sozinho" in shell
+    assert "source.onerror" in shell
+    assert "queryClient.invalidateQueries({ queryKey: [\"ready\"] })" in shell
+    onerror_block = shell[shell.index("source.onerror"):shell.index("return () => source.close()")]
+    assert "source.close()" not in onerror_block
