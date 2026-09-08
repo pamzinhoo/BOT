@@ -60,7 +60,8 @@
   gap: 14px;
 }
 
-.dashboard-form label {
+.dashboard-form label,
+.role-picker-field {
   display: grid;
   gap: 6px;
   color: var(--muted-2);
@@ -75,6 +76,47 @@
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
+}
+
+.role-picker-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.field-label {
+  color: var(--muted-2);
+  font-size: 13px;
+}
+
+.role-checkbox-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 8px;
+  max-height: 220px;
+  overflow: auto;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.role-checkbox {
+  display: flex !important;
+  grid-template-columns: none !important;
+  align-items: center;
+  gap: 8px !important;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text) !important;
+  cursor: pointer;
+}
+
+.role-checkbox input {
+  width: auto;
+  accent-color: var(--accent);
 }
 
 .form-actions,
