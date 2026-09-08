@@ -5,7 +5,7 @@ Base: `master` at `ea1bf87bb2e71a7e1c52db38e710a296b64a33ee`
 
 ## Current status
 
-Phase A is implemented, Phase A.1 is implemented, Phase A.2 fixed boolean persistence/display, Phase C.1 is started, and Phase B.1 added the first real operational page: Giveaways.
+Phase A is implemented, Phase A.1 is implemented, Phase A.2 fixed boolean persistence/display, Phase C.1 is started, Phase B.1 added Giveaways, and Phase B.2 started DLC management.
 
 ## What is fixed now
 
@@ -17,13 +17,16 @@ Phase A is implemented, Phase A.1 is implemented, Phase A.2 fixed boolean persis
 - The UI highlights saved channels/roles that no longer exist in Discord.
 - Boolean values now remain booleans in the settings API. This fixes toggles like `verificacao.enabled` appearing active again after saving `false`.
 - Time fields show units and keep the value saved in the canonical database unit.
+- Emoji fields are forced to text inputs in the web dashboard so admins can paste any emoji/custom emoji instead of being blocked by a select.
+- Audit log rendering now normalizes `executor_id <= 0` to no Discord mention, so dashboard actions show `Painel web` instead of `<@0>`.
 - A local SSE endpoint now pushes `dashboard.invalidate` events every 15 seconds.
 - The frontend subscribes to the SSE stream and invalidates dashboard queries, so settings changed through Discord `/config` are refreshed without needing manual F5.
 - The dashboard now has `/giveaways` as a real page, not a fake sidebar link.
 - Giveaways can be listed, created/published, closed, canceled and rerolled through API routes that call the existing giveaway service/cog flow.
 - The giveaway creation form now uses checkbox cards for allowed roles instead of native multi-select.
 - Giveaway duration now supports minutes, hours and days in the web form/API.
-- New giveaway audit logs created by the dashboard are attributed to `Painel web` instead of mentioning `<@0>`.
+- The dashboard now has `/dlcs` as a real page.
+- DLCs can be listed, created as free/paid, edited, activated/deactivated, and soft-removed through API routes that call `DlcService`.
 
 ## Giveaway phase details
 
@@ -43,6 +46,23 @@ New frontend files/changes:
 
 The create action validates channel, roles, prize type, title, duration and winner count before publishing the Discord message.
 
+## DLC phase details
+
+New backend files/changes:
+
+- `api/routes/admin/dlcs_router.py`
+- `api/routes/admin/__init__.py` registering `dlcs_router`
+
+New frontend files/changes:
+
+- `frontend/src/pages/DlcsPage.tsx`
+- `frontend/src/App.tsx` route `/dlcs`
+- `frontend/src/components/AppShell.tsx` sidebar item
+- `frontend/src/lib/api.ts` DLC types
+- `frontend/src/dashboard-overrides.css` DLC page styles
+
+The DLC API validates slug, name, description, price and Discord roles before calling `DlcService`. Free DLCs use the verified-role rule already enforced by `DlcService`; paid DLCs require a valid exclusive role.
+
 ## Why settings phase came first
 
 The previous dashboard shape used raw attribute names as API keys. Different settings models reuse names like `enabled`, `log_channel_id`, `channel_id`, `verified_role_id` and `update_interval_minutes`. A dashboard save could therefore target the wrong module.
@@ -52,16 +72,20 @@ The new router makes dashboard keys explicit and namespaced. This prevents a web
 ## Files changed
 
 - `api/routes/admin/settings_router.py`
+- `api/routes/admin/settings_emoji_router.py`
+- `api/routes/admin/settings_patch_router.py`
 - `api/routes/admin/events_router.py`
 - `api/routes/admin/giveaways_router.py`
+- `api/routes/admin/dlcs_router.py`
 - `api/routes/admin/__init__.py`
 - `services/giveaway_service.py`
-- `views/embeds.py`
+- `services/audit_log_service.py`
 - `frontend/src/lib/api.ts`
 - `frontend/src/components/SettingsControls.tsx`
 - `frontend/src/components/AppShell.tsx`
 - `frontend/src/pages/SettingsPage.tsx`
 - `frontend/src/pages/GiveawaysPage.tsx`
+- `frontend/src/pages/DlcsPage.tsx`
 - `frontend/src/App.tsx`
 - `frontend/src/main.tsx`
 - `frontend/src/dashboard-overrides.css`
@@ -76,10 +100,11 @@ The new router makes dashboard keys explicit and namespaced. This prevents a web
 - New settings router is registered before legacy routes so only the settings endpoints are replaced.
 - The events router is separate from the legacy router and only exposes a local-only read/event stream.
 - Giveaway write actions call `GiveawayService`, `close_and_announce` and the persistent Discord view instead of duplicating business logic.
+- DLC write actions call `DlcService` instead of writing Product/Plan directly from the dashboard.
 - Channel and role IDs are validated against Discord before saving/creating actions.
 - Ambiguous legacy keys are rejected instead of silently updating the wrong target.
 - Auto refresh pauses while a user has unsaved local edits.
-- Buttons for features without real web CRUD, such as DLCs, remain hidden until implemented.
+- Dashboard audit actors are normalized to `Painel web` instead of fake Discord mention IDs.
 
 ## Local validation commands
 
@@ -87,7 +112,7 @@ Run from the repository root:
 
 ```bash
 python -m pytest tests/test_admin_settings_router_static.py
-python -m ruff check api/routes/admin/settings_router.py api/routes/admin/events_router.py api/routes/admin/giveaways_router.py api/routes/admin/__init__.py services/giveaway_service.py tests/test_admin_settings_router_static.py
+python -m ruff check services/audit_log_service.py api/routes/admin/settings_router.py api/routes/admin/settings_emoji_router.py api/routes/admin/settings_patch_router.py api/routes/admin/events_router.py api/routes/admin/giveaways_router.py api/routes/admin/dlcs_router.py api/routes/admin/__init__.py services/giveaway_service.py tests/test_admin_settings_router_static.py
 cd frontend
 npm run build
 ```
@@ -106,10 +131,16 @@ npm run build
 10. Confirm canceled giveaways cannot be joined.
 11. Create a giveaway restricted to one role and confirm only that role can join.
 12. Confirm the audit log says `Executor: Painel web` for dashboard-created giveaways.
+13. Open `/admin/dlcs`.
+14. Create a free DLC only after the Verificado role is configured.
+15. Create a paid DLC with price and exclusive role.
+16. Edit paid DLC name, description, price and role.
+17. Toggle active/inactive and confirm the shop/catalog behavior.
+18. Soft-remove a DLC and confirm history is preserved.
+19. Confirm DLC audit logs say `Executor: Painel web`.
 
 ## Next phases
 
-- Phase B.2: DLC read/write page using `DlcService`.
 - Phase B.3: Discord panels page with real republish/refresh actions.
 - Phase B.4: ticket/staff operational actions.
 - Phase B.5: monetization/plan/coupon/payment pages.
