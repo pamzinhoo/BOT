@@ -199,6 +199,11 @@ class AuditLogService:
         old_value: str | None = None,
         new_value: str | None = None,
     ) -> AuditLogEntry | None:
+        if executor_id is not None and executor_id <= 0:
+            # O painel web nao possui usuario Discord logado. Historicamente alguns fluxos
+            # enviavam 0 como placeholder e o embed virava <@0>. Normalizamos aqui para
+            # todo log atual/futuro usar executor_name nesses casos.
+            executor_id = None
         if executor_id is None and executor_name is None:
             executor_name = "Desconhecido"
 
@@ -251,7 +256,7 @@ class AuditLogService:
         self,
         *,
         guild_id: int,
-        actor_id: int,
+        actor_id: int | None,
         actor_name: str,
         config_category: str,
         config_name: str,
