@@ -17,9 +17,13 @@ def test_dashboard_monetization_router_is_read_only_summary() -> None:
     assert "MonetizationSettings" in source
     assert "somente leitura" in source
     assert "nao expõe QR code PIX" in source
-    assert "pix_qr_code" not in source.split("return MonetizationSummaryResponse", 1)[1]
-    assert "checkout_url" not in source.split("return MonetizationSummaryResponse", 1)[1]
-    assert "payer_information" not in source.split("return MonetizationSummaryResponse", 1)[1]
+    assert "Products sao globais" in source
+    assert "required_role_guild_id == guild_id" in source
+    assert "Product.id.in_(plan_product_ids)" in source
+    recent_payment_schema = schemas.split("class MonetizationRecentPayment", 1)[1].split("class MonetizationSummaryResponse", 1)[0]
+    assert "pix_qr_code" not in recent_payment_schema
+    assert "checkout_url" not in recent_payment_schema
+    assert "payer_information" not in recent_payment_schema
     assert "MonetizationSummaryResponse" in schemas
     assert "MonetizationRecentPayment" in schemas
     assert "MonetizationAlert" in schemas
