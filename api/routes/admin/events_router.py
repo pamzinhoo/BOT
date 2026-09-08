@@ -29,6 +29,7 @@ _REFRESH_QUERIES = (
     "system",
     "giveaways",
     "dlcs",
+    "monetization",
 )
 
 
