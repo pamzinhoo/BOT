@@ -217,12 +217,56 @@
   color: #fecaca;
 }
 
-.staff-profile-drawer .compact-grid {
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+.staff-profile-drawer section {
+  min-width: 0;
+}
+
+.staff-profile-drawer .metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin: 0;
 }
 
 .staff-metric-card {
-  min-height: 104px;
+  display: grid !important;
+  grid-template-columns: 1fr;
+  align-content: start;
+  gap: 8px;
+  min-height: 108px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.staff-metric-card span,
+.staff-metric-card strong,
+.staff-metric-card small {
+  display: block;
+  margin: 0;
+  min-width: 0;
+}
+
+.staff-metric-card span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.staff-metric-card strong {
+  color: var(--text);
+  font-size: clamp(22px, 3vw, 30px);
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  overflow-wrap: anywhere;
+}
+
+.staff-metric-card small {
+  color: var(--muted-2);
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .staff-mini-list {
@@ -260,5 +304,9 @@
   .compact-grid,
   .staff-mini-item {
     grid-template-columns: 1fr;
+  }
+
+  .staff-profile-drawer .metric-grid {
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
   }
 }
