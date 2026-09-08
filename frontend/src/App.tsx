@@ -1,6 +1,7 @@
 import { Route, Routes } from "react-router-dom";
 import { AppShell } from "./components/AppShell";
 import { AuditPage } from "./pages/AuditPage";
+import { DlcsPage } from "./pages/DlcsPage";
 import { GiveawaysPage } from "./pages/GiveawaysPage";
 import { OverviewPage } from "./pages/OverviewPage";
 import { PanelsPage } from "./pages/PanelsPage";
@@ -17,6 +18,7 @@ export function App() {
         <Route path="/tickets" element={<TicketsPage />} />
         <Route path="/staff" element={<StaffPage />} />
         <Route path="/giveaways" element={<GiveawaysPage />} />
+        <Route path="/dlcs" element={<DlcsPage />} />
         <Route path="/settings/:section" element={<SettingsPage />} />
         <Route path="/panels" element={<PanelsPage />} />
         <Route path="/audit" element={<AuditPage />} />
