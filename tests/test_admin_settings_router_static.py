@@ -66,6 +66,14 @@ def test_dashboard_settings_patch_actor_override_is_registered() -> None:
     assert "<@0>" in patch_source
 
 
+def test_audit_log_service_normalizes_zero_executor_id() -> None:
+    service = Path("services/audit_log_service.py").read_text(encoding="utf-8")
+
+    assert "executor_id is not None and executor_id <= 0" in service
+    assert "executor_id = None" in service
+    assert "virava <@0>" in service
+
+
 def test_dashboard_events_router_is_registered_before_legacy_router() -> None:
     source = Path("api/routes/admin/__init__.py").read_text(encoding="utf-8")
 
