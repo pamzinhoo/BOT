@@ -13,13 +13,22 @@
   font-size: 11px;
 }
 
-.config-warning {
+.config-warning,
+.inline-warning {
   border: 1px solid rgba(245, 158, 11, 0.45);
   background: rgba(245, 158, 11, 0.12);
   border-radius: 16px;
   padding: 12px 14px;
   margin-bottom: 18px;
   color: var(--text);
+}
+
+.inline-warning {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 0;
+  font-size: 13px;
 }
 
 .setting-row.has-error {
@@ -46,9 +55,75 @@
   color: #fcd34d;
 }
 
+.dashboard-form {
+  display: grid;
+  gap: 14px;
+}
+
+.dashboard-form label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted-2);
+  font-size: 13px;
+}
+
+.dashboard-form small {
+  color: var(--muted-2);
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.form-actions,
+.card-actions,
+.entity-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.form-actions {
+  justify-content: flex-end;
+}
+
+.entity-title-row {
+  justify-content: space-between;
+}
+
+.compact-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: 18px;
+}
+
+.metric-card strong {
+  font-size: 28px;
+}
+
+.giveaway-grid {
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.giveaway-card {
+  align-items: stretch;
+}
+
+.giveaway-card p {
+  margin: 0;
+  color: var(--muted);
+}
+
 @media (max-width: 720px) {
   .duration-control {
     max-width: none;
     margin-left: 0;
+  }
+
+  .form-row,
+  .compact-grid {
+    grid-template-columns: 1fr;
   }
 }
