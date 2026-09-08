@@ -196,6 +196,24 @@ class GiveawayService:
 
         return giveaway, winners
 
+    async def cancel_giveaway(self, giveaway_id: uuid.UUID) -> Giveaway | None:
+        """Cancela um sorteio aberto sem sortear nem entregar premio.
+
+        Mantem historico/participantes no banco para auditoria, mas impede a
+        varredura automatica e os botoes de participacao de tratarem o sorteio
+        como ativo.
+        """
+        async with self._database.session() as session:
+            repo = GiveawayRepository(session)
+            giveaway = await repo.get_by_id_locked(giveaway_id)
+            if giveaway is None or giveaway.status != GiveawayStatus.OPEN:
+                return None
+            giveaway.status = GiveawayStatus.CANCELED
+            giveaway.closed_at = datetime.now(UTC)
+            await session.flush()
+            await session.refresh(giveaway)
+        return giveaway
+
     async def reroll(self, giveaway_id: uuid.UUID) -> tuple[Giveaway, list[int]] | None:
         async with self._database.session() as session:
             repo = GiveawayRepository(session)
