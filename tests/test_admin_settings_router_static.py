@@ -171,16 +171,19 @@ def test_dashboard_free_dlc_edit_updates_existing_announcement() -> None:
     assert "elif text_changed and is_free and product.is_active" in source
 
 
-def test_license_reconciliation_is_non_destructive_for_existing_roles() -> None:
-    source = Path("services/reconciliation_service.py").read_text(encoding="utf-8")
+def test_license_role_sync_is_non_destructive_for_existing_roles() -> None:
+    reconciliation = Path("services/reconciliation_service.py").read_text(encoding="utf-8")
     role_sync = Path("services/role_sync_service.py").read_text(encoding="utf-8")
 
-    assert "propositalmente nao destrutiva" in source
-    assert "nao remove cargos que alguem" in source
-    assert "startup causou perda em massa" in source
-    assert "Reconciliacao nao destrutiva bloqueou remocao" in source
-    assert "await member.remove_roles" not in source
-    assert "await member.remove_roles" in role_sync
+    assert "propositalmente nao destrutiva" in reconciliation
+    assert "nao remove cargos que alguem" in reconciliation
+    assert "startup causou perda em massa" in reconciliation
+    assert "Reconciliacao nao destrutiva bloqueou remocao" in reconciliation
+    assert "RoleSync nao destrutivo bloqueou evento" in role_sync
+    assert "Dublador" in role_sync
+    assert "remocao deve ser acao explicita" in role_sync
+    assert "await member.remove_roles" not in reconciliation
+    assert "await member.remove_roles" not in role_sync
 
 
 def test_dashboard_panels_use_real_services_and_safe_publish_flow() -> None:
