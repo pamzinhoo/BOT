@@ -146,17 +146,20 @@
 }
 
 .giveaway-grid,
-.dlc-grid {
+.dlc-grid,
+.panel-grid {
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
 }
 
 .giveaway-card,
-.dlc-card {
+.dlc-card,
+.panel-card {
   align-items: stretch;
 }
 
 .giveaway-card p,
-.dlc-card p {
+.dlc-card p,
+.panel-card p {
   margin: 0;
   color: var(--muted);
 }
@@ -172,6 +175,18 @@
   border-radius: 14px;
   padding: 12px;
   background: rgba(255, 255, 255, 0.03);
+}
+
+.panel-meta,
+.panel-channel-select {
+  display: grid;
+  gap: 6px;
+  color: var(--muted-2);
+  font-size: 13px;
+}
+
+.panel-meta small {
+  color: #fcd34d;
 }
 
 @media (max-width: 720px) {
