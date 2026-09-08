@@ -199,6 +199,12 @@ class AuditLogService:
         old_value: str | None = None,
         new_value: str | None = None,
     ) -> AuditLogEntry | None:
+        # IDs de usuário do Discord são snowflakes positivos. O dashboard local
+        # usa historicamente 0 como sentinela para "sem usuário Discord"; se esse
+        # valor chegar ao renderer ele vira a menção inválida <@0>. Normalize na
+        # fronteira do serviço para não gravar nem renderizar IDs fictícios.
+        if executor_id is not None and executor_id <= 0:
+            executor_id = None
         if executor_id is None and executor_name is None:
             executor_name = "Desconhecido"
 
