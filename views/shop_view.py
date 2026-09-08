@@ -75,11 +75,6 @@ def plan_card_embed(plan: Plan, benefits: list[str], *, position: int, total: in
 
 
 def free_dlc_list_embed(products: list[Any]) -> discord.Embed:
-    """Lista publica das DLCs gratuitas ativas da guild -- sem preco, sem
-    botao de compra (nao existe compra pra elas): acesso e automatico pra
-    quem tem o cargo Verificado. Painel principal da loja so lista Plan
-    (planos/DLC paga), entao sem isto a DLC gratuita fica invisivel pro
-    jogador mesmo depois de criada certinho no bot."""
     embed = discord.Embed(
         title="🎁 DLCs Grátis",
         description=(
@@ -119,13 +114,6 @@ def shop_panel_embed(plans: list[Plan]) -> discord.Embed:
 
 
 class ShopPanelView(SafeView):
-    """Painel fixo da loja — postado uma vez num canal (via /loja publicar:True
-    ou ao definir o Canal da Loja em /config painel > Monetização) e atualizado
-    sozinho quando os planos mudam. So tem um botao publico com custom_id fixo;
-    a navegacao/compra de verdade acontece na ShopView efemera de sempre, cada
-    clique gera uma instancia nova — sem estado (index) compartilhado entre
-    usuarios diferentes."""
-
     def __init__(self) -> None:
         super().__init__(timeout=None)
 
@@ -135,9 +123,6 @@ class ShopPanelView(SafeView):
     async def open_shop(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
         bot: LimerenceBot = interaction.client  # type: ignore[assignment]
         assert interaction.guild_id is not None
-        # Deferir de imediato: list_plans + um list_benefits por plano fazem
-        # varias idas ao banco antes de termos algo pra mostrar, o que
-        # facilmente passa dos 3s que o Discord da pra responder a interacao.
         await interaction.response.defer()
         plans = await bot.plan_service.list_plans(interaction.guild_id, only_active=True)
         if not plans:
@@ -162,9 +147,6 @@ class ShopPanelView(SafeView):
 
 
 class ShopView(SafeView):
-    """/loja — navega pelos planos ativos da guild e inicia a compra. So
-    exibe o que o admin cadastrou: sem plano fixo, sem beneficio fixo."""
-
     def __init__(
         self,
         plans: list[Plan],
@@ -177,8 +159,6 @@ class ShopView(SafeView):
         self.plans = plans
         self.benefits_by_plan = benefits_by_plan
         self.index = index
-        # so vem preenchido quando a Loja e aberta de fora de um servidor
-        # (ex.: botao da DM de renovacao), onde interaction.user e um User
         self.member = member
         self._sync_buttons()
 
@@ -265,26 +245,19 @@ async def _start_purchase(
     payer_information: str | None = None,
     skip_payer_prompt: bool = False,
 ) -> None:
-    """Fluxo unico de compra (Loja, botao Renovar, etc.).
-
-    A etapa de cupom e OPCIONAL e nao-bloqueante: se a guild nao tiver nenhum
-    cupom ativo, nada muda em relacao ao comportamento historico. Se tiver, o
-    comprador ve uma tela "Possui um cupom?" onde pode simplesmente seguir sem
-    cupom. Nenhuma cobranca e gerada antes do cupom ser validado.
-
-    A etapa de "quem vai pagar" (Modal) so aparece quando o provider resolvido
-    pra guild e o ManualProvider (PIX manual) — gateways automaticos tem seu
-    proprio checkout, ninguem precisa identificar quem fez o PIX."""
     bot: LimerenceBot = interaction.client  # type: ignore[assignment]
     member = member if member is not None else interaction.user  # type: ignore[assignment]
     if not isinstance(member, discord.Member):
         return
 
-    if coupon_code is None and not skip_coupon_prompt and not interaction.response.is_done():
+    if not interaction.response.is_done():
+        await interaction.response.defer(ephemeral=interaction.guild is not None)
+
+    if coupon_code is None and not skip_coupon_prompt:
         coupons = await bot.coupon_service.list_coupons(member.guild.id, only_active=True)
         if coupons:
             price = _price_for(plan, cycle)
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 f"Você possui um cupom de desconto para **{plan.name}**"
                 + (f" ({_cents_to_display(price, plan.currency)})?" if price is not None else "?"),
                 view=_CouponPromptView(plan, cycle, member=member, renewal=renewal),
@@ -292,16 +265,18 @@ async def _start_purchase(
             )
             return
 
-    if payer_information is None and not skip_payer_prompt and not interaction.response.is_done():
+    if payer_information is None and not skip_payer_prompt:
         provider = await bot.payment_service.resolve_provider(member.guild.id)
         if isinstance(provider, ManualProvider):
-            await interaction.response.send_modal(
-                _PayerInfoModal(plan, cycle, member=member, renewal=renewal, coupon_code=coupon_code)
+            await interaction.followup.send(
+                "Antes de gerar o pedido, informe quem fará o pagamento. "
+                "Isso ajuda a staff a identificar o PIX/depósito depois.",
+                view=_PayerInfoPromptView(
+                    plan, cycle, member=member, renewal=renewal, coupon_code=coupon_code
+                ),
+                ephemeral=True,
             )
             return
-
-    if not interaction.response.is_done():
-        await interaction.response.defer(ephemeral=interaction.guild is not None)
 
     try:
         subscription, payment, result = await bot.subscription_service.start_purchase(
@@ -342,23 +317,14 @@ async def _start_purchase(
             ephemeral=True,
         )
 
-    # notifica a staff sempre que for ManualProvider — com ou sem QR, alguem
-    # precisa aprovar manualmente. Gateways automaticos (MercadoPago) nao
-    # passam por aqui: a confirmacao deles vem de webhook/consulta de status.
     if payment.provider == "manual":
         await _notify_approval_channel(bot, member, plan, cycle, payment, result.checkout_url)
 
 
-# alias publico: qualquer outra tela (ex.: botao "Renovar" das mensagens de
-# renovacao) reaproveita ESTE fluxo em vez de recriar cobranca/checkout.
 start_purchase_flow = _start_purchase
 
 
 class _CouponPromptView(SafeView):
-    """Passo intermediario entre escolher plano/ciclo e gerar a cobranca. Da
-    pra pular direto ("Continuar sem cupom") — ninguem e obrigado a passar por
-    aqui."""
-
     def __init__(
         self,
         plan: Plan,
@@ -393,12 +359,37 @@ class _CouponPromptView(SafeView):
         )
 
 
-class _PayerInfoModal(discord.ui.Modal, title="Quem vai pagar?"):
-    """Passo obrigatorio antes de gerar o PIX manual — identifica pra staff
-    quem vai aparecer no extrato bancario (nem sempre e a mesma pessoa da
-    conta Discord). Texto salvo integralmente em payment_history.payer_information,
-    nunca resumido/editado pelo bot."""
+class _PayerInfoPromptView(SafeView):
+    def __init__(
+        self,
+        plan: Plan,
+        cycle: BillingCycle,
+        *,
+        member: discord.Member,
+        renewal: bool,
+        coupon_code: str | None,
+    ) -> None:
+        super().__init__(timeout=180)
+        self.plan = plan
+        self.cycle = cycle
+        self.member = member
+        self.renewal = renewal
+        self.coupon_code = coupon_code
 
+    @discord.ui.button(label="Informar pagador", emoji="📝", style=discord.ButtonStyle.primary)
+    async def open_modal(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await interaction.response.send_modal(
+            _PayerInfoModal(
+                self.plan,
+                self.cycle,
+                member=self.member,
+                renewal=self.renewal,
+                coupon_code=self.coupon_code,
+            )
+        )
+
+
+class _PayerInfoModal(discord.ui.Modal, title="Quem vai pagar?"):
     payer_input: discord.ui.TextInput[Any] = discord.ui.TextInput(
         label="Quem fará o pagamento?",
         style=discord.TextStyle.paragraph,
@@ -471,7 +462,6 @@ class _CouponCodeModal(discord.ui.Modal, title="Cupom de desconto"):
                 self.member.guild.id, code, self.member, self.plan, self.cycle, original
             )
         except CouponError as exc:
-            # erro preciso do servico + chance de tentar outro codigo/seguir sem
             await interaction.response.send_message(
                 f"❌ {exc}",
                 view=_CouponPromptView(
@@ -513,9 +503,6 @@ class _CouponCodeModal(discord.ui.Modal, title="Cupom de desconto"):
 
 
 class _ConfirmCouponPurchaseView(SafeView):
-    """A cobranca so e criada depois deste clique — o comprador ve preco
-    original, desconto e preco final antes de qualquer PIX ser gerado."""
-
     def __init__(
         self,
         plan: Plan,
@@ -566,8 +553,6 @@ async def _notify_approval_channel(
     if not isinstance(channel, discord.abc.Messageable):
         return
 
-    # numero curto de exibicao — nao e sequencial, so um jeito legivel de
-    # citar o pedido sem colar o UUID inteiro (que fica no footer/comando).
     order_number = str(payment.id).split("-")[0].upper()
     embed = discord.Embed(
         title=f"💰 Pedido #{order_number}",
@@ -578,8 +563,6 @@ async def _notify_approval_channel(
     embed.add_field(name="Valor", value=_cents_to_display(payment.amount, payment.currency))
     embed.add_field(name="Data", value=f"<t:{int(payment.created_at.timestamp())}:f>", inline=False)
     if payment.payer_information:
-        # visualizacao truncada no embed (limite de 1024 do Discord) — o
-        # texto completo continua salvo integralmente em payment_history.
         embed.add_field(
             name="Informações do Pagador", value=payment.payer_information[:1024], inline=False
         )
@@ -607,8 +590,6 @@ async def _notify_approval_channel(
 
 
 async def _deny_if_not_admin(interaction: discord.Interaction) -> bool:
-    """So chamada depois do callback ja ter deferido — member_is_admin faz uma
-    ida ao banco (settings da guild), entao a resposta precisa ser followup."""
     if not await member_is_admin(interaction):
         await interaction.followup.send(
             "Apenas admins podem gerenciar pagamentos.", ephemeral=True
@@ -620,14 +601,6 @@ async def _deny_if_not_admin(interaction: discord.Interaction) -> bool:
 async def _load_payment_for_guild(
     interaction: discord.Interaction, payment_id: uuid.UUID, *, deferred: bool = False
 ) -> PaymentHistory | None:
-    """Confere que o pagamento pertence a guild de quem esta clicando — nenhum
-    admin pode aprovar/rejeitar/cancelar pagamento de outro servidor, nem por
-    custom_id forjado (mesma defesa usada no painel de cupons).
-
-    `deferred=True` quando o chamador ja deferiu a interacao antes de chegar
-    aqui (os botoes de pagamento deferem de imediato, antes desta consulta ao
-    banco) — nesse caso a mensagem de erro precisa ir por followup, nao por
-    response.send_message (que so funciona uma vez, antes do defer)."""
     bot: LimerenceBot = interaction.client  # type: ignore[assignment]
     payment = await bot.payment_service.get(payment_id)
     if payment is None or payment.guild_id != interaction.guild_id:
@@ -640,10 +613,6 @@ async def _load_payment_for_guild(
 
 
 async def _disable_and_edit(interaction: discord.Interaction) -> None:
-    """So atualiza a mensagem (botoes desabilitados) — nunca deve derrubar a
-    acao que ja foi executada com sucesso no banco. Qualquer falha aqui
-    (parsing do custom_id, erro da API) so vira um log, a interacao ja
-    recebe a confirmacao de sucesso do followup do chamador."""
     if not isinstance(interaction.message, discord.Message):
         return
     try:
@@ -672,7 +641,9 @@ class PaymentApproveButton(
     def __init__(self, payment_id: uuid.UUID) -> None:
         super().__init__(
             discord.ui.Button(
-                label="Aprovar", style=discord.ButtonStyle.success, emoji="✅",
+                label="Aprovar",
+                style=discord.ButtonStyle.success,
+                emoji="✅",
                 custom_id=f"limerence:payment_approval:approve:{payment_id}",
             )
         )
@@ -685,9 +656,6 @@ class PaymentApproveButton(
         return cls(uuid.UUID(match["payment_id"]))
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        # Deferir de imediato: _deny_if_not_admin/_load_payment_for_guild ja
-        # fazem idas ao banco antes de qualquer resposta, e confirm_payment
-        # (cargo, log, auditoria) faz ainda mais — facilmente passa dos 3s.
         await interaction.response.defer()
         if await _deny_if_not_admin(interaction):
             return
@@ -716,7 +684,9 @@ class PaymentRejectButton(
     def __init__(self, payment_id: uuid.UUID) -> None:
         super().__init__(
             discord.ui.Button(
-                label="Rejeitar", style=discord.ButtonStyle.danger, emoji="❌",
+                label="Rejeitar",
+                style=discord.ButtonStyle.danger,
+                emoji="❌",
                 custom_id=f"limerence:payment_approval:reject:{payment_id}",
             )
         )
@@ -729,7 +699,6 @@ class PaymentRejectButton(
         return cls(uuid.UUID(match["payment_id"]))
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        # Deferir de imediato: mesmo motivo do PaymentApproveButton.
         await interaction.response.defer()
         if await _deny_if_not_admin(interaction):
             return
@@ -753,7 +722,9 @@ class PaymentPendingButton(
     def __init__(self, payment_id: uuid.UUID) -> None:
         super().__init__(
             discord.ui.Button(
-                label="Marcar como Pendente", style=discord.ButtonStyle.secondary, emoji="⏳",
+                label="Marcar como Pendente",
+                style=discord.ButtonStyle.secondary,
+                emoji="⏳",
                 custom_id=f"limerence:payment_approval:pending:{payment_id}",
             )
         )
@@ -766,7 +737,6 @@ class PaymentPendingButton(
         return cls(uuid.UUID(match["payment_id"]))
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        # Deferir de imediato: mesmo motivo do PaymentApproveButton.
         await interaction.response.defer()
         if await _deny_if_not_admin(interaction):
             return
@@ -792,7 +762,9 @@ class PaymentCancelButton(
     def __init__(self, payment_id: uuid.UUID) -> None:
         super().__init__(
             discord.ui.Button(
-                label="Cancelar Pedido", style=discord.ButtonStyle.secondary, emoji="🚫",
+                label="Cancelar Pedido",
+                style=discord.ButtonStyle.secondary,
+                emoji="🚫",
                 custom_id=f"limerence:payment_approval:cancel:{payment_id}",
             )
         )
@@ -805,7 +777,6 @@ class PaymentCancelButton(
         return cls(uuid.UUID(match["payment_id"]))
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        # Deferir de imediato: mesmo motivo do PaymentApproveButton.
         await interaction.response.defer()
         if await _deny_if_not_admin(interaction):
             return
@@ -823,9 +794,6 @@ class PaymentCancelButton(
 
 
 def purchase_approval_view(payment_id: uuid.UUID) -> discord.ui.View:
-    """View persistente (sobrevive a restart) do painel de aprovacao manual —
-    Aprovar/Rejeitar/Marcar como Pendente/Cancelar Pedido, um pedido por
-    mensagem no canal de aprovacao."""
     view = SafeView(timeout=None)
     view.add_item(PaymentApproveButton(payment_id))
     view.add_item(PaymentRejectButton(payment_id))
