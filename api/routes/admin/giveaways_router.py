@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import uuid
 from datetime import timedelta
 from typing import Any
@@ -8,9 +9,9 @@ import discord
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from api.routes.admin.security import require_local_admin
-from cogs.giveaways import GiveawayOpenView, close_and_announce, _announce_winners
+from cogs.giveaways import GiveawayOpenView, _announce_winners, close_and_announce
 from database.models.audit_log import AuditLogCategory
-from database.models.giveaway import Giveaway, GiveawayPrizeType, GiveawayStatus
+from database.models.giveaway import Giveaway, GiveawayPrizeType
 from views.embeds import giveaway_panel_embed
 
 router = APIRouter(
