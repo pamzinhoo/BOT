@@ -157,6 +157,18 @@
   align-items: stretch;
 }
 
+.dlc-card.is-clickable {
+  cursor: pointer;
+  transition: border-color 160ms ease, transform 160ms ease, background 160ms ease;
+}
+
+.dlc-card.is-clickable:hover,
+.dlc-card.is-clickable:focus-visible {
+  border-color: rgba(96, 165, 250, 0.55);
+  background: rgba(96, 165, 250, 0.06);
+  transform: translateY(-1px);
+}
+
 .giveaway-card p,
 .dlc-card p,
 .panel-card p {
