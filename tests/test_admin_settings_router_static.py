@@ -82,12 +82,14 @@ def test_dashboard_events_router_is_registered_before_legacy_router() -> None:
     assert "giveaways_router" in source
     assert "dlcs_router" in source
     assert "panels_router" in source
+    assert "ticket_actions_router" in source
     assert "legacy_router" in source
     assert source.index("router.include_router(settings_router)") < source.index("router.include_router(events_router)")
     assert source.index("router.include_router(events_router)") < source.index("router.include_router(giveaways_router)")
     assert source.index("router.include_router(giveaways_router)") < source.index("router.include_router(dlcs_router)")
     assert source.index("router.include_router(dlcs_router)") < source.index("router.include_router(panels_router)")
-    assert source.index("router.include_router(panels_router)") < source.index("router.include_router(legacy_router)")
+    assert source.index("router.include_router(panels_router)") < source.index("router.include_router(ticket_actions_router)")
+    assert source.index("router.include_router(ticket_actions_router)") < source.index("router.include_router(legacy_router)")
 
 
 def test_dashboard_events_router_pushes_invalidation_events() -> None:
@@ -210,3 +212,24 @@ def test_dashboard_panels_use_real_services_and_safe_publish_flow() -> None:
     assert "Atualizar edita a mensagem existente" in page
     assert "PanelStatus" in api
     assert "panel-grid" in css
+
+
+def test_dashboard_ticket_actions_use_existing_ticket_services() -> None:
+    source = Path("api/routes/admin/ticket_actions_router.py").read_text(encoding="utf-8")
+    init_source = Path("api/routes/admin/__init__.py").read_text(encoding="utf-8")
+    page = Path("frontend/src/pages/TicketsPage.tsx").read_text(encoding="utf-8")
+    css = Path("frontend/src/dashboard-overrides.css").read_text(encoding="utf-8")
+
+    assert "ticket_actions_router" in init_source
+    assert "bot.claim_service.claim_ticket" in source
+    assert "bot.claim_service.unclaim_ticket" in source
+    assert "bot.ticket_service.close_ticket" in source
+    assert "bot.ticket_service.reopen_ticket" in source
+    assert "bot.ticket_service.cancel_ticket" in source
+    assert "schedule_channel_deletion" in source
+    assert "executor_name=_DASHBOARD_ACTOR" in source
+    assert "TICKET_ASSUMIDO_PAINEL_WEB" in source
+    assert "TICKET_EXCLUIDO_PAINEL_WEB" in source
+    assert "Ações do atendimento" in page
+    assert "Excluir canal" in page
+    assert "ticket-actions-panel" in css
