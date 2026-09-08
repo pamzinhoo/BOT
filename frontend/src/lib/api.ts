@@ -234,6 +234,54 @@ export type MonetizationPlanRow = {
   source_note: string;
 };
 
+export type MonetizationPlanManageRow = {
+  id: string;
+  name: string;
+  description?: string | null;
+  emoji?: string | null;
+  role_id?: string | null;
+  role_name?: string | null;
+  role_missing: boolean;
+  price_monthly_amount?: number | null;
+  price_yearly_amount?: number | null;
+  price_one_time_amount?: number | null;
+  price_monthly_label?: string | null;
+  price_yearly_label?: string | null;
+  price_one_time_label?: string | null;
+  currency: string;
+  position: number;
+  is_recommended: boolean;
+  is_active: boolean;
+  product_id?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type MonetizationPlanListPayload = {
+  guild_id: string;
+  items: MonetizationPlanManageRow[];
+  security_notes: string[];
+};
+
+export type MonetizationPlanMutationPayload = {
+  name?: string | null;
+  description?: string | null;
+  emoji?: string | null;
+  role_id?: string | null;
+  price_monthly_reais?: string | null;
+  price_yearly_reais?: string | null;
+  price_one_time_reais?: string | null;
+  position?: number | null;
+  is_recommended?: boolean | null;
+  is_active?: boolean | null;
+};
+
+export type MonetizationPlanMutationResponse = {
+  item: MonetizationPlanManageRow;
+  shop_refresh_attempted: boolean;
+  security_notes: string[];
+};
+
 export type MonetizationStatusBreakdown = {
   status: string;
   count: number;
