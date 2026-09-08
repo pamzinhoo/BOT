@@ -196,7 +196,7 @@ class GiveawayService:
 
         return giveaway, winners
 
-    async def cancel(self, giveaway_id: uuid.UUID) -> Giveaway | None:
+    async def cancel_giveaway(self, giveaway_id: uuid.UUID) -> Giveaway | None:
         async with self._database.session() as session:
             repo = GiveawayRepository(session)
             giveaway = await repo.get_by_id_locked(giveaway_id)
@@ -207,6 +207,9 @@ class GiveawayService:
             await session.flush()
             await session.refresh(giveaway)
         return giveaway
+
+    async def cancel(self, giveaway_id: uuid.UUID) -> Giveaway | None:
+        return await self.cancel_giveaway(giveaway_id)
 
     async def reroll(self, giveaway_id: uuid.UUID) -> tuple[Giveaway, list[int]] | None:
         async with self._database.session() as session:
