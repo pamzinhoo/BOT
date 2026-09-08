@@ -189,6 +189,34 @@
   color: #fcd34d;
 }
 
+.ticket-actions-panel {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.ticket-actions-panel label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted-2);
+  font-size: 13px;
+}
+
+.ticket-action-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.button.danger {
+  border-color: rgba(248, 113, 113, 0.55);
+  background: rgba(248, 113, 113, 0.14);
+  color: #fecaca;
+}
+
 @media (max-width: 720px) {
   .duration-control {
     max-width: none;
