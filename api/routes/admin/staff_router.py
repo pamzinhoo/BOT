@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import uuid
 from typing import Any
 
@@ -60,15 +61,33 @@ def _ticket_label(bot: Any, ticket: Ticket) -> str:
     return f"#{channel_name}" if channel_name else f"Ticket {str(ticket.id)[:8]}"
 
 
-def _ticket_category_label(ticket: Ticket, panel_name: str | None) -> str:
-    """No painel de staff, o motivo util e o painel real que abriu o ticket.
+def _clean_panel_reason(panel_name: str) -> str:
+    """Transforma nomes de painel em motivo legivel no perfil da staff.
 
-    Muitos tickets antigos ficaram com category="outro" porque a categoria
-    tecnica do banco e generica; quem explica o motivo para a staff e o painel
-    de origem, ex.: "Painel Duvida", "Bug", "Parceria". So cai para category
-    quando o ticket nao tem painel vinculado.
+    Ex.: "Painel Duvida — pam" vira "Duvida". O nome completo do painel e
+    util na configuracao, mas na lista de tickets o que importa e o motivo real
+    do atendimento, sem mostrar criador/sufixo.
     """
-    return panel_name or ticket.category.value
+    value = panel_name.strip()
+    value = re.sub(r"^painel\s+", "", value, flags=re.IGNORECASE).strip()
+    value = re.split(r"\s+[—-]\s+", value, maxsplit=1)[0].strip()
+    return value or panel_name
+
+
+def _ticket_category_label(ticket: Ticket, panel_name: str | None) -> str:
+    """Mostra o motivo real quando o ticket veio de painel.
+
+    Muitos tickets ficam com category="outro" porque essa categoria e apenas o
+    fallback tecnico do banco. Para tickets com panel_id, o motivo real vem do
+    painel de origem. Para tickets antigos sem panel_id e gravados como outro,
+    nao existe como recuperar o motivo exato com seguranca; nesses casos o
+    painel mostra "Sem motivo vinculado" em vez de fingir que tudo e Outros.
+    """
+    if panel_name:
+        return _clean_panel_reason(panel_name)
+    if ticket.category.value == "outro":
+        return "Sem motivo vinculado"
+    return ticket.category.value
 
 
 def _ticket_item(
