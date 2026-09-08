@@ -155,7 +155,7 @@ async def _refresh_shop_panel(bot: Any, guild_id: int) -> bool:
     if refresh is None:
         return False
     try:
-        await refresh(guild_id, executor_name=_DASHBOARD_ACTOR)
+        await refresh(guild_id)
         return True
     except Exception:
         return False
