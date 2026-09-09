@@ -16,7 +16,6 @@ type MonetizationGatewayStatus = {
   webhook_enabled: boolean;
   public_base_url_configured: boolean;
   mercadopago_credentials_configured: boolean;
-  mercadopago_public_key_configured: boolean;
   mercadopago_webhook_configured: boolean;
   readonly_env: boolean;
 };
