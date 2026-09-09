@@ -125,6 +125,7 @@ async def _payload(bot: Any, guild_id: int) -> dict[str, Any]:
         raw_shop_message_id = settings.shop_message_id
 
     app_settings = bot.settings
+    credentials_configured = bool(app_settings.mercadopago_access_token)
     return {
         "guild_id": str(guild_id),
         "values": values,
@@ -144,7 +145,8 @@ async def _payload(bot: Any, guild_id: int) -> dict[str, Any]:
             "environment": app_settings.environment,
             "webhook_enabled": app_settings.webhook_enabled,
             "public_base_url_configured": bool(app_settings.public_base_url),
-            "mercadopago_access_token_configured": bool(app_settings.mercadopago_access_token),
+            "mercadopago_access_token_configured": credentials_configured,
+            "mercadopago_credentials_configured": credentials_configured,
             "mercadopago_public_key_configured": bool(app_settings.mercadopago_public_key),
             "mercadopago_webhook_secret_configured": bool(app_settings.mercadopago_webhook_secret),
             "readonly_env": True,
