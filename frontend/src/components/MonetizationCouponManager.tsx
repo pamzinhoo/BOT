@@ -48,6 +48,11 @@ function inputDate(value?: string | null) {
   return value ? value.slice(0, 16) : "";
 }
 
+function optionalNumber(value: string) {
+  const clean = value.trim();
+  return clean ? Number(clean) : null;
+}
+
 function seedCouponDraft(coupon: MonetizationCouponManageRow): CouponDraft {
   return {
     code: coupon.code,
@@ -77,8 +82,8 @@ function buildCouponPayload(draft: CouponDraft): MonetizationCouponMutationPaylo
     active: draft.active,
     starts_at: draft.starts_at,
     expires_at: draft.expires_at,
-    max_global_uses: draft.max_global_uses,
-    max_uses_per_user: draft.max_uses_per_user,
+    max_global_uses: optionalNumber(draft.max_global_uses),
+    max_uses_per_user: optionalNumber(draft.max_uses_per_user),
     required_role_id: draft.required_role_id,
     allow_stack: draft.allow_stack,
     billing_cycles: draft.billing_cycles,
