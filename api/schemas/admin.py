@@ -346,6 +346,60 @@ class MonetizationCouponRow(BaseModel):
     source_note: str
 
 
+class MonetizationCouponManageRow(BaseModel):
+    id: str
+    code: str
+    description: str | None = None
+    emoji: str | None = None
+    discount_type: str
+    discount_value: int
+    discount_value_reais: str | None = None
+    discount_label: str
+    active: bool
+    starts_at: str | None = None
+    expires_at: str | None = None
+    max_global_uses: int | None = None
+    max_uses_per_user: int | None = None
+    required_role_id: str | None = None
+    required_role_name: str | None = None
+    required_role_missing: bool = False
+    allow_stack: bool = False
+    billing_cycles: list[str] = Field(default_factory=list)
+    allowed_plan_ids: list[str] = Field(default_factory=list)
+    applies_to_all_plans: bool = True
+    deleted: bool = False
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
+class MonetizationCouponListResponse(BaseModel):
+    guild_id: str
+    items: list[MonetizationCouponManageRow] = Field(default_factory=list)
+    security_notes: list[str] = Field(default_factory=list)
+
+
+class MonetizationCouponMutationRequest(BaseModel):
+    code: str | None = None
+    description: str | None = None
+    emoji: str | None = None
+    discount_type: str | None = None
+    discount_value: str | None = None
+    active: bool | None = None
+    starts_at: str | None = None
+    expires_at: str | None = None
+    max_global_uses: int | None = None
+    max_uses_per_user: int | None = None
+    required_role_id: str | None = None
+    allow_stack: bool | None = None
+    billing_cycles: list[str] | None = None
+    allowed_plan_ids: list[str] | None = None
+
+
+class MonetizationCouponMutationResponse(BaseModel):
+    item: MonetizationCouponManageRow
+    security_notes: list[str] = Field(default_factory=list)
+
+
 class MonetizationPlanAccessItem(BaseModel):
     discord_id: str
     discord_name: str | None = None
