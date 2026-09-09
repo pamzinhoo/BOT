@@ -300,6 +300,60 @@ export type MonetizationCouponRow = {
   source_note: string;
 };
 
+export type MonetizationCouponManageRow = {
+  id: string;
+  code: string;
+  description?: string | null;
+  emoji?: string | null;
+  discount_type: "percentage" | "fixed" | string;
+  discount_value: number;
+  discount_value_reais?: string | null;
+  discount_label: string;
+  active: boolean;
+  starts_at?: string | null;
+  expires_at?: string | null;
+  max_global_uses?: number | null;
+  max_uses_per_user?: number | null;
+  required_role_id?: string | null;
+  required_role_name?: string | null;
+  required_role_missing: boolean;
+  allow_stack: boolean;
+  billing_cycles: string[];
+  allowed_plan_ids: string[];
+  applies_to_all_plans: boolean;
+  deleted: boolean;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type MonetizationCouponListPayload = {
+  guild_id: string;
+  items: MonetizationCouponManageRow[];
+  security_notes: string[];
+};
+
+export type MonetizationCouponMutationPayload = {
+  code?: string | null;
+  description?: string | null;
+  emoji?: string | null;
+  discount_type?: "percentage" | "fixed" | string | null;
+  discount_value?: string | null;
+  active?: boolean | null;
+  starts_at?: string | null;
+  expires_at?: string | null;
+  max_global_uses?: number | null;
+  max_uses_per_user?: number | null;
+  required_role_id?: string | null;
+  allow_stack?: boolean | null;
+  billing_cycles?: string[] | null;
+  allowed_plan_ids?: string[] | null;
+};
+
+export type MonetizationCouponMutationResponse = {
+  item: MonetizationCouponManageRow;
+  security_notes: string[];
+};
+
 export type MonetizationPlanAccessItem = {
   discord_id: string;
   discord_name?: string | null;
