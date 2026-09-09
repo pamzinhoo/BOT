@@ -191,7 +191,7 @@ export function MonetizationPage() {
         {(createPlan.error || updatePlan.error || togglePlan.error) && <p className="inline-warning">{((createPlan.error || updatePlan.error || togglePlan.error) as Error).message}</p>}
       </Section>
 
-      <MonetizationCouponManager guildId={guild.id} />
+      {guild && <MonetizationCouponManager guildId={guild.id} />}
 
       <Section title="Planos e desempenho" description="Clique em um plano para ver quais usuários têm o VIP/cargo, assinatura ou pagamento registrado.">
         {data.plans.length === 0 ? <EmptyState message="Nenhum plano cadastrado." /> : (<table className="data-table monetization-table"><thead><tr><th>Plano</th><th>Preço</th><th>Status</th><th>Vendas</th><th>Receita</th><th>Ticket médio</th><th>Assinaturas</th><th>Pendentes</th><th>Falhas</th></tr></thead><tbody>{data.plans.map((plan) => (<tr key={plan.id} title="Clique para ver usuários deste plano/VIP" className={`clickable-table-row ${selectedPlanId === plan.id ? "is-selected" : ""}`} onClick={() => setSelectedPlanId((current) => current === plan.id ? null : plan.id)}><td><strong>{plan.name}</strong><small>{plan.role_name ? `Cargo: ${plan.role_name}` : plan.role_id ? "Cargo ausente" : "Sem cargo"}</small></td><td>{planPrice(plan)}</td><td><StatusBadge state={plan.active ? "online" : "neutral"}>{plan.active ? "Ativo" : "Inativo"}</StatusBadge></td><td>{plan.approved_sales}</td><td>{plan.approved_revenue_label}</td><td>{plan.average_ticket_label}</td><td>{plan.active_subscriptions}</td><td>{plan.pending_payments}</td><td>{plan.failed_payments}</td></tr>))}</tbody></table>)}
