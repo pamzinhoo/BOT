@@ -15,7 +15,7 @@ type MonetizationGatewayStatus = {
   environment: string;
   webhook_enabled: boolean;
   public_base_url_configured: boolean;
-  mercadopago_access_token_configured: boolean;
+  mercadopago_credentials_configured: boolean;
   mercadopago_public_key_configured: boolean;
   mercadopago_webhook_secret_configured: boolean;
   readonly_env: boolean;
@@ -140,7 +140,7 @@ export function MonetizationPaymentSettings({ guildId }: { guildId: string }) {
     <Section title="Configurações da loja/pagamento" description="Fase 3.4: configure canais da monetização e publique o painel da loja sem editar tokens ou pagamentos antigos.">
       <div className="metric-grid compact-grid monetization-metric-grid">
         <div className="metric-card staff-metric-card"><span>Modo de pagamento</span><strong>{data.gateway.payment_mode}</strong><small>{data.gateway.environment}</small></div>
-        <div className="metric-card staff-metric-card"><span>Mercado Pago</span><strong>{data.gateway.mercadopago_access_token_configured ? "Configurado" : "Sem token"}</strong><small>Chaves ficam somente no .env</small></div>
+        <div className="metric-card staff-metric-card"><span>Mercado Pago</span><strong>{data.gateway.mercadopago_credentials_configured ? "Configurado" : "Sem credencial"}</strong><small>Chaves ficam somente no .env</small></div>
         <div className="metric-card staff-metric-card"><span>Webhook</span><strong>{data.gateway.webhook_enabled ? "Ativo" : "Inativo"}</strong><small>{data.gateway.mercadopago_webhook_secret_configured ? "Secret configurado" : "Sem secret"}</small></div>
       </div>
 
