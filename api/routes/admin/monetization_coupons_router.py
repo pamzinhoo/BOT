@@ -15,6 +15,7 @@ from api.schemas.admin import (
     MonetizationCouponMutationRequest,
     MonetizationCouponMutationResponse,
 )
+from database.models.audit_log import AuditLogCategory
 from database.models.discount_coupon import DiscountCoupon, DiscountType
 from database.models.subscription import BillingCycle
 from services.coupon_service import CouponError, normalize_code
@@ -28,6 +29,17 @@ router = APIRouter(
 _MAX_FIXED_DISCOUNT_CENTS = 1_000_000
 _MAX_TEXT = 1500
 _MAX_CODE = 64
+_DASHBOARD_ACTOR = "Painel web"
+
+
+class _DashboardExecutor:
+    id = 0
+
+    def __str__(self) -> str:
+        return _DASHBOARD_ACTOR
+
+
+_DASHBOARD_EXECUTOR = _DashboardExecutor()
 
 
 def _bot(request: Request):
@@ -182,6 +194,17 @@ def _security_notes() -> list[str]:
     ]
 
 
+async def _record_coupon_action(bot: Any, guild_id: int, action: str, coupon: DiscountCoupon) -> None:
+    await bot.audit_log_service.record(
+        guild_id=guild_id,
+        category=AuditLogCategory.COUPON,
+        action=action,
+        executor_id=0,
+        executor_name=_DASHBOARD_ACTOR,
+        details={"cupom": coupon.code},
+    )
+
+
 async def _serialize_coupon(bot: Any, guild: discord.Guild, coupon: DiscountCoupon) -> MonetizationCouponManageRow:
     allowed_plan_ids = await bot.coupon_service.list_allowed_plans(coupon.id)
     return MonetizationCouponManageRow(
@@ -291,8 +314,10 @@ async def create_coupon(request: Request, guild_id: int, payload: MonetizationCo
         coupon = await bot.coupon_service.create_coupon(guild_id, code, **fields)
         if allowed_plan_ids is not None:
             await bot.coupon_service.set_allowed_plans(coupon.id, allowed_plan_ids)
+            coupon = await _get_owned_coupon(bot, guild_id, coupon.id)
     except CouponError as exc:
         raise _payload_error(str(exc), "code") from exc
+    await _record_coupon_action(bot, guild_id, "Cupom criado", coupon)
     return MonetizationCouponMutationResponse(
         item=await _serialize_coupon(bot, guild, coupon),
         security_notes=_security_notes(),
@@ -312,6 +337,7 @@ async def update_coupon(request: Request, guild_id: int, coupon_id: uuid.UUID, p
             coupon = await _get_owned_coupon(bot, guild_id, coupon_id)
     except CouponError as exc:
         raise _payload_error(str(exc)) from exc
+    await _record_coupon_action(bot, guild_id, "Cupom editado", coupon)
     return MonetizationCouponMutationResponse(
         item=await _serialize_coupon(bot, guild, coupon),
         security_notes=_security_notes(),
@@ -326,7 +352,7 @@ async def toggle_coupon(request: Request, guild_id: int, coupon_id: uuid.UUID, p
     if payload.active is None:
         raise _payload_error("Informe active.", "active")
     try:
-        coupon = await bot.coupon_service.set_active(coupon_id, payload.active)
+        coupon = await bot.coupon_service.set_active(coupon_id, payload.active, executor=_DASHBOARD_EXECUTOR)
     except CouponError as exc:
         raise _payload_error(str(exc)) from exc
     return MonetizationCouponMutationResponse(
