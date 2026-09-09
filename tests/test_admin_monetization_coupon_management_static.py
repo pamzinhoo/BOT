@@ -17,6 +17,9 @@ def test_monetization_coupon_management_uses_coupon_service_safely() -> None:
     assert "bot.coupon_service.set_active" in source
     assert "bot.coupon_service.set_allowed_plans" in source
     assert "bot.coupon_service.list_coupons" in source
+    assert "_DASHBOARD_ACTOR = \"Painel web\"" in source
+    assert "executor=_DASHBOARD_EXECUTOR" in source
+    assert "executor_name=_DASHBOARD_ACTOR" in source
     assert "delete_coupon" not in source
     assert "PaymentHistory" not in source
     assert "License" not in source
