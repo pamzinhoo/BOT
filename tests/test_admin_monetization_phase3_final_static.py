@@ -1,7 +1,4 @@
-from __future__ import annotations
-
 from pathlib import Path
-
 
 MONETIZATION_BACKEND_FILES = [
     Path("api/routes/admin/monetization_router.py"),
