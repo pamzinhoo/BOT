@@ -8,6 +8,7 @@ from api.routes.admin.giveaways_router import router as giveaways_router
 from api.routes.admin.monetization_coupons_router import router as monetization_coupons_router
 from api.routes.admin.monetization_plans_router import router as monetization_plans_router
 from api.routes.admin.monetization_router import router as monetization_router
+from api.routes.admin.monetization_settings_router import router as monetization_settings_router
 from api.routes.admin.panels_router import router as panels_router
 from api.routes.admin.router import router as legacy_router
 from api.routes.admin.settings_emoji_router import router as settings_emoji_router
@@ -24,6 +25,7 @@ router.include_router(events_router)
 router.include_router(giveaways_router)
 router.include_router(dlcs_router)
 router.include_router(panels_router)
+router.include_router(monetization_settings_router)
 router.include_router(monetization_coupons_router)
 router.include_router(monetization_plans_router)
 router.include_router(monetization_router)
