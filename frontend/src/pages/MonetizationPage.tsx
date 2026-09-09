@@ -3,6 +3,7 @@ import { AlertTriangle, BarChart3, EyeOff, Pencil, Plus, Save, ShieldCheck, Star
 import { useState } from "react";
 import { useShell } from "../components/AppShell";
 import { MonetizationCouponManager } from "../components/MonetizationCouponManager";
+import { MonetizationPaymentSettings } from "../components/MonetizationPaymentSettings";
 import { EmptyState, ErrorState, LoadingState, PageHeader, Section, StatusBadge } from "../components/Ui";
 import { api, DiscordOptions, MonetizationPlanAccessPayload, MonetizationPlanListPayload, MonetizationPlanManageRow, MonetizationPlanMutationPayload, MonetizationPlanMutationResponse, MonetizationSummary } from "../lib/api";
 
@@ -171,7 +172,7 @@ export function MonetizationPage() {
 
   return (
     <>
-      <PageHeader title="Monetização" description="Fase 3.1 somente leitura + Fase 3.2 + Fase 3.3: analytics e gerenciamento seguro de planos e cupons; não exibe QR Code PIX e não altera pagamentos, assinaturas ou licenças." />
+      <PageHeader title="Monetização" description="Fase 3.1 somente leitura + Fase 3.2 + Fase 3.3 + Fase 3.4: analytics e gerenciamento seguro de planos, cupons, loja e pagamento; não exibe QR Code PIX e não altera pagamentos, assinaturas ou licenças." />
 
       <Section title="Resumo" description={`Gateway: ${data.gateway.mode || "Sem dados"} · Gerado em ${fmtDate(data.generated_at)}`}>
         <div className="metric-grid compact-grid monetization-metric-grid">{data.metrics.map((metric) => (<div className="metric-card staff-metric-card" key={metric.label} title={metric.source || undefined}><span>{metric.label}</span><strong>{metric.value}</strong>{metric.hint && <small>{metric.hint}</small>}{metric.source && <em>{metric.source}</em>}</div>))}</div>
@@ -194,6 +195,7 @@ export function MonetizationPage() {
       </Section>
 
       {guild && <MonetizationCouponManager guildId={guild.id} />}
+      {guild && <MonetizationPaymentSettings guildId={guild.id} />}
 
       <Section title="Planos e desempenho" description="Clique em um plano para ver quais usuários têm o VIP/cargo, assinatura ou pagamento registrado.">
         {data.plans.length === 0 ? <EmptyState message="Nenhum plano cadastrado." /> : (<table className="data-table monetization-table"><thead><tr><th>Plano</th><th>Preço</th><th>Status</th><th>Vendas</th><th>Receita</th><th>Ticket médio</th><th>Assinaturas</th><th>Pendentes</th><th>Falhas</th></tr></thead><tbody>{data.plans.map((plan) => (<tr key={plan.id} title="Clique para ver usuários deste plano/VIP" className={`clickable-table-row ${selectedPlanId === plan.id ? "is-selected" : ""}`} onClick={() => setSelectedPlanId((current) => current === plan.id ? null : plan.id)}><td><strong>{plan.name}</strong><small>{plan.role_name ? `Cargo: ${plan.role_name}` : plan.role_id ? "Cargo ausente" : "Sem cargo"}</small></td><td>{planPrice(plan)}</td><td><StatusBadge state={plan.active ? "online" : "neutral"}>{plan.active ? "Ativo" : "Inativo"}</StatusBadge></td><td>{plan.approved_sales}</td><td>{plan.approved_revenue_label}</td><td>{plan.average_ticket_label}</td><td>{plan.active_subscriptions}</td><td>{plan.pending_payments}</td><td>{plan.failed_payments}</td></tr>))}</tbody></table>)}
@@ -203,7 +205,7 @@ export function MonetizationPage() {
 
       <Section title="Pagamentos por status" description="Distribuição dos registros em payment_history.">{data.payment_status_breakdown.length === 0 ? <EmptyState message="Nenhum pagamento registrado." /> : <table className="data-table"><thead><tr><th>Status</th><th>Quantidade</th><th>Valor registrado</th></tr></thead><tbody>{data.payment_status_breakdown.map((row) => (<tr key={row.status}><td><StatusBadge state={paymentState(row.status)}>{paymentStatusLabel(row.status)}</StatusBadge></td><td>{row.count}</td><td>{row.amount_label}</td></tr>))}</tbody></table>}</Section>
 
-      <Section title="Varredura de segurança" description="Alertas de configuração e consistência antes de liberar ações maiores."><div className="security-note-box"><ShieldCheck size={18} /><div><strong>Modo seguro da Fase 3.2/3.3</strong><p>Editar plano ou cupom não altera pagamentos, assinaturas, licenças ou cargos já concedidos. Desativar só tira da oferta ativa e preserva histórico.</p></div></div>{data.alerts.length === 0 ? <EmptyState message="Nenhum alerta crítico encontrado." /> : <div className="alert-list">{data.alerts.map((item) => (<div className="alert-row" key={`${item.severity}-${item.title}-${item.message}`}><AlertTriangle size={16} /><div><strong>{item.title}</strong><span>{item.message}</span></div><StatusBadge state={alertState(item.severity)}>{item.severity}</StatusBadge></div>))}</div>}</Section>
+      <Section title="Varredura de segurança" description="Alertas de configuração e consistência antes de liberar ações maiores."><div className="security-note-box"><ShieldCheck size={18} /><div><strong>Modo seguro da Fase 3.2/3.3/3.4</strong><p>Editar plano, cupom ou canais da loja não altera pagamentos, assinaturas, licenças ou cargos já concedidos. Publicar a loja só recria/atualiza a mensagem fixa.</p></div></div>{data.alerts.length === 0 ? <EmptyState message="Nenhum alerta crítico encontrado." /> : <div className="alert-list">{data.alerts.map((item) => (<div className="alert-row" key={`${item.severity}-${item.title}-${item.message}`}><AlertTriangle size={16} /><div><strong>{item.title}</strong><span>{item.message}</span></div><StatusBadge state={alertState(item.severity)}>{item.severity}</StatusBadge></div>))}</div>}</Section>
 
       <Section title="Pagamentos recentes" description="Somente leitura, sem dados sensíveis do PIX ou comprador.">{data.recent_payments.length === 0 ? <EmptyState message="Nenhum pagamento registrado ainda." /> : <table className="data-table"><thead><tr><th>Plano</th><th>Valor</th><th>Status</th><th>Provider</th><th>Criado em</th><th>Pago em</th></tr></thead><tbody>{data.recent_payments.map((payment) => (<tr key={payment.id}><td><strong>{payment.plan_name || "Plano removido"}</strong><small>Usuário: {payment.user_id}</small></td><td>{payment.amount_label}</td><td><StatusBadge state={paymentState(payment.status)}>{paymentStatusLabel(payment.status)}</StatusBadge></td><td>{payment.provider}</td><td>{fmtDate(payment.created_at)}</td><td>{fmtDate(payment.paid_at)}</td></tr>))}</tbody></table>}</Section>
 
