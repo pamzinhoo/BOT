@@ -169,7 +169,7 @@ export function MonetizationPage() {
 
   return (
     <>
-      <PageHeader title="Monetização" description="Fase 3.1 somente leitura + Fase 3.2/3.3: analytics e gerenciamento seguro de planos e cupons; não exibe QR Code PIX e não altera pagamentos, assinaturas ou licenças." />
+      <PageHeader title="Monetização" description="Fase 3.1 somente leitura + Fase 3.2 + Fase 3.3: analytics e gerenciamento seguro de planos e cupons; não exibe QR Code PIX e não altera pagamentos, assinaturas ou licenças." />
 
       <Section title="Resumo" description={`Gateway: ${data.gateway.mode || "Sem dados"} · Gerado em ${fmtDate(data.generated_at)}`}>
         <div className="metric-grid compact-grid monetization-metric-grid">{data.metrics.map((metric) => (<div className="metric-card staff-metric-card" key={metric.label} title={metric.source || undefined}><span>{metric.label}</span><strong>{metric.value}</strong>{metric.hint && <small>{metric.hint}</small>}{metric.source && <em>{metric.source}</em>}</div>))}</div>
