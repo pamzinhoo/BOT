@@ -46,6 +46,7 @@ const nav = [
       { label: "Staff", to: "/staff", icon: Users },
       { label: "Painéis", to: "/panels", icon: FileText },
       { label: "Sorteios", to: "/giveaways", icon: Gift },
+      { label: "Cronômetros", to: "/event-timers", icon: Bell },
       { label: "DLCs", to: "/dlcs", icon: Package },
       { label: "Monetização", to: "/monetization", icon: DollarSign },
     ],
@@ -93,6 +94,7 @@ const EVENT_QUERY_KEYS = [
   "audit",
   "system",
   "giveaways",
+  "event-timers",
   "dlcs",
   "monetization",
 ];

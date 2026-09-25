@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from api.routes.admin.dlcs_router import router as dlcs_router
+from api.routes.admin.event_timers_router import router as event_timers_router
 from api.routes.admin.events_router import router as events_router
 from api.routes.admin.giveaways_router import router as giveaways_router
 from api.routes.admin.monetization_coupons_router import router as monetization_coupons_router
@@ -22,6 +23,7 @@ router.include_router(settings_emoji_router)
 router.include_router(settings_patch_router)
 router.include_router(settings_router)
 router.include_router(events_router)
+router.include_router(event_timers_router)
 router.include_router(giveaways_router)
 router.include_router(dlcs_router)
 router.include_router(panels_router)

@@ -24,6 +24,7 @@ from services.config_service import ConfigService
 from services.coupon_service import CouponService
 from services.dlc_service import DlcService
 from services.evaluation_service import EvaluationService
+from services.event_timer_service import EventTimerService
 from services.giveaway_service import GiveawayService
 from services.guild_service import GuildService
 from services.help_service import HelpService
@@ -118,6 +119,7 @@ class LimerenceBot(commands.Bot):
         self.verification_service = VerificationService(database, self)
         self.partnership_service = PartnershipService(database, self)
         self.giveaway_service = GiveawayService(database, self)
+        self.event_timer_service = EventTimerService(database, self)
 
         self.tree.on_error = self._on_app_command_error
 
@@ -160,9 +162,7 @@ class LimerenceBot(commands.Bot):
             )
         else:
             await self.tree.sync()
-            logger.info(
-                "Slash commands sincronizados globalmente (propagacao pode levar ate 1h)."
-            )
+            logger.info("Slash commands sincronizados globalmente (propagacao pode levar ate 1h).")
 
     async def _register_persistent_views(self) -> None:
         from cogs.giveaways import (
@@ -201,7 +201,11 @@ class LimerenceBot(commands.Bot):
         self.add_view(PartnershipInfoView())
         self.add_dynamic_items(AppealButton, AppealAcceptButton, AppealDenyButton)
         self.add_dynamic_items(
-            AnalisesNavButton, AnalisesSelect, AnalisesAcceptButton, AnalisesDenyButton, AnalisesBackButton
+            AnalisesNavButton,
+            AnalisesSelect,
+            AnalisesAcceptButton,
+            AnalisesDenyButton,
+            AnalisesBackButton,
         )
         self.add_dynamic_items(PollVoteButton)
         self.add_dynamic_items(

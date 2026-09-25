@@ -9,21 +9,20 @@ class StorageError(RuntimeError):
 
 
 class StorageProvider(ABC):
-    """Camada de abstracao sobre o backend de objetos que guarda os arquivos
-    de DLC/base game/binario do Launcher. O processo do bot NUNCA serve bytes
-    — so assina URLs de curta duracao pro cliente baixar direto do storage.
-
-    Cloudflare R2, Amazon S3 e Backblaze B2 falam a mesma API S3 (SigV4), entao
-    uma unica implementacao (S3CompatibleStorageProvider) cobre os 3 — trocar
-    de provedor e so trocar endpoint/credenciais via env, nunca codigo."""
+    """Abstracao sobre o storage S3-compativel usado pelo bot."""
 
     name: str
 
     @abstractmethod
     def generate_download_url(
         self, storage_path: str, *, expires_in_seconds: int, filename: str | None = None
-    ) -> str:
-        """Gera uma URL de download temporaria (GET) pra `storage_path`. Nunca
-        retorna um link permanente — `expires_in_seconds` sempre curto
-        (minutos, nao horas/dias)."""
-        ...
+    ) -> str: ...
+
+    @abstractmethod
+    def upload_bytes(self, storage_path: str, data: bytes, *, content_type: str) -> None: ...
+
+    @abstractmethod
+    def download_bytes(self, storage_path: str) -> bytes: ...
+
+    @abstractmethod
+    def delete_object(self, storage_path: str) -> None: ...

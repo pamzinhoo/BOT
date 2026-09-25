@@ -2,6 +2,7 @@ import { Route, Routes } from "react-router-dom";
 import { AppShell } from "./components/AppShell";
 import { AuditPage } from "./pages/AuditPage";
 import { DlcsPage } from "./pages/DlcsPage";
+import { EventTimersPage } from "./pages/EventTimersPage";
 import { GiveawaysPage } from "./pages/GiveawaysPage";
 import { MonetizationPage } from "./pages/MonetizationPage";
 import { OverviewPage } from "./pages/OverviewPage";
@@ -19,6 +20,7 @@ export function App() {
         <Route path="/tickets" element={<TicketsPage />} />
         <Route path="/staff" element={<StaffPage />} />
         <Route path="/giveaways" element={<GiveawaysPage />} />
+        <Route path="/event-timers" element={<EventTimersPage />} />
         <Route path="/dlcs" element={<DlcsPage />} />
         <Route path="/monetization" element={<MonetizationPage />} />
         <Route path="/settings/:section" element={<SettingsPage />} />

@@ -7,14 +7,6 @@ logger = get_logger("storage_s3_compatible")
 
 
 class S3CompatibleStorageProvider(StorageProvider):
-    """Cliente unico compativel com Cloudflare R2, Amazon S3 e Backblaze B2 —
-    os 3 implementam a API S3 (SigV4). Presign e computacao local (HMAC), sem
-    chamada de rede, entao gerar a URL nao bloqueia o event loop.
-
-    `name` (r2/s3/b2) e so informativo (logging/auditoria) — o comportamento e
-    identico independente do provedor, controlado inteiramente por
-    `endpoint_url` (None = AWS S3 real; URL do R2/B2 pros outros dois)."""
-
     def __init__(
         self,
         *,
@@ -56,3 +48,30 @@ class S3CompatibleStorageProvider(StorageProvider):
         except Exception as exc:
             logger.exception("Falha ao gerar URL assinada (%s) para %s.", self.name, storage_path)
             raise StorageError(f"Falha ao gerar URL de download ({self.name}).") from exc
+
+    def upload_bytes(self, storage_path: str, data: bytes, *, content_type: str) -> None:
+        try:
+            self._client.put_object(
+                Bucket=self._bucket,
+                Key=storage_path,
+                Body=data,
+                ContentType=content_type,
+            )
+        except Exception as exc:
+            logger.exception("Falha ao enviar objeto (%s) para %s.", self.name, storage_path)
+            raise StorageError(f"Falha ao enviar arquivo ({self.name}).") from exc
+
+    def download_bytes(self, storage_path: str) -> bytes:
+        try:
+            response = self._client.get_object(Bucket=self._bucket, Key=storage_path)
+            return response["Body"].read()
+        except Exception as exc:
+            logger.exception("Falha ao baixar objeto (%s) de %s.", self.name, storage_path)
+            raise StorageError(f"Falha ao baixar arquivo ({self.name}).") from exc
+
+    def delete_object(self, storage_path: str) -> None:
+        try:
+            self._client.delete_object(Bucket=self._bucket, Key=storage_path)
+        except Exception as exc:
+            logger.exception("Falha ao remover objeto (%s) de %s.", self.name, storage_path)
+            raise StorageError(f"Falha ao apagar arquivo ({self.name}).") from exc

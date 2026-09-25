@@ -83,6 +83,34 @@ export type GiveawayMutationResponse = {
   item: GiveawayItem;
 };
 
+export type EventTimerItem = {
+  id: string;
+  title: string;
+  description?: string | null;
+  status: "ACTIVE" | "PAUSED" | "FINISHED" | "CANCELED" | "ERROR" | string;
+  channel_id: string;
+  channel_name?: string | null;
+  channel_missing?: boolean;
+  message_id?: string | null;
+  creator_id: string;
+  repeat_interval_seconds: number;
+  mention_everyone: boolean;
+  ends_at: string;
+  next_announcement_at?: string | null;
+  last_announcement_at?: string | null;
+  finished_at?: string | null;
+  last_error?: string | null;
+  has_image: boolean;
+  image_filename?: string | null;
+  image_size?: number | null;
+  created_at?: string | null;
+};
+
+export type EventTimersPayload = {
+  guild_id: string;
+  items: EventTimerItem[];
+};
+
 export type DlcItem = {
   id: string;
   slug: string;
@@ -398,9 +426,12 @@ export type MonetizationSummary = {
 };
 
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
+  const isFormData = init?.body instanceof FormData;
   const response = await fetch(`/admin/api${path}`, {
     ...init,
-    headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
+    headers: isFormData
+      ? { ...(init?.headers || {}) }
+      : { "Content-Type": "application/json", ...(init?.headers || {}) },
   });
   const body = await response.json().catch(() => null);
   if (!response.ok) {

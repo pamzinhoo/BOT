@@ -25,6 +25,7 @@ from database.models.download import Download, DownloadStatus
 from database.models.enquete_settings import EnqueteSettings
 from database.models.evaluation import Evaluation
 from database.models.evaluation_settings import EvaluationSettings
+from database.models.event_timer import EventTimer, EventTimerStatus
 from database.models.game_manifest import GameManifestEntry, ManifestEntryType
 from database.models.giveaway import (
     Giveaway,
@@ -136,6 +137,8 @@ __all__ = [
     "EnqueteSettings",
     "Evaluation",
     "EvaluationSettings",
+    "EventTimer",
+    "EventTimerStatus",
     "FORM_FIELD_STYLES",
     "GameManifestEntry",
     "Giveaway",
