@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import io
 from datetime import UTC, datetime
 
 import discord
@@ -25,8 +24,8 @@ def event_timer_embed(event: EventTimer) -> discord.Embed:
     embed.add_field(name="Termina", value=f"<t:{unix_end}:F>", inline=True)
     embed.add_field(name="Tempo restante", value=f"<t:{unix_end}:R>", inline=True)
     embed.set_footer(text="Cronômetro de evento")
-    if event.image_storage_path and event.image_filename:
-        embed.set_image(url=f"attachment://{event.image_filename}")
+    if event.image_storage_path:
+        embed.set_image(url=event.image_storage_path)
     return embed
 
 
@@ -56,17 +55,11 @@ async def publish_event_timer(bot: LimerenceBot, event: EventTimer) -> int:
 
     await _delete_previous_message(bot, event)
 
-    files: list[discord.File] = []
-    image_bytes = await bot.event_timer_service.load_image(event)
-    if image_bytes is not None and event.image_filename:
-        files.append(discord.File(io.BytesIO(image_bytes), filename=event.image_filename))
-
     content = "@everyone" if event.mention_everyone else None
     allowed_mentions = discord.AllowedMentions(everyone=event.mention_everyone)
     message = await channel.send(
         content=content,
         embed=event_timer_embed(event),
-        files=files,
         allowed_mentions=allowed_mentions,
     )
     return message.id

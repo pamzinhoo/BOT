@@ -32,9 +32,9 @@ async def test_create_rejects_short_repeat_interval():
 
 
 @pytest.mark.asyncio
-async def test_create_rejects_image_when_storage_unconfigured():
+async def test_create_rejects_invalid_image_url():
     service = EventTimerService(database=None, bot=DummyBot())  # type: ignore[arg-type]
-    with pytest.raises(EventTimerValidationError, match="Storage"):
+    with pytest.raises(EventTimerValidationError, match="URL da imagem"):
         await service.create(
             guild_id=1,
             creator_id=1,
@@ -43,9 +43,7 @@ async def test_create_rejects_image_when_storage_unconfigured():
             description=None,
             ends_at=datetime.now(UTC) + timedelta(hours=1),
             repeat_interval_seconds=60,
-            image_bytes=b"abc",
-            image_filename="evento.png",
-            image_content_type="image/png",
+            image_url="arquivo-local.png",
         )
 
 

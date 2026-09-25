@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import discord
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 
 from api.routes.admin.security import require_local_admin
 from cogs.event_timers import finish_event_timer, publish_event_timer
@@ -73,8 +73,7 @@ def _serialize(guild: discord.Guild, event: EventTimer) -> dict[str, Any]:
         "finished_at": event.finished_at.isoformat() if event.finished_at else None,
         "last_error": event.last_error,
         "has_image": bool(event.image_storage_path),
-        "image_filename": event.image_filename,
-        "image_size": event.image_size,
+        "image_url": event.image_storage_path,
         "created_at": event.created_at.isoformat() if event.created_at else None,
     }
 
@@ -134,12 +133,11 @@ async def create_event_timer(
     duration_unit: str | None = Form(None),
     ends_at: str | None = Form(None),
     mention_everyone: bool = Form(True),
-    image: UploadFile | None = File(None),
+    image_url: str = Form(""),
 ) -> dict[str, Any]:
     bot = _bot(request)
     guild = _guild(bot, guild_id)
     channel = _channel(guild, channel_id)
-    image_bytes = await image.read() if image else None
     try:
         event = await bot.event_timer_service.create(
             guild_id=guild_id,
@@ -150,9 +148,7 @@ async def create_event_timer(
             ends_at=_parse_end(end_mode, duration_amount, duration_unit, ends_at),
             repeat_interval_seconds=repeat_interval_seconds,
             mention_everyone=mention_everyone,
-            image_bytes=image_bytes,
-            image_filename=image.filename if image else None,
-            image_content_type=image.content_type if image else None,
+            image_url=image_url,
         )
     except EventTimerValidationError as exc:
         raise HTTPException(

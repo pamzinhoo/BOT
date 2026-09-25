@@ -20,7 +20,7 @@ export function EventTimersPage() {
   const [durationAmount, setDurationAmount] = useState(1);
   const [durationUnit, setDurationUnit] = useState<DurationUnit>("days");
   const [endsAt, setEndsAt] = useState("");
-  const [image, setImage] = useState<File | null>(null);
+  const [imageUrl, setImageUrl] = useState("");
   const timers = useQuery({
     queryKey: ["event-timers", guild?.id],
     queryFn: () => api<EventTimersPayload>(`/guild/${guild!.id}/event-timers`),
@@ -51,7 +51,7 @@ export function EventTimersPage() {
       form.set("duration_unit", durationUnit);
       if (endsAt) form.set("ends_at", new Date(endsAt).toISOString());
       form.set("mention_everyone", "true");
-      if (image) form.set("image", image);
+      if (imageUrl.trim()) form.set("image_url", imageUrl.trim());
       return api<any>(`/guild/${guild!.id}/event-timers`, { method: "POST", body: form });
     },
     onSuccess: () => {
@@ -59,7 +59,7 @@ export function EventTimersPage() {
       setTitle("");
       setDescription("");
       setChannelId("");
-      setImage(null);
+      setImageUrl("");
       invalidate();
     },
   });
@@ -96,7 +96,7 @@ export function EventTimersPage() {
       </div>
 
       {createOpen && (
-        <Section title="Criar cronômetro" description="A imagem fica no storage enquanto o cronômetro estiver ativo ou pausado e é removida ao encerrar.">
+        <Section title="Criar cronômetro" description="Use uma URL pública de imagem; nenhum storage próprio é necessário.">
           <div className="dashboard-form">
             <label>Título<input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={256} /></label>
             <label>Descrição<textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={4} /></label>
@@ -132,10 +132,10 @@ export function EventTimersPage() {
             ) : (
               <label>Data e hora final<input type="datetime-local" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} /></label>
             )}
-            <label>Imagem do evento
-              <input type="file" accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp" onChange={(e) => setImage(e.target.files?.[0] || null)} />
+            <label>URL da imagem (opcional)
+              <input type="url" placeholder="https://exemplo.com/imagem.png" value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} />
             </label>
-            <small>A imagem aparece grande no final do embed. Limite: 8 MB.</small>
+            <small>A imagem aparece grande no final do embed. A URL precisa ser pública e continuar acessível.</small>
             <div className="form-actions">
               <button className="button ghost" onClick={() => setCreateOpen(false)}>Cancelar</button>
               <button className="button primary" disabled={createMutation.isPending || !title || !channelId} onClick={() => createMutation.mutate()}>
@@ -178,7 +178,7 @@ function EventTimerCard({ item, busy, onAction }: { item: EventTimerItem; busy: 
       <span>Repetição: {formatInterval(item.repeat_interval_seconds)}</span>
       <span>Encerra: {formatDate(item.ends_at)}</span>
       {item.next_announcement_at && <span>Próximo aviso: {formatDate(item.next_announcement_at)}</span>}
-      {item.has_image && <small>Imagem: {item.image_filename || "arquivo anexado"}</small>}
+      {item.has_image && <small>Imagem por URL configurada</small>}
       {item.last_error && <p className="inline-warning">{item.last_error}</p>}
       <div className="card-actions">
         {active && <button className="button ghost" disabled={busy} onClick={() => onAction("pause")}><Pause size={15} />Pausar</button>}

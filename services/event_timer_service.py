@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import uuid
 from datetime import UTC, datetime
-from pathlib import PurePosixPath
 from typing import TYPE_CHECKING
 
 from database.database import Database
@@ -52,9 +50,7 @@ class EventTimerService:
         ends_at: datetime,
         repeat_interval_seconds: int,
         mention_everyone: bool = True,
-        image_bytes: bytes | None = None,
-        image_filename: str | None = None,
-        image_content_type: str | None = None,
+        image_url: str | None = None,
     ) -> EventTimer:
         now = datetime.now(UTC)
         if ends_at.tzinfo is None:
@@ -68,22 +64,9 @@ class EventTimerService:
         if not clean_title:
             raise EventTimerValidationError("Titulo obrigatorio.")
 
-        storage_path = None
-        if image_bytes is not None:
-            if self._storage is None:
-                raise EventTimerValidationError("Storage de imagens nao esta configurado.")
-            if image_content_type not in _ALLOWED_IMAGE_TYPES:
-                raise EventTimerValidationError("Imagem deve ser PNG, JPG/JPEG ou WEBP.")
-            if len(image_bytes) > _MAX_IMAGE_BYTES:
-                raise EventTimerValidationError("Imagem excede 8 MB.")
-            safe_name = PurePosixPath(image_filename or "evento.png").name
-            storage_path = f"event-timers/{guild_id}/{uuid.uuid4()}-{safe_name}"
-            await asyncio.to_thread(
-                self._storage.upload_bytes,
-                storage_path,
-                image_bytes,
-                content_type=image_content_type or "application/octet-stream",
-            )
+        clean_image_url = (image_url or "").strip() or None
+        if clean_image_url and not clean_image_url.lower().startswith(("http://", "https://")):
+            raise EventTimerValidationError("A URL da imagem deve comecar com http:// ou https://.")
         try:
             async with self._database.session() as session:
                 event = await EventTimerRepository(session).add(
@@ -97,18 +80,12 @@ class EventTimerService:
                         repeat_interval_seconds=repeat_interval_seconds,
                         ends_at=ends_at,
                         next_announcement_at=now,
-                        image_storage_path=storage_path,
-                        image_filename=PurePosixPath(image_filename or "").name or None,
-                        image_content_type=image_content_type,
-                        image_size=len(image_bytes) if image_bytes is not None else None,
+                        image_storage_path=clean_image_url,
                     )
                 )
                 await session.refresh(event)
                 return event
         except Exception:
-            if storage_path and self._storage is not None:
-                with contextlib.suppress(StorageError):
-                    await asyncio.to_thread(self._storage.delete_object, storage_path)
             raise
 
     async def get(self, event_id: uuid.UUID) -> EventTimer | None:
@@ -187,11 +164,8 @@ class EventTimerService:
             event.status = EventTimerStatus.CANCELED if canceled else EventTimerStatus.FINISHED
             event.finished_at = datetime.now(UTC)
             event.next_announcement_at = None
-            if event.image_storage_path:
-                event.image_delete_pending = True
             await session.flush()
             await session.refresh(event)
-        await self.cleanup_image(event.id)
         return event
 
     async def cleanup_image(self, event_id: uuid.UUID) -> bool:
