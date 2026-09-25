@@ -10,8 +10,9 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-from alembic import op
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 revision: str = "3e7a1b9c4d20"
 down_revision: str | None = "2d6f9a1c8b44"
@@ -20,8 +21,23 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    status = sa.Enum("ACTIVE", "PAUSED", "FINISHED", "CANCELED", "ERROR", name="event_timer_status")
-    status.create(op.get_bind(), checkfirst=True)
+    status = postgresql.ENUM(
+        "ACTIVE",
+        "PAUSED",
+        "FINISHED",
+        "CANCELED",
+        "ERROR",
+        name="event_timer_status",
+        create_type=False,
+    )
+    postgresql.ENUM(
+        "ACTIVE",
+        "PAUSED",
+        "FINISHED",
+        "CANCELED",
+        "ERROR",
+        name="event_timer_status",
+    ).create(op.get_bind(), checkfirst=True)
     op.create_table(
         "event_timers",
         sa.Column("creator_id", sa.BigInteger(), nullable=False),
