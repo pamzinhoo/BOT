@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+from contextlib import suppress
 
 import discord
 
@@ -234,10 +235,8 @@ class PainelService:
         except discord.NotFound:
             return
 
-        from views.shop_view import shop_panel_embed
+        from views.shop_view import ShopPanelView, shop_panel_embed
 
         plans = await self._bot.plan_service.list_plans(guild_id, only_active=True)
-        try:
-            await message.edit(embed=shop_panel_embed(plans))
-        except discord.HTTPException:
-            pass
+        with suppress(discord.HTTPException):
+            await message.edit(embed=shop_panel_embed(plans), view=ShopPanelView())

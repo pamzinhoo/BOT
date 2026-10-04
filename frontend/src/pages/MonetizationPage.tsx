@@ -3,6 +3,7 @@ import { AlertTriangle, BarChart3, EyeOff, Pencil, Plus, Save, ShieldCheck, Star
 import { useState } from "react";
 import { useShell } from "../components/AppShell";
 import { MonetizationCouponManager } from "../components/MonetizationCouponManager";
+import { MonetizationRedemptionManager } from "../components/MonetizationRedemptionManager";
 import { MonetizationPaymentSettings } from "../components/MonetizationPaymentSettings";
 import { EmptyState, ErrorState, LoadingState, PageHeader, Section, StatusBadge } from "../components/Ui";
 import { api, DiscordOptions, MonetizationPlanAccessPayload, MonetizationPlanListPayload, MonetizationPlanManageRow, MonetizationPlanMutationPayload, MonetizationPlanMutationResponse, MonetizationSummary } from "../lib/api";
@@ -195,6 +196,7 @@ export function MonetizationPage() {
       </Section>
 
       {guild && <MonetizationCouponManager guildId={guild.id} />}
+      {guild && <MonetizationRedemptionManager key={guild.id} guildId={guild.id} />}
       {guild && <MonetizationPaymentSettings guildId={guild.id} />}
 
       <Section title="Planos e desempenho" description="Clique em um plano para ver quais usuários têm o VIP/cargo, assinatura ou pagamento registrado.">

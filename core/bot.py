@@ -40,6 +40,7 @@ from services.punishment_review_service import PunishmentReviewService
 from services.punishment_service import PunishmentService
 from services.ranking_service import RankingService
 from services.reconciliation_service import ReconciliationService
+from services.redemption_service import RedemptionService
 from services.role_sync_service import RoleSyncService
 from services.staff_service import StaffService
 from services.subscription_reminder_service import SubscriptionReminderService
@@ -95,6 +96,7 @@ class LimerenceBot(commands.Bot):
         self.plan_service = PlanService(database, self)
         self.payment_service = PaymentService(database, settings)
         self.coupon_service = CouponService(database, self)
+        self.redemption_service = RedemptionService(database, self)
         self.product_service = ProductService(database)
         self.event_bus = EventBus()
         self.license_service = LicenseService(database, self.event_bus)

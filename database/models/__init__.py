@@ -70,6 +70,7 @@ from database.models.punishment import (
 from database.models.punishment_appeal import AppealStatus, PunishmentAppeal
 from database.models.punishment_review_role import PunishmentReviewRole
 from database.models.ranking_settings import RankingSettings
+from database.models.redemption import Redemption, RedemptionCode, RedemptionRoleGrant
 from database.models.scheduled_job_state import ScheduledJobState
 from database.models.staff import Staff
 from database.models.staff_activity import StaffActivity, StaffActivityEvent
@@ -193,6 +194,9 @@ __all__ = [
     "PunishmentStatus",
     "PunishmentType",
     "RankingSettings",
+    "Redemption",
+    "RedemptionCode",
+    "RedemptionRoleGrant",
     "ScheduledJobState",
     "Staff",
     "StaffActivity",

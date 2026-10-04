@@ -7,6 +7,7 @@ from discord.ext import commands
 from core.bot import LimerenceBot
 from utils.checks import is_admin, member_is_admin
 from views.monetization_panel_view import MonetizationMenuView, monetization_menu_embed
+from views.redemption_view import redemption_only_view
 from views.shop_view import ShopView
 
 
@@ -43,7 +44,8 @@ class ShopCog(commands.Cog):
         plans = await self.bot.plan_service.list_plans(interaction.guild_id, only_active=True)
         if not plans:
             await interaction.followup.send(
-                "Nenhum plano disponível no momento.", ephemeral=True
+                "Nenhum plano disponível no momento. Você ainda pode resgatar um código.",
+                view=redemption_only_view(), ephemeral=True,
             )
             return
 

@@ -16,6 +16,7 @@ from services.subscription_service import DuplicateSubscriptionError, MissingPri
 from utils.checks import member_is_admin
 from utils.constants import EMBED_COLOR_WARNING
 from views.base_view import SafeView
+from views.redemption_view import RedemptionButton, redemption_only_view
 
 if TYPE_CHECKING:
     from core.bot import LimerenceBot
@@ -128,6 +129,7 @@ class ShopPanelView(SafeView):
 
     def __init__(self) -> None:
         super().__init__(timeout=None)
+        self.add_item(RedemptionButton())
 
     @discord.ui.button(
         label="🛒 Ver planos", style=discord.ButtonStyle.success, custom_id="limerence:shop:open"
@@ -141,7 +143,10 @@ class ShopPanelView(SafeView):
         await interaction.response.defer()
         plans = await bot.plan_service.list_plans(interaction.guild_id, only_active=True)
         if not plans:
-            await interaction.followup.send("Nenhum plano disponível no momento.", ephemeral=True)
+            await interaction.followup.send(
+                "Nenhum plano disponível no momento. Você ainda pode resgatar um código.",
+                view=redemption_only_view(), ephemeral=True,
+            )
             return
         benefits_by_plan = {}
         for plan in plans:
@@ -181,6 +186,7 @@ class ShopView(SafeView):
         # (ex.: botao da DM de renovacao), onde interaction.user e um User
         self.member = member
         self._sync_buttons()
+        self.add_item(RedemptionButton())
 
     def _sync_buttons(self) -> None:
         self.prev_button.disabled = self.index <= 0
