@@ -42,6 +42,7 @@ from services.ranking_service import RankingService
 from services.reconciliation_service import ReconciliationService
 from services.redemption_service import RedemptionService
 from services.role_sync_service import RoleSyncService
+from services.social_notification_service import SocialNotificationService
 from services.staff_service import StaffService
 from services.subscription_reminder_service import SubscriptionReminderService
 from services.subscription_renewal_config_service import SubscriptionRenewalConfigService
@@ -122,6 +123,7 @@ class LimerenceBot(commands.Bot):
         self.partnership_service = PartnershipService(database, self)
         self.giveaway_service = GiveawayService(database, self)
         self.event_timer_service = EventTimerService(database, self)
+        self.social_notification_service = SocialNotificationService(database, self)
 
         self.tree.on_error = self._on_app_command_error
 

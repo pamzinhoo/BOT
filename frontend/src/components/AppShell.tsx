@@ -20,6 +20,7 @@ import {
   Trophy,
   UserCheck,
   Users,
+  Share2,
 } from "lucide-react";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { NavLink } from "react-router-dom";
@@ -49,6 +50,7 @@ const nav = [
       { label: "Cronômetros", to: "/event-timers", icon: Bell },
       { label: "DLCs", to: "/dlcs", icon: Package },
       { label: "Monetização", to: "/monetization", icon: DollarSign },
+      { label: "Redes sociais", to: "/social-notifications", icon: Share2 },
     ],
   },
   {
@@ -97,6 +99,7 @@ const EVENT_QUERY_KEYS = [
   "event-timers",
   "dlcs",
   "monetization",
+  "social-notifications",
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {

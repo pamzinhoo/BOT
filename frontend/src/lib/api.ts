@@ -48,6 +48,36 @@ export type DiscordOptions = {
   roles: { id: string; name: string; type: string; position?: number; color?: string }[];
 };
 
+export type SocialNotificationItem = {
+  id: string;
+  platform: string;
+  url: string;
+  message_template: string;
+  mention_everyone: boolean;
+  status: "SENT" | "FAILED" | string;
+  channel_id: string;
+  channel_name?: string | null;
+  channel_missing?: boolean;
+  message_id?: string | null;
+  error_message?: string | null;
+  created_at?: string | null;
+};
+
+export type SocialNotificationsPayload = {
+  guild_id: string;
+  items: SocialNotificationItem[];
+};
+
+export type SocialNotificationMutationResponse = {
+  item: SocialNotificationItem;
+};
+
+export type SocialNotificationPreview = {
+  platform: string;
+  url: string;
+  message: string;
+};
+
 export type GiveawayItem = {
   id: string;
   title: string;

@@ -8,6 +8,7 @@ import { MonetizationPage } from "./pages/MonetizationPage";
 import { OverviewPage } from "./pages/OverviewPage";
 import { PanelsPage } from "./pages/PanelsPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { SocialNotificationsPage } from "./pages/SocialNotificationsPage";
 import { StaffPage } from "./pages/StaffPage";
 import { SystemPage } from "./pages/SystemPage";
 import { TicketsPage } from "./pages/TicketsPage";
@@ -23,6 +24,7 @@ export function App() {
         <Route path="/event-timers" element={<EventTimersPage />} />
         <Route path="/dlcs" element={<DlcsPage />} />
         <Route path="/monetization" element={<MonetizationPage />} />
+        <Route path="/social-notifications" element={<SocialNotificationsPage />} />
         <Route path="/settings/:section" element={<SettingsPage />} />
         <Route path="/panels" element={<PanelsPage />} />
         <Route path="/audit" element={<AuditPage />} />

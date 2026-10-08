@@ -72,6 +72,7 @@ from database.models.punishment_review_role import PunishmentReviewRole
 from database.models.ranking_settings import RankingSettings
 from database.models.redemption import Redemption, RedemptionCode, RedemptionRoleGrant
 from database.models.scheduled_job_state import ScheduledJobState
+from database.models.social_notification import SocialNotification, SocialNotificationStatus, SocialPlatform
 from database.models.staff import Staff
 from database.models.staff_activity import StaffActivity, StaffActivityEvent
 from database.models.staff_stats import StaffStats
@@ -198,6 +199,9 @@ __all__ = [
     "RedemptionCode",
     "RedemptionRoleGrant",
     "ScheduledJobState",
+    "SocialNotification",
+    "SocialNotificationStatus",
+    "SocialPlatform",
     "Staff",
     "StaffActivity",
     "StaffActivityEvent",
