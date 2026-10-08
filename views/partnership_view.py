@@ -17,7 +17,7 @@ DEFAULT_PARTNER_ANNOUNCEMENT = "🎬 **VÍDEO NOVO!**\n\n" "Confira o novo conte
 
 
 class PartnerAnnouncementModal(discord.ui.Modal, title="Publicar novo anúncio"):
-    """Modal usado pelo parceiro para publicar um conteúdo no canal configurado."""
+    """Modal usado pelo parceiro para publicar um conteúdo no próprio canal."""
 
     url = discord.ui.TextInput(
         label="Link do conteúdo",
@@ -61,14 +61,7 @@ class PartnerAnnouncementModal(discord.ui.Modal, title="Publicar novo anúncio")
                 )
                 return
 
-            settings = await self._bot.partnership_service.get_settings(self._guild_id)
-            target_channel_id = settings.announcement_channel_id
-            if target_channel_id is None:
-                await interaction.followup.send(
-                    "❌ O canal de anúncios ainda não foi configurado pela administração.",
-                    ephemeral=True,
-                )
-                return
+            target_channel_id = self._source_channel_id
 
             notification = await self._bot.social_notification_service.send_manual(
                 guild_id=self._guild_id,
@@ -95,7 +88,7 @@ class PartnerAnnouncementModal(discord.ui.Modal, title="Publicar novo anúncio")
 
             await interaction.followup.send(
                 "✅ **Anúncio publicado com sucesso!**\n"
-                "O conteúdo foi enviado para o canal oficial de anúncios com @everyone.",
+                "O conteúdo foi publicado neste canal com @everyone.",
                 ephemeral=True,
             )
         except SocialNotificationValidationError as exc:
