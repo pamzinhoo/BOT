@@ -22,7 +22,7 @@ _GUILD_SETTINGS = SimpleNamespace(
     blacklist_channel_id=123,
     moderator_role_id=None,
     dev_role_id=None,
-    ceo_role_id=None,
+    head_moderator_role_id=None,
     owner_role_id=None,
     support_role_id=None,
 )

@@ -117,7 +117,7 @@ erDiagram
         bigint evaluations_channel_id
         bigint moderator_role_id
         bigint dev_role_id
-        bigint ceo_role_id
+        bigint head_moderator_role_id
         int inactive_after_minutes
         jsonb extra_config
         timestamptz updated_at

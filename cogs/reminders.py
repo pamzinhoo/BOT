@@ -21,7 +21,7 @@ _TIERS: list[tuple[int, int]] = [(20, 1), (60, 2), (120, 3)]
 
 class RemindersCog(commands.Cog):
     """Lembra a staff de tickets parados (sem primeira resposta), escalando
-    a urgencia: 20min avisa no canal, 1h marca o Moderador, 2h marca o CEO."""
+    a urgencia: 20min avisa no canal, 1h marca o Moderator, 2h marca o Head Moderator."""
 
     def __init__(self, bot: LimerenceBot) -> None:
         self.bot = bot
@@ -73,8 +73,8 @@ class RemindersCog(commands.Cog):
             content = f"<@&{settings.moderator_role_id}>" if settings.moderator_role_id else None
             description = "Já se passou 1 hora sem resposta! Moderação, precisa de atenção aqui."
         else:
-            content = f"<@&{settings.ceo_role_id}>" if settings.ceo_role_id else None
-            description = "2 horas sem resposta. CEO, esse ticket está sendo esquecido."
+            content = f"<@&{settings.head_moderator_role_id}>" if settings.head_moderator_role_id else None
+            description = "2 horas sem resposta. Head Moderator, esse ticket está sendo esquecido."
 
         await channel.send(
             content=content,
