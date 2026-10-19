@@ -15,7 +15,7 @@ from services.config_transfer_service import (
     build_preview_embed,
     export_guild_config,
 )
-from utils.checks import has_permission, is_owner_or_ceo
+from utils.checks import has_permission, is_owner_or_dev
 from views.audit_log_panel_view import AuditLogPanelView, audit_log_summary_embed
 from views.config_history_view import (
     CONFIG_HISTORY_CATEGORY_CHOICES,
@@ -187,20 +187,52 @@ class ConfigCog(commands.Cog):
             f"Categoria de tickets definida: {categoria.name}", ephemeral=True
         )
 
-    @config_group.command(name="cargo-moderador", description="Define o cargo de moderador.")
+    @config_group.command(name="cargo-owner", description="Define o cargo de Owner.")
     @has_permission("config")
-    async def cargo_moderador(self, interaction: discord.Interaction, cargo: discord.Role) -> None:
+    async def cargo_owner(self, interaction: discord.Interaction, cargo: discord.Role) -> None:
         assert interaction.guild_id is not None
         await interaction.response.defer(ephemeral=True)
         before = await self.bot.config_service.get_settings(interaction.guild_id)
-        await self.bot.config_service.update(interaction.guild_id, moderator_role_id=cargo.id)
+        await self.bot.config_service.update(interaction.guild_id, owner_role_id=cargo.id)
         await self._log(
-            interaction, category="Cargos", name="Moderador",
-            before=_fmt_role(before.moderator_role_id), after=cargo.mention,
+            interaction, category="Cargos", name="Owner",
+            before=_fmt_role(before.owner_role_id), after=cargo.mention,
         )
-        await interaction.followup.send(f"Cargo de moderador definido: {cargo.mention}", ephemeral=True)
+        await interaction.followup.send(f"Cargo de Owner definido: {cargo.mention}", ephemeral=True)
 
-    @config_group.command(name="cargo-dev", description="Define o cargo de desenvolvedor.")
+    @config_group.command(name="cargo-dev", description="Define o cargo de Dev.")
+    @has_permission("config")
+    async def cargo_dev(self, interaction: discord.Interaction, cargo: discord.Role) -> None:
+        assert interaction.guild_id is not None
+        await interaction.response.defer(ephemeral=True)
+        before = await self.bot.config_service.get_settings(interaction.guild_id)
+        await self.bot.config_service.update(interaction.guild_id, dev_role_id=cargo.id)
+        await self._log(
+            interaction, category="Cargos", name="Dev",
+            before=_fmt_role(before.dev_role_id), after=cargo.mention,
+        )
+        await interaction.followup.send(f"Cargo de Dev definido: {cargo.mention}", ephemeral=True)
+
+    @config_group.command(
+        name="cargo-head-moderator", description="Define o cargo de Head Moderator."
+    )
+    @has_permission("config")
+    async def cargo_head_moderator(self, interaction: discord.Interaction, cargo: discord.Role) -> None:
+        assert interaction.guild_id is not None
+        await interaction.response.defer(ephemeral=True)
+        before = await self.bot.config_service.get_settings(interaction.guild_id)
+        await self.bot.config_service.update(
+            interaction.guild_id, head_moderator_role_id=cargo.id
+        )
+        await self._log(
+            interaction, category="Cargos", name="Head Moderator",
+            before=_fmt_role(before.head_moderator_role_id), after=cargo.mention,
+        )
+        await interaction.followup.send(
+            f"Cargo de Head Moderator definido: {cargo.mention}", ephemeral=True
+        )
+
+    @config_group.command(name="cargo-moderador", description="Define o cargo de Moderator.")
     @has_permission("config")
     async def cargo_dev(self, interaction: discord.Interaction, cargo: discord.Role) -> None:
         assert interaction.guild_id is not None
@@ -213,18 +245,22 @@ class ConfigCog(commands.Cog):
         )
         await interaction.followup.send(f"Cargo de dev definido: {cargo.mention}", ephemeral=True)
 
-    @config_group.command(name="cargo-ceo", description="Define o cargo de CEO.")
+    @config_group.command(
+        name="cargo-help-community", description="Define o cargo de Help Community."
+    )
     @has_permission("config")
-    async def cargo_ceo(self, interaction: discord.Interaction, cargo: discord.Role) -> None:
+    async def cargo_help_community(self, interaction: discord.Interaction, cargo: discord.Role) -> None:
         assert interaction.guild_id is not None
         await interaction.response.defer(ephemeral=True)
         before = await self.bot.config_service.get_settings(interaction.guild_id)
-        await self.bot.config_service.update(interaction.guild_id, ceo_role_id=cargo.id)
+        await self.bot.config_service.update(interaction.guild_id, support_role_id=cargo.id)
         await self._log(
-            interaction, category="Cargos", name="CEO",
-            before=_fmt_role(before.ceo_role_id), after=cargo.mention,
+            interaction, category="Cargos", name="Help Community",
+            before=_fmt_role(before.support_role_id), after=cargo.mention,
         )
-        await interaction.followup.send(f"Cargo de CEO definido: {cargo.mention}", ephemeral=True)
+        await interaction.followup.send(
+            f"Cargo de Help Community definido: {cargo.mention}", ephemeral=True
+        )
 
     @config_group.command(
         name="tempo-inatividade", description="Define minutos para considerar staff inativa."
@@ -290,9 +326,11 @@ class ConfigCog(commands.Cog):
         embed.add_field(name="Canal de Transcrições", value=f"<#{settings.transcript_channel_id}>" if settings.transcript_channel_id else "—")
         embed.add_field(name="Canal do Dashboard", value=f"<#{settings.dashboard_channel_id}>" if settings.dashboard_channel_id else "—")
         embed.add_field(name="Categoria de Tickets", value=f"<#{settings.ticket_category_id}>" if settings.ticket_category_id else "—")
-        embed.add_field(name="Cargo Moderador", value=f"<@&{settings.moderator_role_id}>" if settings.moderator_role_id else "—")
+        embed.add_field(name="Cargo Owner", value=f"<@&{settings.owner_role_id}>" if settings.owner_role_id else "—")
         embed.add_field(name="Cargo Dev", value=f"<@&{settings.dev_role_id}>" if settings.dev_role_id else "—")
-        embed.add_field(name="Cargo CEO", value=f"<@&{settings.ceo_role_id}>" if settings.ceo_role_id else "—")
+        embed.add_field(name="Cargo Head Moderator", value=f"<@&{settings.head_moderator_role_id}>" if settings.head_moderator_role_id else "—")
+        embed.add_field(name="Cargo Moderator", value=f"<@&{settings.moderator_role_id}>" if settings.moderator_role_id else "—")
+        embed.add_field(name="Cargo Help Community", value=f"<@&{settings.support_role_id}>" if settings.support_role_id else "—")
         embed.add_field(name="Inatividade", value=f"{settings.inactive_after_minutes} min" if settings.inactive_after_minutes else "—")
         await interaction.followup.send(embed=embed, ephemeral=True)
 
@@ -408,9 +446,9 @@ class ConfigCog(commands.Cog):
 
     @config_group.command(
         name="reset-all",
-        description="Restaura TODAS as configurações do servidor para o padrão (Owner/CEO apenas).",
+        description="Restaura TODAS as configurações do servidor para o padrão (Owner/Dev apenas).",
     )
-    @is_owner_or_ceo()
+    @is_owner_or_dev()
     async def reset_all(self, interaction: discord.Interaction) -> None:
         assert interaction.guild_id is not None
         await interaction.response.send_message(

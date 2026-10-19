@@ -8,7 +8,7 @@ import discord
 
 from database.models.audit_log import AuditLogCategory
 from services.punishment_service import AppealError
-from utils.checks import member_can, member_is_owner_or_ceo
+from utils.checks import member_can, member_is_owner_or_dev
 from views.base_view import SafeView
 from views.embeds import (
     appeal_accepted_dm_embed,
@@ -152,7 +152,7 @@ class DenyAppealModal(discord.ui.Modal, title="Negar recurso"):
                 reviewer=member,
                 reason=str(self.motivo),
                 review_role_id=settings.review_role_id,
-                bypass_self_review=await member_is_owner_or_ceo(interaction),
+                bypass_self_review=await member_is_owner_or_dev(interaction),
             )
         except AppealError as exc:
             await interaction.followup.send(str(exc), ephemeral=True)
@@ -245,7 +245,7 @@ class AppealAcceptButton(
                 appeal_id=self.appeal_id,
                 reviewer=member,
                 review_role_id=settings.review_role_id,
-                bypass_self_review=await member_is_owner_or_ceo(interaction),
+                bypass_self_review=await member_is_owner_or_dev(interaction),
             )
         except AppealError as exc:
             await interaction.followup.send(str(exc), ephemeral=True)

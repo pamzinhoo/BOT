@@ -26,7 +26,7 @@ class GuildSettings(Base, UUIDPrimaryKeyMixin):
     evaluations_channel_id: Mapped[int | None] = mapped_column(BigInteger)
     moderator_role_id: Mapped[int | None] = mapped_column(BigInteger)
     dev_role_id: Mapped[int | None] = mapped_column(BigInteger)
-    ceo_role_id: Mapped[int | None] = mapped_column(BigInteger)
+    head_moderator_role_id: Mapped[int | None] = mapped_column(BigInteger)
     owner_role_id: Mapped[int | None] = mapped_column(BigInteger)
     support_role_id: Mapped[int | None] = mapped_column(BigInteger)
     partner_role_id: Mapped[int | None] = mapped_column(BigInteger)

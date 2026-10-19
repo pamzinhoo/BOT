@@ -53,7 +53,7 @@ TABLE_SCHEMAS: dict[str, list[tuple[str, RefKind]]] = {
         ("evaluations_channel_id", RefKind.CHANNEL),
         ("moderator_role_id", RefKind.ROLE),
         ("dev_role_id", RefKind.ROLE),
-        ("ceo_role_id", RefKind.ROLE),
+        ("head_moderator_role_id", RefKind.ROLE),
         ("owner_role_id", RefKind.ROLE),
         ("support_role_id", RefKind.ROLE),
         ("partner_role_id", RefKind.ROLE),
@@ -131,7 +131,7 @@ _GUILD_SETTINGS_CATEGORY: dict[str, str] = {
     "blacklist_channel_id": "antispam",
     "inactive_after_minutes": "tickets",
     "owner_role_id": "cargos",
-    "ceo_role_id": "cargos",
+    "head_moderator_role_id": "cargos",
     "dev_role_id": "cargos",
     "moderator_role_id": "cargos",
     "support_role_id": "cargos",
@@ -389,7 +389,11 @@ async def build_import_plan(
                 )
                 continue
 
+            # Arquivos exportados antes da troca de CEO para Head Moderator
+            # continuam validos: o antigo campo e importado como Head Moderator.
             entry = table_input.get(attr)
+            if attr == "head_moderator_role_id" and attr not in table_input:
+                entry = table_input.get("ceo_role_id")
 
             if kind == RefKind.CHANNEL:
                 new_value, status, ref_name = _resolve_channel_import(guild, entry)

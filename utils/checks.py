@@ -14,8 +14,9 @@ if TYPE_CHECKING:
 
 # acoes cujo fallback legado (sem override em permission_settings) e admin/staff/publico
 _LEGACY_ADMIN_ACTIONS = {"auditoria", "config"}
+_LEGACY_MODERATION_ACTIONS = {"recurso_banimento", "analises"}
 _LEGACY_STAFF_ACTIONS = {
-    "claim", "unclaim", "fechar", "reabrir", "excluir", "recurso_banimento", "analises",
+    "claim", "unclaim", "fechar", "reabrir", "excluir",
 }
 
 
@@ -49,10 +50,10 @@ def member_has_staff_role(member: discord.Member, settings: GuildSettings | None
         return True
     allowed = (
         {
-            settings.moderator_role_id,
-            settings.dev_role_id,
-            settings.ceo_role_id,
             settings.owner_role_id,
+            settings.dev_role_id,
+            settings.head_moderator_role_id,
+            settings.moderator_role_id,
             settings.support_role_id,
         }
         if settings
@@ -63,19 +64,17 @@ def member_has_staff_role(member: discord.Member, settings: GuildSettings | None
 
 
 async def member_is_admin(interaction: discord.Interaction) -> bool:
-    """True se o membro tem permissao de Administrador ou cargo Owner/Dev/CEO configurado."""
+    """True se o membro tem permissao de Administrador ou cargo Owner/Dev configurado."""
     if isinstance(interaction.user, discord.Member) and interaction.user.guild_permissions.administrator:
         return True
     settings = await _get_guild_settings(interaction)
     role_ids = _member_role_ids(interaction)
-    allowed = (
-        {settings.dev_role_id, settings.ceo_role_id, settings.owner_role_id} if settings else set()
-    )
+    allowed = {settings.owner_role_id, settings.dev_role_id} if settings else set()
     return bool(role_ids & {r for r in allowed if r is not None})
 
 
 async def member_is_staff(interaction: discord.Interaction) -> bool:
-    """True se o membro tem permissao de Administrador ou cargo Moderador/Dev/CEO."""
+    """True se o membro tem permissao de Administrador ou algum dos cinco cargos de staff."""
     if not isinstance(interaction.user, discord.Member):
         return False
     settings = await _get_guild_settings(interaction)
@@ -91,22 +90,15 @@ def is_admin() -> Any:
     return app_commands.check(predicate)
 
 
-async def member_is_owner_or_ceo(interaction: discord.Interaction) -> bool:
-    """True se o membro tem permissao de Administrador ou cargo Owner/CEO configurado.
-    Mais restrito que member_is_admin — nao inclui o cargo Dev. Usado pro reset geral
-    de configuracoes (/config reset-all), que nunca deve ficar disponivel pra
-    Moderador/Suporte/Dev."""
-    if isinstance(interaction.user, discord.Member) and interaction.user.guild_permissions.administrator:
-        return True
-    settings = await _get_guild_settings(interaction)
-    role_ids = _member_role_ids(interaction)
-    allowed = {settings.ceo_role_id, settings.owner_role_id} if settings else set()
-    return bool(role_ids & {r for r in allowed if r is not None})
+async def member_is_owner_or_dev(interaction: discord.Interaction) -> bool:
+    """True se o membro tem permissao de Administrador ou cargo Owner/Dev configurado.
+    Usado para acoes que exigem o mesmo nivel administrativo dos dois cargos."""
+    return await member_is_admin(interaction)
 
 
-def is_owner_or_ceo() -> Any:
+def is_owner_or_dev() -> Any:
     async def predicate(interaction: discord.Interaction) -> bool:
-        if await member_is_owner_or_ceo(interaction):
+        if await member_is_owner_or_dev(interaction):
             return True
         raise NotAdminError()
 
@@ -130,10 +122,15 @@ async def _get_permission_settings(interaction: discord.Interaction) -> Permissi
 
 
 async def member_can(interaction: discord.Interaction, action: str) -> bool:
-    """Checa se o membro pode executar `action` (claim/unclaim/fechar/reabrir/excluir/
-    auditoria/ranking/config). Se a guild configurou cargos especificos pra essa acao em
-    `permission_settings`, usa so isso. Senao, cai no comportamento padrao de sempre
-    (staff pras acoes de ticket, admin pra auditoria/config, publico pro resto)."""
+    """Checa se o membro pode executar uma acao configuravel.
+
+    Se a guild configurou cargos especificos pra essa acao em permission_settings,
+    usa so isso. Senao, cai no padrao:
+    - config/auditoria: Owner/Dev (ou Administrador do Discord);
+    - acoes de moderacao: Owner/Dev/Head Moderator/Moderator;
+    - acoes de ticket: os cinco cargos de staff;
+    - demais acoes: publicas.
+    """
     if not isinstance(interaction.user, discord.Member):
         return False
     if interaction.user.guild_permissions.administrator:
@@ -147,25 +144,63 @@ async def member_can(interaction: discord.Interaction, action: str) -> bool:
 
     if action in _LEGACY_ADMIN_ACTIONS:
         return await member_is_admin(interaction)
+    if action in _LEGACY_MODERATION_ACTIONS:
+        return await member_is_moderation_staff(interaction)
     if action in _LEGACY_STAFF_ACTIONS:
         return await member_is_staff(interaction)
-    return True  # acoes sem fallback restrito (ex.: ranking) sao publicas por padrao
+    return True
 
 
-# Moderador so pode advertencia/timeout/kick — ban/ban_temporario exige Administrador/Owner.
 _MODERATOR_ALLOWED_PUNISHMENT_TYPES = {
     PunishmentType.ADVERTENCIA,
     PunishmentType.TIMEOUT,
-    PunishmentType.KICK,
 }
+_HEAD_MODERATOR_ALLOWED_PUNISHMENT_TYPES = set(PunishmentType)
 
 
-async def member_can_apply_punishment(interaction: discord.Interaction, ptype: PunishmentType) -> bool:
-    """Controle de permissoes de /punir (Etapa 9): Administrador/Owner podem qualquer tipo,
-    Moderador so advertencia/timeout/kick, os demais nao podem punir."""
-    if await member_is_admin(interaction):
+async def member_is_moderation_staff(interaction: discord.Interaction) -> bool:
+    """True para Owner/Dev/Head Moderator/Moderator, mas nao Help Community."""
+    if not isinstance(interaction.user, discord.Member):
+        return False
+    if interaction.user.guild_permissions.administrator:
         return True
-    if await member_is_staff(interaction):
+    settings = await _get_guild_settings(interaction)
+    if settings is None:
+        return False
+    role_ids = _member_role_ids(interaction)
+    allowed = {
+        settings.owner_role_id,
+        settings.dev_role_id,
+        settings.head_moderator_role_id,
+        settings.moderator_role_id,
+    }
+    return bool(role_ids & {r for r in allowed if r is not None})
+
+
+async def member_can_apply_punishment(
+    interaction: discord.Interaction, ptype: PunishmentType
+) -> bool:
+    """Controle de permissoes de /punir:
+    Owner/Dev podem qualquer tipo;
+    Head Moderator pode qualquer tipo;
+    Moderator so advertencia/timeout;
+    Help Community nao pode punir.
+    """
+    if not isinstance(interaction.user, discord.Member):
+        return False
+    if interaction.user.guild_permissions.administrator:
+        return True
+
+    settings = await _get_guild_settings(interaction)
+    if settings is None:
+        return False
+
+    role_ids = _member_role_ids(interaction)
+    if role_ids & {r for r in (settings.owner_role_id, settings.dev_role_id) if r is not None}:
+        return True
+    if settings.head_moderator_role_id is not None and settings.head_moderator_role_id in role_ids:
+        return ptype in _HEAD_MODERATOR_ALLOWED_PUNISHMENT_TYPES
+    if settings.moderator_role_id is not None and settings.moderator_role_id in role_ids:
         return ptype in _MODERATOR_ALLOWED_PUNISHMENT_TYPES
     return False
 
@@ -182,10 +217,10 @@ def can_punish_target(staff: discord.Member, target: discord.Member) -> bool:
 
 
 async def member_can_review_appeal(interaction: discord.Interaction, applied_by_staff_id: int) -> bool:
-    """Staff responsavel pela punicao original nao pode analisar o proprio recurso (Etapa 20)."""
+    """Staff de moderacao nao pode analisar o proprio recurso (Etapa 20)."""
     if interaction.user.id == applied_by_staff_id:
         return False
-    return await member_is_staff(interaction)
+    return await member_is_moderation_staff(interaction)
 
 
 def member_can_create_invite(member: discord.Member, settings: PermissionSettings | None) -> bool:

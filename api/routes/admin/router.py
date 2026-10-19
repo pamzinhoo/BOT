@@ -62,7 +62,7 @@ logger = get_logger("admin_api")
 
 _CATEGORY_DESCRIPTIONS = {
     "tickets": "Comportamento, canais e automacoes do atendimento.",
-    "cargos": "Cargos base usados pelas regras do bot.",
+    "cargos": "Equipe de staff e cargos funcionais usados pelas regras do bot.",
     "permissoes": "Quem pode executar acoes administrativas e de ticket.",
     "ranking": "Criterio, periodo e publicacao do ranking.",
     "avaliacoes": "Coleta, destino e mensagem de avaliacao.",
@@ -88,6 +88,11 @@ _FIELD_DESCRIPTIONS = {
     "enabled": "Liga ou desliga este modulo.",
     "min_comment_rating": "Nota que torna comentario obrigatorio.",
     "evaluation_method": "Onde o usuario recebe a acao de avaliar.",
+    "owner_role_id": "Cargo Owner: acesso administrativo total.",
+    "dev_role_id": "Cargo Dev: mesmo nivel de acesso administrativo do Owner.",
+    "head_moderator_role_id": "Cargo Head Moderator: lidera a moderacao e resolve casos graves.",
+    "moderator_role_id": "Cargo Moderator: moderacao diaria, timeout, mensagens e topicos.",
+    "support_role_id": "Cargo Help Community: atendimento e suporte, sem poderes de moderacao.",
 }
 
 

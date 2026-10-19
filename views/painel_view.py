@@ -63,7 +63,13 @@ async def _create_ticket(interaction: discord.Interaction, category: TicketCateg
 
     staff_role_ids = [
         role_id
-        for role_id in (settings.moderator_role_id, settings.dev_role_id, settings.ceo_role_id)
+        for role_id in (
+            settings.owner_role_id,
+            settings.dev_role_id,
+            settings.head_moderator_role_id,
+            settings.moderator_role_id,
+            settings.support_role_id,
+        )
         if role_id is not None
     ]
 

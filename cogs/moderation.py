@@ -19,7 +19,7 @@ from utils.checks import (
     is_staff,
     member_can,
     member_can_apply_punishment,
-    member_is_owner_or_ceo,
+    member_is_owner_or_dev,
 )
 from utils.time import InvalidDurationError, humanize_duration, parse_duration
 from views.appeal_view import punishment_dm_view, send_appeal_to_review_channel
@@ -613,9 +613,9 @@ class ModerationCog(commands.Cog):
     ) -> None:
         if interaction.guild is None or not isinstance(interaction.user, discord.Member):
             return
-        if not await member_is_owner_or_ceo(interaction):
+        if not await member_is_owner_or_dev(interaction):
             await interaction.response.send_message(
-                "Apenas o Owner pode revogar punições.", ephemeral=True
+                "Apenas Owner ou Dev pode revogar punições.", ephemeral=True
             )
             return
         await interaction.response.defer(ephemeral=True)

@@ -576,9 +576,11 @@ class TicketPanelService:
         return [
             role_id
             for role_id in (
-                getattr(guild_settings, "moderator_role_id", None),
+                getattr(guild_settings, "owner_role_id", None),
                 getattr(guild_settings, "dev_role_id", None),
-                getattr(guild_settings, "ceo_role_id", None),
+                getattr(guild_settings, "head_moderator_role_id", None),
+                getattr(guild_settings, "moderator_role_id", None),
+                getattr(guild_settings, "support_role_id", None),
             )
             if role_id is not None
         ]

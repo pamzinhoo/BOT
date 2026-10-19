@@ -25,7 +25,7 @@ class _Service:
             blacklist_channel_id=None,
             inactive_after_minutes=1440,
             owner_role_id=None,
-            ceo_role_id=None,
+            head_moderator_role_id=None,
             dev_role_id=None,
             moderator_role_id=None,
             support_role_id=None,

@@ -103,6 +103,34 @@ function displayLabel(label: string) {
 }
 
 function groupFields(section: string, fields: NonNullable<SettingsPayload["sections"][number]["fields"]>) {
+  if (section === "cargos") {
+    const staffKeys = new Set([
+      "owner_role_id",
+      "dev_role_id",
+      "head_moderator_role_id",
+      "moderator_role_id",
+      "support_role_id",
+    ]);
+    const staffFields = fields.filter((field) => staffKeys.has(field.key));
+    const systemFields = fields.filter((field) => !staffKeys.has(field.key));
+    const result = [];
+    if (staffFields.length) {
+      result.push({
+        title: "Equipe",
+        description: "Hierarquia da staff: Owner > Dev > Head Moderator > Moderator > Help Community.",
+        fields: staffFields,
+      });
+    }
+    if (systemFields.length) {
+      result.push({
+        title: "Cargos de sistema",
+        description: "Cargos funcionais. Eles não fazem parte da hierarquia da equipe.",
+        fields: systemFields,
+      });
+    }
+    return result;
+  }
+
   const groups = [
     { title: "Geral", description: "Comportamento principal.", match: ["enabled", "allow_multiple_tickets", "max_tickets_per_user", "criteria", "default_period", "min_comment_rating", "star_emoji", "evaluation_method", "window_seconds", "cross_channel_threshold", "flood_threshold", "ignore_staff", "default_action"] },
     { title: "Canais", description: "Destinos e categorias do Discord.", match: ["channel", "category"] },

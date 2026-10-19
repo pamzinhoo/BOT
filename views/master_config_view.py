@@ -130,19 +130,17 @@ def _tickets_category(bot: LimerenceBot) -> tuple[list[SettingsField], GetSettin
 
 def _cargos_category(bot: LimerenceBot) -> tuple[list[SettingsField], GetSettings, UpdateSettings]:
     fields = [
+        # Hierarquia da equipe: Owner > Dev > Head Moderator > Moderator > Help Community.
         SettingsField("owner_role_id", "Owner", FieldKind.ROLE, GuildSettings),
-        SettingsField("ceo_role_id", "CEO", FieldKind.ROLE, GuildSettings),
-        SettingsField("dev_role_id", "Desenvolvedor", FieldKind.ROLE, GuildSettings),
-        SettingsField("moderator_role_id", "Moderador", FieldKind.ROLE, GuildSettings),
-        SettingsField("support_role_id", "Suporte", FieldKind.ROLE, GuildSettings),
-        SettingsField("partner_role_id", "Parceiro", FieldKind.ROLE, GuildSettings),
-        SettingsField("streamer_role_id", "Streamer", FieldKind.ROLE, GuildSettings),
-        SettingsField(
-            "player_role_id", "Jogador (restaurado após ban revogado)", FieldKind.ROLE, GuildSettings
-        ),
-        SettingsField(
-            "verified_role_id", "Verificado (login com Discord no jogo)", FieldKind.ROLE, GuildSettings
-        ),
+        SettingsField("dev_role_id", "Dev", FieldKind.ROLE, GuildSettings),
+        SettingsField("head_moderator_role_id", "Head Moderator", FieldKind.ROLE, GuildSettings),
+        SettingsField("moderator_role_id", "Moderator", FieldKind.ROLE, GuildSettings),
+        SettingsField("support_role_id", "Help Community", FieldKind.ROLE, GuildSettings),
+        # Cargos funcionais do sistema — nao fazem parte da hierarquia da equipe.
+        SettingsField("partner_role_id", "Sistema — Parceiro", FieldKind.ROLE, GuildSettings),
+        SettingsField("streamer_role_id", "Sistema — Streamer", FieldKind.ROLE, GuildSettings),
+        SettingsField("player_role_id", "Sistema — Jogador (restaurado após ban revogado)", FieldKind.ROLE, GuildSettings),
+        SettingsField("verified_role_id", "Sistema — Verificado (login com Discord no jogo)", FieldKind.ROLE, GuildSettings),
     ]
 
     async def get_settings(guild_id: int) -> Any:
